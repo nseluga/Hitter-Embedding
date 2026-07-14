@@ -4,9 +4,9 @@ One entry per working session. Format fixed by
 `~/os/knowledge/frameworks/research-standards.md` §5 — `/research-partner`
 appends to it every session.
 
-Public repo — write entries for a stranger reading them: honest about
-mistakes and negative results, but in the register you'd use explaining the
-work in an interview, not raw stream-of-consciousness.
+Write entries for a stranger reading them: honest about
+mistakes and negative results, but in a semi-formal register,
+not raw stream-of-consciousness.
 
 ---
 
