@@ -1,4 +1,3 @@
-# Claude Code — keep AGENTS.md tracked, ignore everything else Claude-specific
+# Claude Code — keep CLAUDE.md tracked, ignore everything else Claude-specific
 .claude/
-CLAUDE.md
 docs/research-manifest.md
