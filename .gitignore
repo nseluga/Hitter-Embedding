@@ -1,3 +1,13 @@
 # Claude Code — keep CLAUDE.md tracked, ignore everything else Claude-specific
 .claude/
 docs/research-manifest.md
+
+# Python environment
+.venv/
+__pycache__/
+*.pyc
+
+# Data — large Statcast snapshots are gitignored; pull script + manifest.json are committed
+data/raw/
+data/processed/
+*.parquet
