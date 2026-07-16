@@ -18,14 +18,10 @@ Deep-learning hitter representation model trained on pitch-by-pitch process sign
 
 ## Documentation
 
-See `~/os/knowledge/library/baseball-research/Layer1_Architecture_Plan_v2.md` for the canonical architecture specification and build order. Session-facing documents live in `docs/`.
+All project documentation lives in `docs/`:
 
-For full project context (literature references, handoff document, feature details), see `~/os/knowledge/library/baseball-research/`.
+- **`docs/README.md`** — Project overview, references to canonical architecture and research documents, working document templates
+- **`docs/decision-log.md`** — Append-only record of all modeling and design decisions with rationale
+- **`docs/lab-notebook.md`** — Per-session working notes: what was built, why, what was learned, and next steps
 
-## Key Resources
-
-- **Architecture:** `~/os/knowledge/library/baseball-research/Layer1_Architecture_Plan_v2.md` (frozen decision log)
-- **Research manifest:** `docs/research-manifest.md` (config for `/research-partner` and `/research-review`)
-- **Decision log:** `docs/decision-log.md`
-- **Lab notebook:** `docs/lab-notebook.md`
-- **Literature:** `~/os/knowledge/library/baseball-research/` (PDFs + summaries)
+Working documents (feature analysis, baseline results, training logs, evaluation checkpoints) are created in `docs/` as needed during development.
