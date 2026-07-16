@@ -7,7 +7,15 @@ docs/research-manifest.md
 __pycache__/
 *.pyc
 
-# Data — large Statcast snapshots are gitignored; pull script + manifest.json are committed
-data/raw/
+# Data — large Statcast snapshots are gitignored, but the snapshot manifests ARE
+# committed (reproducibility record — see decision log 2026-07-14). A blanket
+# `data/raw/` ignore can't re-include children, so ignore per-level with `/*` and
+# carve the manifests back in.
+data/raw/*
+!data/raw/statcast
+data/raw/statcast/*
+!data/raw/statcast/snapshot_*
+data/raw/statcast/snapshot_*/*
+!data/raw/statcast/snapshot_*/manifest.json
 data/processed/
 *.parquet
