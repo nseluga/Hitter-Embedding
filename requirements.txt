@@ -1,0 +1,10 @@
+# Core data pipeline
+pybaseball==2.2.7
+pandas==3.0.3
+pyarrow==25.0.0
+
+# Notebooks and tests
+pytest==9.1.1
+nbconvert==7.17.1
+nbformat==5.10.4
+ipykernel==7.3.0
