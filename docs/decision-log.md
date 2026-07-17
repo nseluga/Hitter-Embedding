@@ -26,3 +26,19 @@ Append-only. Format fixed by `~/os/knowledge/frameworks/research-standards.md`
 - **Alternatives:** A minimum-PA hitter floor was rejected because it deletes the low-exposure population the thesis targets. A velocity-based position-player rule was rejected because it misclassifies hard-armed position players. Dropping spin columns was deferred to a Phase B ablation.
 - **Rationale:** Every filter is backed by the profiling notebook, and the modeling-versus-target split keeps sharpening filters from biasing ground truth.
 - **Revisit if:** Phase B feature screening changes the retained context set, or target construction needs a filtered field.
+
+---
+
+## 2026-07-17 — Contact-quality label domain
+- **Decision:** The contact-quality head (EV, LA, spray) is labeled on balls in play only (`hit_into_play`); `ev`/`la`/`spray` are null on all other pitches.
+- **Alternatives:** Labeling all contact-with-EV was rejected because fouls carry EV/LA ~70% of the time but have no spray and no batted-ball outcome, giving ragged masking and no run-value mapping.
+- **Rationale:** Fouls are contact for the whiff head but are non-terminal count transitions in the Markov composition; only in-play balls have the run-value-bearing outcome the quality head feeds.
+- **Revisit if:** the outcome space or run-value mapping (§1.5) changes to need foul-ball measurements.
+
+---
+
+## 2026-07-17 — Spray angle derivation
+- **Decision:** Spray = `atan((hc_x − 125.42)/(198.27 − hc_y))` in degrees, then mirrored so positive = pull for both hands (flip sign for RHB).
+- **Alternatives:** Empirically calibrating the home-plate origin was dropped once the constants were sourced; raw field-side angle (no mirroring) was rejected as not batter-intrinsic.
+- **Rationale:** Formula and constants corroborated by three sources (abdwr3e App. C, BGSU, Weise); MLB does not publish the origin, so a real-data regression-guard (field mean ≈ 0, pull-mean > 0) confirms our export matches the scale.
+- **Revisit if:** the near-plate artifact (`|spray| > 90°`, ~1% of in-play) needs clipping, decided in Phase B.
