@@ -1,0 +1,20 @@
+{
+  "metric": "wOBA linear weights (FanGraphs)",
+  "formula": "wOBA = (wBB*uBB + wHBP*HBP + w1B*1B + w2B*2B + w3B*3B + wHR*HR) / (AB + BB - IBB + SF + HBP)",
+  "source": "FanGraphs Guts! constants, https://www.fangraphs.com/guts.aspx?type=cn ; formula per https://library.fangraphs.com/offense/woba/",
+  "retrieved": "2026-07-20",
+  "note": "Per-season weights; league_woba is the published league wOBA used as the reconciliation guard when aggregating our own play-by-play.",
+  "weights": {
+    "2015": {"wBB": 0.687, "wHBP": 0.718, "w1B": 0.881, "w2B": 1.256, "w3B": 1.594, "wHR": 2.065, "league_woba": 0.313},
+    "2016": {"wBB": 0.691, "wHBP": 0.721, "w1B": 0.878, "w2B": 1.242, "w3B": 1.569, "wHR": 2.015, "league_woba": 0.318},
+    "2017": {"wBB": 0.693, "wHBP": 0.723, "w1B": 0.877, "w2B": 1.232, "w3B": 1.552, "wHR": 1.980, "league_woba": 0.321},
+    "2018": {"wBB": 0.690, "wHBP": 0.720, "w1B": 0.880, "w2B": 1.247, "w3B": 1.578, "wHR": 2.031, "league_woba": 0.315},
+    "2019": {"wBB": 0.690, "wHBP": 0.719, "w1B": 0.870, "w2B": 1.217, "w3B": 1.529, "wHR": 1.940, "league_woba": 0.320},
+    "2020": {"wBB": 0.699, "wHBP": 0.728, "w1B": 0.883, "w2B": 1.238, "w3B": 1.558, "wHR": 1.979, "league_woba": 0.320},
+    "2021": {"wBB": 0.692, "wHBP": 0.722, "w1B": 0.879, "w2B": 1.242, "w3B": 1.568, "wHR": 2.007, "league_woba": 0.314},
+    "2022": {"wBB": 0.689, "wHBP": 0.720, "w1B": 0.884, "w2B": 1.261, "w3B": 1.601, "wHR": 2.072, "league_woba": 0.310},
+    "2023": {"wBB": 0.696, "wHBP": 0.726, "w1B": 0.883, "w2B": 1.244, "w3B": 1.569, "wHR": 2.004, "league_woba": 0.318},
+    "2024": {"wBB": 0.689, "wHBP": 0.720, "w1B": 0.882, "w2B": 1.254, "w3B": 1.590, "wHR": 2.050, "league_woba": 0.310},
+    "2025": {"wBB": 0.691, "wHBP": 0.722, "w1B": 0.882, "w2B": 1.252, "w3B": 1.584, "wHR": 2.037, "league_woba": 0.313}
+  }
+}
