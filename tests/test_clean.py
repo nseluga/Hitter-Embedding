@@ -76,6 +76,18 @@ def test_filter_noncompetitive_rules():
     assert kept == {"ball", "intent_ball"}
 
 
+def test_filter_invalid_pitch_type_drops_artifacts_keeps_real():
+    df = frame([
+        make_pitch(pitch_type="FF"),   # keep: real
+        make_pitch(pitch_type="IN"),   # keep: intentional ball is a real classification
+        make_pitch(pitch_type="UN"),   # drop: unknown
+        make_pitch(pitch_type="AB"),   # drop: artifact
+        make_pitch(pitch_type="PO"),   # drop: artifact
+    ])
+    kept = set(clean.filter_invalid_pitch_type(df)["pitch_type"])
+    assert kept == {"FF", "IN"}
+
+
 def test_validate_core_context_drops_null_and_impossible():
     df = frame([
         make_pitch(),                       # keep

@@ -8,10 +8,14 @@ These live in YAML/JSON config files and must be committed to the repo:
 
 ### Walk-Forward Season Splits
 ```
-train_seasons: [2015, ..., t-1]
-validation_season: t
+train_seasons: [2015, ..., t]
+validation_season: t+1
 test_season: t+2
 ```
+Contiguous walk-forward per architecture doc §2.2: train on seasons <= t,
+validate on t+1, test on t+2. Frozen instance: train 2015-2023, val 2024,
+test 2025 (see split_config.json).
+
 **Rule:** Frozen once defined. Random splits are forbidden. If you need to change this, stop and ask Nate.
 
 ### Outcome Space (Phase B Decision)

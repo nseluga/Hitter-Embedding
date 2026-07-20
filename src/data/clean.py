@@ -13,6 +13,8 @@ Every filter is evidence-backed by notebooks/01_statcast_profiling.ipynb:
   velocity is deliberately NOT used, it misclassifies hard-armed position players
 - non-competitive pitches removed (pitchouts, automatic balls/strikes, bunts);
   intentional balls are KEPT, they are real takes and real walks
+- pitches with a tracking-artifact pitch_type (UN/AB/PO, ~36 rows) removed;
+  intentional-ball IN is a real classification and is kept
 - rows missing or out-of-bounds on any CORE context field are dropped; optional
   context (spin) missingness is kept and flagged, never imputed
 - deprecated/empty columns dropped; exact duplicate pitches deduped
@@ -46,6 +48,11 @@ DEPRECATED_COLUMNS = ["spin_dir", "spin_rate_deprecated", "break_angle_deprecate
 NONCOMPETITIVE_DESCRIPTIONS = {"pitchout", "foul_pitchout", "swinging_pitchout",
                                "automatic_ball", "automatic_strike",
                                "foul_bunt", "missed_bunt", "bunt_foul_tip"}
+
+# pitch_type codes that are tracking artifacts, not a real pitch classification:
+# UN (unknown) and AB/PO (mis-coded), ~36 rows total. Dropped. IN (intentional
+# ball) is a real, retained category and is deliberately NOT in this set.
+INVALID_PITCH_TYPES = {"UN", "AB", "PO"}
 
 # physically impossible readings beyond these are tracking errors, not real pitches
 RELEASE_SPEED_BOUNDS = (30.0, 110.0)
@@ -126,6 +133,11 @@ def filter_noncompetitive(df):
     return df[~(labeled | in_play_bunt)]
 
 
+def filter_invalid_pitch_type(df):
+    """Remove pitches whose pitch_type is a tracking artifact, not a real classification."""
+    return df[~df["pitch_type"].isin(INVALID_PITCH_TYPES)]
+
+
 def validate_core_context(df):
     """Drop rows missing a core context field or holding a physically impossible reading."""
     valid = df[CORE_CONTEXT_FIELDS].notna().all(axis=1)
@@ -164,6 +176,7 @@ def clean(snapshot_dir, seasons=None):
         ("deduplicate", deduplicate),
         ("position_player_pitchers", filter_position_player_pitchers),
         ("noncompetitive", filter_noncompetitive),
+        ("invalid_pitch_type", filter_invalid_pitch_type),
         ("core_context", validate_core_context),
     ]:
         df = step(df)

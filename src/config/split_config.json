@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "frozen": true,
+  "frozen_on": "2026-07-17",
+  "rule_reference": "Layer1_Architecture_Plan_v2.md §2.2 (Splits), §3 Phase A step 4",
+  "description": "Strict walk-forward by season: train on seasons <= t, validate on t+1, test on t+2. Frozen before any model comparison; never revisited. Random splits are forbidden.",
+  "seasons": [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+  "split": {
+    "train": [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023],
+    "val": [2024],
+    "test": [2025]
+  }
+}
