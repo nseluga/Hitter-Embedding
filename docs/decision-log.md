@@ -50,3 +50,33 @@ Append-only. Format fixed by `~/os/knowledge/frameworks/research-standards.md`
 - **Alternatives:** Random k-fold rejected (leaks a hitter's future PAs into his own ID embedding, memorizing the outcome we claim to project and manufacturing a positive result). Rolling multi-fold deferred (multiplies compute against the <$200 budget with no gain on the exposure axis we grade on). A val/test gap season rejected (wastes data, breaks Phase B's same-season window trade).
 - **Rationale:** Projection is a forecasting task, so eval must mirror deployment: train on the past, test on a strictly-later season. Freezing before any model comparison keeps the held-out season from becoming a shopped hyperparameter (pre-registration). Contiguity minimizes distribution shift so the metric measures projection skill, not regime drift. Robustness comes from exposure stratification + dual-sampler, not temporal folds.
 - **Revisit if:** never for this project (frozen rule); a new fold requires a new entry naming this one.
+
+---
+
+## 2026-07-21 — Stabilization reported at two thresholds (r=0.5 and r=0.7)
+- **Decision:** Every stabilization point is reported at both r=0.5 and r=0.7, not a single threshold. r=0.5 (signal variance equals noise variance) is framed as the equal-weight-with-prior point — the regression-to-the-mean ballast, and the small-sample projection currency the thesis trades in. r=0.7 is the stricter "reliable measurement" convention.
+- **Alternatives:** Single r=0.5 point (rejected: invites an unanswered "why 0.5?" and hides that 0.5 still means half the variance is noise). Single r=0.7 (rejected: not the quantity the shrinkage/projection argument uses).
+- **Rationale:** The two thresholds answer different questions; reporting both preempts the threshold objection and lets us cross-check against Carleton's published r=0.7 numbers.
+- **Reference:** Carleton, "Reliably Stable (You Keep Using That Word)" (Baseball Prospectus); FanGraphs "A Long-Needed Update on Reliability."
+- **Tier:** 2.
+- **Revisit if:** the paper's reviewers want a different reliability convention.
+
+---
+
+## 2026-07-21 — Variance-components estimator added alongside split-half
+- **Decision:** Added a one-way random-effects (variance-components / Cronbach-alpha) estimator to src/analysis/stabilization.py: one signal/noise decomposition over all hitters yields an analytic reliability(n), an analytic stabilization point, and a bootstrap CI. Split-half is kept as an independent cross-check; the two must agree on the closed-form synthetic (they do). The variance-components point is the headline where the two diverge, because split-half at large n only uses hitters with >= n observations (survivorship).
+- **Alternatives:** Split-half only (rejected: survivorship-biased at large n — precisely where the wOBA outcome lives — and gives no confidence interval). Mixed-model REML (rejected for now: heavier, and the method-of-moments ANOVA matches Cronbach's alpha at a fraction of the code).
+- **Rationale:** On the real table the two estimators agree on the fast process metrics but diverge ~2x on wOBA (VC 190 PA vs split-half 435 PA vs LHP) — a survivorship artifact the variance-components method removes by using all 2142 hitters, not just the durable ones.
+- **Reference:** FanGraphs "A New Way to Look at Sample Size (Math Supplement)" — Cronbach-alpha signal/noise decomposition; KR-21 for the binary heads.
+- **Tier:** 2. Changed a tested module → re-ran the closed-form synthetic gate (test_stabilization.py, 14 tests) before trusting the numbers, per the ml-engineer gate.
+- **Revisit if:** the VC/split-half divergence on wOBA turns out to be heteroscedasticity in the VC assumptions rather than survivorship in split-half (to be disentangled in notebooks/02).
+
+---
+
+## 2026-07-21 — Matched-slice and across-time reporting for the process-vs-outcome comparison
+- **Decision:** The B.1 comparison additionally reports (a) process metrics sliced by pitcher hand (whiff/EV vs LHP and vs RHP), so process is measured on the same side-specific slice as the outcome; and (b) a sequential (chronological early-half vs late-half) split alongside the random split, so absolute points reflect across-circumstance reliability, not just within-sample consistency.
+- **Alternatives:** Pooled process vs side-specific outcome only (rejected: apples-to-oranges — some of the gap is the split, not the process/outcome distinction). Random split only (rejected: measures within-sample consistency, which flatters the projection-relevant number).
+- **Rationale:** Matched slicing kills the comparison-asymmetry objection — process stays fast even split by hand (whiff ~45–50 swings per side vs pooled 51). The process-beats-outcome gap survives every slicing and split choice; only the absolute points move, so the B.1 headline is robust.
+- **Reference:** Carleton, "Reliably Stable" — sequential/different-circumstance splits drop reliability vs same-circumstance splits.
+- **Tier:** 2.
+- **Revisit if:** the sequential split shows a large systematic across-time degradation on the headline metrics (modest in the 2026-07-21 run).
