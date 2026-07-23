@@ -1,0 +1,42 @@
+{
+  "swing": {
+    "task": "clf",
+    "n_train": 5937276,
+    "n_val": 705351,
+    "val_metric": 0.44763249158859253,
+    "base_rate_metric": 0.6921763972919777,
+    "best_iteration": 599
+  },
+  "whiff": {
+    "task": "clf",
+    "n_train": 2783491,
+    "n_val": 337138,
+    "val_metric": 0.43656280636787415,
+    "base_rate_metric": 0.5431650222097483,
+    "best_iteration": 599
+  },
+  "ev": {
+    "task": "reg",
+    "n_train": 1027856,
+    "n_val": 122345,
+    "val_metric": 12.21390151977539,
+    "base_rate_metric": 13.984244346618652,
+    "best_iteration": 599
+  },
+  "la": {
+    "task": "reg",
+    "n_train": 1027988,
+    "n_val": 122408,
+    "val_metric": 26.329307556152344,
+    "base_rate_metric": 28.55972671508789,
+    "best_iteration": 599
+  },
+  "spray": {
+    "task": "reg",
+    "n_train": 1002557,
+    "n_val": 121485,
+    "val_metric": 26.804861068725586,
+    "base_rate_metric": 28.505922317504883,
+    "best_iteration": 522
+  }
+}

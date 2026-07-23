@@ -124,6 +124,27 @@ def test_in_play_without_coordinates_has_null_spray_but_keeps_ev():
     assert result["ev"].notna().iloc[0]
 
 
+def test_near_plate_spray_artifact_is_clipped_but_keeps_ev():
+    # hit coords just behind the plate origin (hc_y > HOME_PLATE_HC_Y) make the
+    # angle formula blow past 90 deg; spray is nulled, EV survives (launch tracking)
+    df = pd.DataFrame([make_batted(hc_x=175.0, hc_y=labels.HOME_PLATE_HC_Y + 5.0,
+                                   launch_speed=98.0)])
+    raw = labels.field_side_angle(df).iloc[0]
+    assert abs(raw) > labels.SPRAY_ABS_MAX  # precondition: this row is the artifact
+    result = labels.add_contact_quality_labels(df)
+    assert pd.isna(result["spray"].iloc[0])
+    assert result["ev"].iloc[0] == pytest.approx(98.0)
+
+
+def test_reconciliation_reports_and_clears_spray_clip():
+    rows = [make_batted(hc_x=75.42, hc_y=100.0),                       # normal pull, kept
+            make_batted(hc_x=175.0, hc_y=labels.HOME_PLATE_HC_Y + 5.0)]  # near-plate artifact
+    report = labels.reconcile_labels(labels.derive_labels(pd.DataFrame(rows)))
+    assert report["n_spray_clipped"] == 1
+    assert report["n_extreme_spray_gt90"] == 0
+    assert report["n_spray"] == 1
+
+
 # ---- Block L3: orchestrator, reconciliation, decode gate ----
 
 def mixed_frame():

@@ -1,0 +1,35 @@
+gate: seasons train=[2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023] val=[2024] test(untouched)=[2025]
+gate: context matrix (7347953, 48), non-finite=0
+gate: decode-a-batch (val context vs raw):
+pitch_type_raw pitch_type_decoded p_throws_raw p_throws_decoded stand_raw stand_decoded  balls_raw balls_decoded  strikes_raw strikes_decoded  release_speed_raw  release_speed_roundtrip
+            FF                 FF            R                R         R             R          0             0            0               0               92.6                     92.6
+            FF                 FF            R                R         L             L          2             2            2               2               96.8                     96.8
+            SL                 SL            R                R         R             R          0             0            0               0               86.2                     86.2
+            SI                 SI            R                R         R             R          0             0            0               0               93.5                     93.5
+            FS                 FS            R                R         L             L          1             1            0               0               86.8                     86.8
+            FF                 FF            R                R         R             R          2             2            1               1               93.8                     93.8
+
+swing  n_tr= 5937276 n_val=  705351 val=0.4476 base=0.6922 [beats base rate]
+whiff  n_tr= 2783491 n_val=  337138 val=0.4366 base=0.5432 [beats base rate]
+ev     n_tr= 1027856 n_val=  122345 val=12.2139 base=13.9842 [beats base rate]
+la     n_tr= 1027988 n_val=  122408 val=26.3293 base=28.5597 [beats base rate]
+spray  n_tr= 1002557 n_val=  121485 val=26.8049 base=28.5059 [beats base rate]
+
+feature decisions (flag = near-zero everywhere, needs an argument to enter):
+            group verdict  frozen_in best_head  best_perm_norm
+  effective_speed    flag      False     spray        0.008127
+    release_pos_z    flag      False     whiff        0.007511
+        spin_axis    flag      False     whiff        0.005412
+release_spin_rate    flag      False        la        0.001899
+    release_pos_y    flag      False        ev        0.000642
+release_extension    flag      False     spray        0.000637
+          plate_x    keep      False     swing        0.771881
+          plate_z    keep      False     swing        0.682608
+            count    keep       True     swing        0.307291
+            pfx_x    keep      False     swing        0.135622
+            pfx_z    keep      False        la        0.104721
+            stand    keep       True     spray        0.063305
+       pitch_type    keep      False     whiff        0.040589
+    release_speed    keep      False        la        0.027156
+    release_pos_x    keep      False        ev        0.012339
+         p_throws    keep       True     swing        0.010798

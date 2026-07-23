@@ -48,6 +48,15 @@ HOME_PLATE_HC_Y = 198.27
 # (and no spray), so they are NOT quality-labeled even when EV/LA are present.
 IN_PLAY_DESCRIPTION = "hit_into_play"
 
+# a fair ball lies within the ~90-deg foul-line wedge, so |spray| > 90 is
+# physically impossible. Those rows are a near-plate coordinate artifact: when hit
+# coords sit near the plate origin the angle formula blows up. The spray label is
+# unreliable there and is nulled; EV/LA come from launch tracking (not hit coords)
+# and stay valid. Effect measured in results/phase_b/spray_clipping.csv (VC n*
+# 82->73); the physical argument, not the small n* gain, is the reason.
+# (2026-07-22 decision, Phase B.)
+SPRAY_ABS_MAX = 90.0
+
 
 def add_swing_contact_labels(df):
     """
@@ -106,7 +115,9 @@ def add_contact_quality_labels(df):
 
     df["ev"] = df["launch_speed"].where(in_play, other=np.nan)
     df["la"] = df["launch_angle"].where(in_play, other=np.nan)
-    df["spray"] = spray.where(in_play, other=np.nan)
+    # in-play only, then null the near-plate |spray| > 90 artifact (see SPRAY_ABS_MAX)
+    spray = spray.where(in_play, other=np.nan)
+    df["spray"] = spray.where(spray.abs() <= SPRAY_ABS_MAX, other=np.nan)
     return df
 
 
@@ -142,6 +153,7 @@ def reconcile_labels(df):
     contact = df["contact"]
     in_play = df["description"] == IN_PLAY_DESCRIPTION
     spray = df["spray"]
+    field_side = field_side_angle(df)  # raw angle; NaN iff hit coords missing
 
     report = {
         "n_pitches": int(len(df)),
@@ -156,15 +168,25 @@ def reconcile_labels(df):
         "n_ev": int(df["ev"].notna().sum()),
         "n_la": int(df["la"].notna().sum()),
         "n_spray": int(spray.notna().sum()),
-        "n_in_play_without_coords": int((in_play & spray.isna()).sum()),
-        "n_extreme_spray_gt90": int((spray.abs() > 90).sum()),
-        "spray_field_side_mean": _round(field_side_angle(df[in_play]).mean()),
+        # truly missing hit coordinates (angle is NaN); disjoint from the clip below
+        "n_in_play_without_coords": int((in_play & field_side.isna()).sum()),
+        # in-play sprays nulled by the |spray| > 90 clip; coords present, angle valid
+        # (raw angle, pre-mirror; abs is sign-invariant so mirroring does not matter)
+        "n_spray_clipped": int((in_play & (field_side.abs() > SPRAY_ABS_MAX)).sum()),
+        # post-clip this must be 0: the label carries no |spray| > 90 survivors
+        "n_extreme_spray_gt90": int((spray.abs() > SPRAY_ABS_MAX).sum()),
+        "spray_field_side_mean": _round(field_side[in_play].mean()),
         "spray_pull_mean": _round(spray.mean()),
     }
 
     # identities that must hold exactly; failing loud beats a poisoned ablation
     assert report["n_swing"] == report["n_whiff"] + report["n_contact"]
     assert report["n_contact"] == sum(report["contact_breakdown"].values())
+    assert report["n_extreme_spray_gt90"] == 0, "spray clip left |spray| > 90 survivors"
+    # every in-play ball is exactly one of: sprayed, coord-missing, or clipped
+    assert report["n_in_play"] == (
+        report["n_spray"] + report["n_in_play_without_coords"] + report["n_spray_clipped"]
+    ), "in-play spray partition does not close"
     return report
 
 
