@@ -22,11 +22,16 @@ from src.analysis import claim1_eval as ce
 def pa_table(rows):
     """Build a minimal PA-level eval-target table from (batter, season, hand, n_pa, woba) tuples."""
     records = []
+    pa_id = 0
     for batter, season, hand, n_pa, woba in rows:
         for _ in range(n_pa):
+            pa_id += 1
             records.append({
                 "batter": batter, "season": season, "p_throws": hand,
                 "woba_points": woba, "in_denominator": True,
+                # a real pitcher id (never a batter here) so the pitcher-batter
+                # filter has the columns it needs and drops nothing
+                "pitcher": 900001, "game_pk": pa_id, "at_bat_number": 1,
             })
     return pd.DataFrame(records)
 

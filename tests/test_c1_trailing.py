@@ -17,11 +17,14 @@ from src.analysis import c1_trailing as c1
 def pa_table(rows):
     """Build a PA-level eval-target table from (batter, season, hand, n_pa, woba_points) tuples."""
     records = []
+    pa_id = 0
     for batter, season, hand, n_pa, points in rows:
         for _ in range(n_pa):
+            pa_id += 1
             records.append({
                 "batter": batter, "season": season, "p_throws": hand,
                 "woba_points": points, "in_denominator": True,
+                "pitcher": 900001, "game_pk": pa_id, "at_bat_number": 1,
             })
     return pd.DataFrame(records)
 

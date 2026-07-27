@@ -88,3 +88,46 @@ def test_aggregate_splits_by_pitcher_hand():
     by_hand = dict(zip(agg["p_throws"], agg["woba"]))
     assert by_hand["R"] == pytest.approx(2.0)   # lone HR / denom 1
     assert by_hand["L"] == pytest.approx(0.0)   # lone strikeout / denom 1
+
+
+# ---- gates: pitcher-batter identification (hitter-talent quantities only) ----
+
+def _pa_rows(rows):
+    """(batter, pitcher, season, n) -> PA-level frame with unique PA keys."""
+    records, pa_id = [], 0
+    for batter, pitcher, season, n in rows:
+        for _ in range(n):
+            pa_id += 1
+            records.append({"batter": batter, "pitcher": pitcher, "season": season,
+                            "game_pk": pa_id, "at_bat_number": 1,
+                            "woba_points": 0.3, "in_denominator": True})
+    return pd.DataFrame(records)
+
+
+def test_pitcher_taking_his_own_at_bats_is_excluded():
+    """Faces 300 batters, takes 12 PA -> an NL pitcher hitting. Not a hitter."""
+    df = _pa_rows([(600, 500, 2019, 300), (500, 998, 2019, 12)])
+    assert (2019, 500) in et.primarily_pitchers(df)
+    assert 500 not in set(et.drop_pitcher_batters(df)["batter"])
+
+
+def test_two_way_player_is_retained_as_a_hitter():
+    """Faces 300 batters AND takes 500 PA -> Ohtani. Both conditions required."""
+    df = _pa_rows([(700, 999, 2021, 500), (800, 700, 2021, 300)])
+    assert (2021, 700) not in et.primarily_pitchers(df)
+    assert 700 in set(et.drop_pitcher_batters(df)["batter"])
+
+
+def test_position_player_who_mopped_up_is_retained():
+    """Faces 6 batters in a blowout, takes 500 PA -> a hitter, not a pitcher."""
+    df = _pa_rows([(750, 999, 2019, 500), (860, 750, 2019, 6)])
+    assert (2019, 750) not in et.primarily_pitchers(df)
+    assert 750 in set(et.drop_pitcher_batters(df)["batter"])
+
+
+def test_exclusion_is_per_season_not_career():
+    """A player who pitches one season and hits the next is judged season by season."""
+    df = _pa_rows([(600, 500, 2019, 300), (500, 998, 2019, 12),
+                   (500, 998, 2021, 400)])
+    excluded = et.primarily_pitchers(df)
+    assert (2019, 500) in excluded and (2021, 500) not in excluded

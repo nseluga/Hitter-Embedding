@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from src.analysis import stabilization as stab
+from src.data.eval_targets import primarily_pitchers
 
 OUT = "results/phase_b"
 MAX_TRAIN_SEASON = 2023
@@ -175,9 +176,15 @@ def main():
                               columns=["batter", "season", "p_throws", "game_pk", "at_bat_number",
                                        "swing", "contact", "ev", "la", "spray"])
     labeled = labeled[labeled["season"] <= MAX_TRAIN_SEASON]
-    pa = pd.read_parquet("data/processed/eval_targets_pa.parquet",
-                         columns=["batter", "season", "p_throws", "woba_points", "in_denominator"])
+    pa = pd.read_parquet("data/processed/eval_targets_pa.parquet")
     pa = pa[(pa["season"] <= MAX_TRAIN_SEASON) & (pa["in_denominator"] == 1)]
+    # Pitchers taking their own turn at bat (NL, pre-2022 DH) are ~40% of distinct
+    # batters in these seasons and hit ~.15. They are not the hitter population any
+    # stabilization point describes, and their spread inflates between-hitter signal
+    # variance, biasing n* downward. Excluded from BOTH tables, keyed by (season, batter).
+    excluded = primarily_pitchers(pa)
+    pa = pa[~pd.MultiIndex.from_arrays([pa["season"], pa["batter"]]).isin(excluded)]
+    labeled = labeled[~pd.MultiIndex.from_arrays([labeled["season"], labeled["batter"]]).isin(excluded)]
 
     panel = build_panel(labeled, pa)
     factors = conversion_factors(labeled)

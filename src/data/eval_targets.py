@@ -128,6 +128,55 @@ def build(snapshot_dir, seasons=None, weights=None):
     return df
 
 
+# Mirror of clean.py's position-player-pitcher rule, in the batting direction. Real
+# pitchers face hundreds of batters a season; a pitcher who ALSO takes a full slate of
+# PA is a two-way player (Ohtani) and is a genuine hitter, so both conditions are
+# required. Thresholds match clean.py's for consistency.
+PITCHER_MIN_BATTERS_FACED = 50
+TWO_WAY_MIN_PA = 50
+
+
+def primarily_pitchers(pa_df):
+    """
+    Batter ids that are pitchers taking their own turn at bat, per season.
+
+    The eval-target table is built from the COMPLETE source on purpose, so it contains
+    every PA including NL pitchers batting before the 2022 universal DH — roughly half
+    the distinct batters in 2015-2021. That is correct for the target itself (ground
+    truth must not be filtered), but any quantity describing HITTER talent — a prior,
+    a stabilization point, a league average a projection shrinks toward — must exclude
+    them, or a population of ~.15-wOBA non-hitters contaminates it.
+
+    Returns a set of (season, batter) pairs.
+    """
+    out = set()
+    for season, frame in pa_df.groupby("season"):
+        pa_key = frame[["batter", "game_pk", "at_bat_number"]].drop_duplicates()
+        batted = pa_key.groupby("batter").size()
+        faced = frame[["pitcher", "game_pk", "at_bat_number"]].drop_duplicates().groupby("pitcher").size()
+
+        real_pitchers = set(faced[faced >= PITCHER_MIN_BATTERS_FACED].index)
+        two_way = set(batted[batted >= TWO_WAY_MIN_PA].index)
+        # only ids that actually took a PA are meaningful here — a pitcher who never
+        # batted needs no exclusion and would just clutter the set
+        out.update((season, batter)
+                   for batter in (real_pitchers & set(batted.index)) - two_way)
+    return out
+
+
+def drop_pitcher_batters(pa_df):
+    """
+    Remove pitchers' own plate appearances. Use for every hitter-talent quantity;
+    never for the evaluation target itself.
+    """
+    excluded = primarily_pitchers(pa_df)
+    if not excluded:
+        return pa_df
+    keys = pd.MultiIndex.from_arrays([pa_df["season"], pa_df["batter"]])
+    mask = ~keys.isin(excluded)
+    return pa_df[mask]
+
+
 def aggregate(pa_df, by=("batter", "season", "p_throws")):
     """
     Roll the PA-level table up to wOBA per group (default: hitter x season x pitcher hand).

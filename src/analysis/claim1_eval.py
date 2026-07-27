@@ -40,14 +40,14 @@ measurement. Errors add in quadrature:
 
 so every model, however good, pays the same irreducible noise tax and RMSE is
 trapped in a narrow band. On the 2024 frame that tax is ~60-70% of the mean squared
-error in every stratum (low stratum: floor 0.0472 of an observed 0.0600), which
+error in every stratum (low stratum: floor 0.0465 of an observed 0.0591), which
 compresses real differences into what looks like rounding. `score` therefore reports
 `noise_floor` and the deconvolved `model_rmse` alongside the raw PA-weighted RMSE.
 The raw metric is unchanged and remains the frozen §5.2 number; the extra columns
 only make it legible.
 
 The floor is per stratum, not global — it is set by how many PA sit in THAT
-stratum's answer key (low ~103 PA -> 0.0472; high ~232 PA -> 0.0332). The
+stratum's answer key (low ~96 PA -> 0.0465; high ~251 PA -> 0.0330). The
 deconvolution assumes model error and target sampling noise are independent, which
 holds because no model sees the held-out season. It is an estimate and is labeled
 as one wherever reported.
@@ -63,13 +63,19 @@ import pandas as pd
 from src.config.splits import load_splits
 
 # Stratum boundaries in prior side-specific PA. Derived from the B.1 result, not
-# chosen by round-number convenience: side-specific wOBA stabilizes at n* ~= 190 PA
-# (variance-components estimate, lab notebook 2026-07-21). Below n*/2 the observed
-# split is noise-dominated — the regime the small-sample thesis exists to serve.
-# Above 2*n* the hitter's own observed split is trustworthy on its own and a model
-# has little to add.
-STABILIZATION_N_STAR = 190
-STRATUM_BOUNDARIES = (STABILIZATION_N_STAR // 2, STABILIZATION_N_STAR * 2)  # (95, 380)
+# chosen by round-number convenience: side-specific wOBA vs LHP stabilizes at
+# n* ~= 226 PA (variance-components estimate on TRAIN seasons, hitters only). Below
+# n*/2 the observed split is noise-dominated — the regime the small-sample thesis
+# exists to serve. Above 2*n* the hitter's own observed split is trustworthy on its
+# own and a model has little to add.
+#
+# The vs-LHP figure anchors the cuts (rather than vs-RHP's 254) because the scarce
+# side is the one the thesis is graded on. Revised 2026-07-27 from 190: the earlier
+# value was estimated on a population that still included pitchers taking their own
+# at-bats, whose ~.15 wOBA inflated between-hitter signal variance and so biased n*
+# downward. Hitters-only CI [199, 264].
+STABILIZATION_N_STAR = 226
+STRATUM_BOUNDARIES = (STABILIZATION_N_STAR // 2, STABILIZATION_N_STAR * 2)  # (113, 452)
 STRATUM_NAMES = ("low", "medium", "high")
 
 # A hitter with a handful of held-out PA has an essentially random observed wOBA;
@@ -136,7 +142,11 @@ def build_eval_frame(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
     pa_df: PA-level eval targets; predictions: frame with batter/season/p_throws/pred_woba.
     Returns (eval_frame, coverage) where coverage records what was dropped and why.
     """
-    from src.data.eval_targets import aggregate
+    from src.data.eval_targets import aggregate, drop_pitcher_batters
+
+    # claim 1 projects HITTERS; pitchers taking their own turn at bat are not the
+    # population. A no-op on DH-era eval seasons, correct on any earlier one.
+    pa_df = drop_pitcher_batters(pa_df)
 
     assert set(KEY + ["pred_woba"]).issubset(predictions.columns), \
         f"predictions must have {KEY + ['pred_woba']}, got {list(predictions.columns)}"
@@ -235,6 +245,11 @@ def deconvolve(rmse, floor):
     return float(np.sqrt(max(0.0, rmse**2 - floor**2)))
 
 
+# ponytail: model-vs-model claims currently compare two absolute RMSEs, each inflated
+# by the same target noise. The powerful form is a PAIRED loss differential —
+# per-hitter squared-error differences, where the shared noise largely cancels —
+# bootstrapped over hitters within stratum for a CI (Diebold-Mariano). Deferred to the
+# first genuine head-to-head (C.2 vs C.1) since it needs two real models to be useful.
 def skill_score(model_rmse, reference_model_rmse):
     """
     Share of the reference's true error the model eliminates, in variance terms:

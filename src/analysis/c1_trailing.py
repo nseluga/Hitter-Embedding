@@ -38,7 +38,7 @@ season, including the league average the predictions shrink toward.
 
 import pandas as pd
 
-from src.data.eval_targets import aggregate
+from src.data.eval_targets import aggregate, drop_pitcher_batters
 
 TRAILING_SEASONS = 3
 
@@ -97,6 +97,9 @@ def predict(pa_df, eval_season, variant="bucketed", n_seasons=TRAILING_SEASONS,
     Returns a frame with batter/season/p_throws/pred_woba, ready for claim1_eval.
     """
     assert variant in {"raw", "bucketed"}, f"unknown variant {variant!r}"
+    # pitchers batting (pre-2022 NL) would drag the league average a projection
+    # shrinks toward well below any real hitter's level
+    pa_df = drop_pitcher_batters(pa_df)
 
     window = trailing_window(pa_df, eval_season, n_seasons)
     league = league_average(window)
