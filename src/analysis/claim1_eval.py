@@ -245,11 +245,50 @@ def deconvolve(rmse, floor):
     return float(np.sqrt(max(0.0, rmse**2 - floor**2)))
 
 
-# ponytail: model-vs-model claims currently compare two absolute RMSEs, each inflated
-# by the same target noise. The powerful form is a PAIRED loss differential —
-# per-hitter squared-error differences, where the shared noise largely cancels —
-# bootstrapped over hitters within stratum for a CI (Diebold-Mariano). Deferred to the
-# first genuine head-to-head (C.2 vs C.1) since it needs two real models to be useful.
+def paired_rmse_difference(frame_a, frame_b, n_boot=2000, seed=0, ci=(2.5, 97.5)):
+    """
+    Head-to-head model comparison as a PAIRED bootstrap (Diebold-Mariano in spirit).
+
+    Comparing two absolute RMSEs is weak here: each is ~60-70% the SAME target noise,
+    so a real improvement reads as rounding and neither number carries an interval.
+    Scoring both models on the same resampled hitters cancels the shared noise, so the
+    difference is far better resolved than either level.
+
+    frame_a, frame_b: build_eval_frame outputs for the two models. Returns one row per
+    stratum with rmse_a, rmse_b, their difference (negative favours A), and a
+    percentile CI. Resamples HITTERS, the independent unit.
+    """
+    merged = frame_a.merge(frame_b[KEY + ["pred_woba"]], on=KEY, suffixes=("_a", "_b"))
+    assert len(merged) == len(frame_a) == len(frame_b), \
+        "paired comparison requires both models to score exactly the same groups"
+    rng = np.random.default_rng(seed)
+
+    rows = []
+    for name in list(STRATUM_NAMES) + ["all"]:
+        part = merged if name == "all" else merged[merged["stratum"] == name]
+        if len(part) < 3:
+            continue
+        actual, pa = part["woba"].to_numpy(), part["pa"].to_numpy(dtype=float)
+        error_a = (part["pred_woba_a"].to_numpy() - actual) ** 2
+        error_b = (part["pred_woba_b"].to_numpy() - actual) ** 2
+        weighted = lambda err, idx: float(np.sqrt(np.sum(pa[idx] * err[idx]) / pa[idx].sum()))
+
+        full = np.arange(len(part))
+        draws = [weighted(error_a, i) - weighted(error_b, i)
+                 for i in (rng.integers(0, len(part), len(part)) for _ in range(n_boot))]
+        rows.append({
+            "stratum": name,
+            "n_hitters": len(part),
+            "rmse_a": weighted(error_a, full),
+            "rmse_b": weighted(error_b, full),
+            "rmse_difference": weighted(error_a, full) - weighted(error_b, full),
+            "ci_low": float(np.percentile(draws, ci[0])),
+            "ci_high": float(np.percentile(draws, ci[1])),
+            "favours_a_share": float(np.mean(np.asarray(draws) < 0)),
+        })
+    return pd.DataFrame(rows)
+
+
 def skill_score(model_rmse, reference_model_rmse):
     """
     Share of the reference's true error the model eliminates, in variance terms:

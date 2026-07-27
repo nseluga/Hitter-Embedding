@@ -1,0 +1,8 @@
+{
+  "eval_season": 2024,
+  "actual_groups": 1279,
+  "dropped_below_min_eval_pa": 264,
+  "min_eval_pa": 25,
+  "dropped_no_prediction": 0,
+  "scored_groups": 1015
+}
