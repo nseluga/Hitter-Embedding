@@ -22,7 +22,13 @@ import pandas as pd
 
 from src.analysis import c1_trailing as c1
 from src.analysis import c2_bivariate_eb as c2
+from src.analysis import c3_gbm as c3
 from src.analysis import claim1_eval as evaluation
+
+# the only columns c3.season_process reads; the labeled table is 340MB and the
+# rest of it is context the hitter-level baselines have no use for
+PITCH_COLUMNS = ["batter", "season", "p_throws", "pitch_type", "strikes",
+                 "swing", "contact", "ev", "la", "spray"]
 
 DEFAULT_EVAL_SEASON = 2024
 OUT_DIR = Path("results/phase_c")
@@ -77,9 +83,9 @@ def fit_and_describe(pa_df, eval_season, seed):
     return params, pd.DataFrame(rows), rho_ci
 
 
-def build_predictions(pa_df, eval_season, params):
+def build_predictions(pa_df, eval_season, params, process_seasons, seed=0):
     """Every Phase C baseline, plus the two reference rows, on one eval frame."""
-    return {
+    predictions = {
         "c2_bivariate": c2.predict(pa_df, eval_season, params=params),
         "c2_book_rho_reference": c2.predict(pa_df, eval_season, params=params,
                                             rho_override=BOOK_IMPLIED_RHO),
@@ -88,6 +94,16 @@ def build_predictions(pa_df, eval_season, params):
         "no_info_league_average": c1.predict(pa_df, eval_season, variant="bucketed",
                                              buckets=NO_INFO_BUCKETS),
     }
+    # C.3 in both feature sets: "outcome" sees exactly what C.1/C.2 saw, "full"
+    # adds process and its context slices. The pair is the ablation.
+    models = {}
+    for feature_set in ("outcome", "full"):
+        prediction, model, n_rounds = c3.predict(pa_df, process_seasons, eval_season,
+                                                 feature_set=feature_set, seed=seed,
+                                                 return_model=True)
+        predictions[f"c3_gbm_{feature_set}"] = prediction
+        models[feature_set] = (model, n_rounds)
+    return predictions, models
 
 
 def score_all(pa_df, predictions, eval_season):
@@ -108,6 +124,60 @@ def score_all(pa_df, predictions, eval_season):
         for _, row in scored.iterrows()
     ]
     return frames, scored, coverage
+
+
+def shuffle_null_table(pa_df, process_seasons, reference_frame, eval_season, seed,
+                       real_differences):
+    """
+    How large a margin over C.2 does the C.3 fitting procedure produce with NO
+    hitter information? Trains the same model on shuffled labels several times
+    and scores each against the same reference, giving the real margin a null to
+    be judged against rather than an eyeballed "that looks big".
+    """
+    nulls = c3.shuffle_null(pa_df, process_seasons, eval_season)
+    differences = []
+    for null_seed, prediction in nulls.items():
+        frame, _ = evaluation.build_eval_frame(pa_df, prediction, eval_season)
+        table = evaluation.paired_rmse_difference(frame, reference_frame, n_boot=200, seed=seed)
+        table["null_seed"] = null_seed
+        differences.append(table)
+    stacked = pd.concat(differences, ignore_index=True)
+    real = real_differences.set_index("stratum")["rmse_difference"]
+    stacked["beats_real"] = [row["rmse_difference"] <= real.get(row["stratum"], -np.inf)
+                             for _, row in stacked.iterrows()]
+
+    return (stacked.groupby("stratum", observed=True)
+            .agg(n_seeds=("rmse_difference", "size"),
+                 mean_difference=("rmse_difference", "mean"),
+                 min_difference=("rmse_difference", "min"),
+                 max_difference=("rmse_difference", "max"),
+                 n_null_fits_beating_real=("beats_real", "sum"))
+            .reset_index())
+
+
+def prediction_bias(frames):
+    """
+    PA-weighted mean prediction minus mean actual, per stratum. The level error
+    every Phase C baseline carries: they shrink toward LEAGUE average, but
+    low-exposure hitters are genuinely below it (managers bench bad hitters), so
+    a model that can express an exposure-conditional level gains RMSE without
+    ordering hitters any better. Reading the skill scores without this column
+    invites crediting a level correction as projection skill.
+    """
+    rows = []
+    for name, frame in frames.items():
+        for stratum in evaluation.STRATUM_NAMES:
+            part = frame[frame["stratum"] == stratum]
+            if not len(part):
+                continue
+            weight = part["pa"].astype(float)
+            rows.append({
+                "model": name, "stratum": stratum,
+                "bias": float(np.average(part["pred_woba"] - part["woba"], weights=weight)),
+                "mean_pred": float(np.average(part["pred_woba"], weights=weight)),
+                "mean_actual": float(np.average(part["woba"], weights=weight)),
+            })
+    return pd.DataFrame(rows)
 
 
 def exposure_talent_correlation(frame):
@@ -158,6 +228,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Run the Phase C baseline report.")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
+    parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-season", type=int, default=DEFAULT_EVAL_SEASON)
     parser.add_argument("--out-dir", default=str(OUT_DIR))
     parser.add_argument("--seed", type=int, default=0)
@@ -179,7 +250,14 @@ def main():
         print(f"  type {batter_type}: rho {point:.3f} 95% CI [{low:.3f}, {high:.3f}] "
               f"vs Book-implied {book:.3f} -> {verdict}  [{at_bound:.0%} of resamples at bound]")
 
-    predictions = build_predictions(pa_df, args.eval_season, params)
+    process_seasons = c3.season_process(
+        pd.read_parquet(args.pitch_events, columns=PITCH_COLUMNS))
+    predictions, c3_models = build_predictions(pa_df, args.eval_season, params,
+                                               process_seasons, seed=args.seed)
+    for feature_set, (_, n_rounds) in c3_models.items():
+        print(f"C.3 [{feature_set}]: {n_rounds} boosting rounds "
+              f"(early-stopped on target season {c3.INNER_VAL_SEASON})")
+
     frames, scored, coverage = score_all(pa_df, predictions, args.eval_season)
     print("\nclaim-1 scores")
     print(scored.to_string(index=False, float_format="%.4f"))
@@ -195,6 +273,38 @@ def main():
                                                     frames["c2_book_rho_reference"], seed=args.seed)
     print("\npaired bootstrap: estimated rho minus The Book's implied rho")
     print(paired_book.to_string(index=False, float_format="%.5f"))
+
+    # the two head-to-heads C.3 exists to settle: does a GBM beat the EB incumbent,
+    # and does giving it process features (rather than the same inputs C.2 had) help
+    paired_c3 = evaluation.paired_rmse_difference(frames["c3_gbm_full"],
+                                                  frames["c2_bivariate"], seed=args.seed)
+    print("\npaired bootstrap: C.3 full minus C.2 bivariate (negative favours C.3)")
+    print(paired_c3.to_string(index=False, float_format="%.5f"))
+
+    paired_c3_ablation = evaluation.paired_rmse_difference(frames["c3_gbm_full"],
+                                                           frames["c3_gbm_outcome"], seed=args.seed)
+    print("\npaired bootstrap: C.3 full minus C.3 outcome-only (negative favours process features)")
+    print(paired_c3_ablation.to_string(index=False, float_format="%.5f"))
+
+    shuffle = shuffle_null_table(pa_df, process_seasons, frames["c2_bivariate"],
+                                 args.eval_season, args.seed, paired_c3)
+    print("\nlabel-shuffle null: same fitting procedure, hitter->target link destroyed")
+    print(shuffle.to_string(index=False, float_format="%.5f"))
+    real_low = paired_c3[paired_c3["stratum"] == "low"]["rmse_difference"].iat[0]
+    null_low = shuffle[shuffle["stratum"] == "low"]
+    print(f"  C.3 full's low-stratum margin {real_low:+.5f} vs a null of "
+          f"{null_low['mean_difference'].iat[0]:+.5f} "
+          f"[{null_low['min_difference'].iat[0]:+.5f}, {null_low['max_difference'].iat[0]:+.5f}]"
+          f" -> {int(null_low['n_null_fits_beating_real'].iat[0])} of "
+          f"{int(null_low['n_seeds'].iat[0])} null fits match it")
+
+    bias = prediction_bias(frames)
+    print("\nprediction bias by stratum (mean predicted minus mean actual, PA-weighted)")
+    print(bias.pivot(index="model", columns="stratum", values="bias").to_string(float_format="%.4f"))
+
+    importance = c3.feature_importance(c3_models["full"][0], "full")
+    print("\nC.3 gain importance (in-sample, interpretation only — the ablation is the evidence)")
+    print(importance.head(12).to_string(index=False, float_format="%.4f"))
 
     exposure = exposure_talent_correlation(frames["c2_bivariate"])
     print("\nexposure-talent correlation (EB exchangeability check, reported not corrected)")
@@ -212,8 +322,13 @@ def main():
     paired_book.to_csv(out_dir / "c2_vs_book_rho_paired.csv", index=False)
     exposure.to_csv(out_dir / "c2_exposure_talent_correlation.csv", index=False)
     decoded.to_csv(out_dir / "c_decode_sample.csv", index=False)
+    paired_c3.to_csv(out_dir / "c3_vs_c2_paired.csv", index=False)
+    paired_c3_ablation.to_csv(out_dir / "c3_process_ablation_paired.csv", index=False)
+    importance.to_csv(out_dir / "c3_feature_importance.csv", index=False)
+    shuffle.to_csv(out_dir / "c3_shuffle_null.csv", index=False)
+    bias.to_csv(out_dir / "c_prediction_bias.csv", index=False)
     (out_dir / "c_coverage.json").write_text(json.dumps(coverage, indent=2))
-    print(f"\nwrote 6 files to {out_dir}")
+    print(f"\nwrote 11 files to {out_dir}")
 
 
 if __name__ == "__main__":
