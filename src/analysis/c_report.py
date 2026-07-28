@@ -155,6 +155,25 @@ def shuffle_null_table(pa_df, process_seasons, reference_frame, eval_season, see
             .reset_index())
 
 
+def oracle_debias(frame):
+    """
+    Recenter a model's predictions to zero PA-weighted bias within each stratum,
+    USING THE HELD-OUT ACTUALS. This is an oracle: it peeks at the answer key, so
+    it can never be a baseline and is never scored as one. Its only job is to
+    separate a model's level error from its ordering, so the C.2/C.3 comparison
+    can say how much of the margin is each.
+    """
+    out = frame.copy()
+    for stratum in evaluation.STRATUM_NAMES:
+        mask = out["stratum"] == stratum
+        if not mask.any():
+            continue
+        weight = out.loc[mask, "pa"].astype(float)
+        bias = np.average(out.loc[mask, "pred_woba"] - out.loc[mask, "woba"], weights=weight)
+        out.loc[mask, "pred_woba"] -= bias
+    return out
+
+
 def prediction_bias(frames):
     """
     PA-weighted mean prediction minus mean actual, per stratum. The level error
@@ -298,6 +317,19 @@ def main():
           f" -> {int(null_low['n_null_fits_beating_real'].iat[0])} of "
           f"{int(null_low['n_seeds'].iat[0])} null fits match it")
 
+    # how much of C.3's margin is the exposure-conditional level C.2 cannot express?
+    # (decision log 2026-07-28 — the confound is reported, not corrected)
+    debiased = evaluation.paired_rmse_difference(oracle_debias(frames["c3_gbm_full"]),
+                                                 oracle_debias(frames["c2_bivariate"]),
+                                                 seed=args.seed)
+    print("\nORACLE bound (peeks at actuals, never a baseline): C.3 full minus C.2, "
+          "both level-corrected")
+    print(debiased.to_string(index=False, float_format="%.5f"))
+    reported_low = paired_c3[paired_c3["stratum"] == "low"]["rmse_difference"].iat[0]
+    debiased_low = debiased[debiased["stratum"] == "low"]["rmse_difference"].iat[0]
+    print(f"  low stratum: {1 - debiased_low / reported_low:.0%} of C.3's reported margin "
+          "is the level correction, not ordering")
+
     bias = prediction_bias(frames)
     print("\nprediction bias by stratum (mean predicted minus mean actual, PA-weighted)")
     print(bias.pivot(index="model", columns="stratum", values="bias").to_string(float_format="%.4f"))
@@ -327,8 +359,9 @@ def main():
     importance.to_csv(out_dir / "c3_feature_importance.csv", index=False)
     shuffle.to_csv(out_dir / "c3_shuffle_null.csv", index=False)
     bias.to_csv(out_dir / "c_prediction_bias.csv", index=False)
+    debiased.to_csv(out_dir / "c3_vs_c2_oracle_debiased.csv", index=False)
     (out_dir / "c_coverage.json").write_text(json.dumps(coverage, indent=2))
-    print(f"\nwrote 11 files to {out_dir}")
+    print(f"\nwrote 12 files to {out_dir}")
 
 
 if __name__ == "__main__":
