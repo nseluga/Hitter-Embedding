@@ -40,6 +40,15 @@ OUT_DIR = Path("results/phase_c")
 # The Book p. 157 (via Tango, insidethebook.com 2009), converted to the rho it is
 # equivalent to via n*_d = n*_side / (2(1 - rho)) with n*_side = 226 (B.1, hitters
 # only). Approximate — assumes tau_L = tau_R. A REFERENCE ROW, never fitted.
+#
+# Scope, decided 2026-07-29: this is a PLAUSIBILITY CHECK on our own fitted prior,
+# not a scored incumbent. We do not have a copy of The Book, so its functional form
+# cannot be reproduced faithfully and a head-to-head against it would be a comparison
+# with a reconstruction, not with the source. The check that remains is in parameter
+# space — our rho and implied split constant against the published ones, printed below
+# and committed in c2_prior_parameters.csv — which answers "are we in the right
+# ballpark" without claiming to have run their model. The paired bootstrap that used
+# to score this row was removed for that reason.
 BOOK_IMPLIED_RHO = {"R": 0.949, "L": 0.887, "S": 0.949}
 
 # no-information reference: predict the side-specific league average for everyone.
@@ -368,11 +377,6 @@ def main():
     print("\npaired bootstrap: C.2 bivariate minus C.1 raw (negative favours C.2)")
     print(paired_raw.to_string(index=False, float_format="%.5f"))
 
-    paired_book = evaluation.paired_rmse_difference(frames["c2_bivariate"],
-                                                    frames["c2_book_rho_reference"], seed=args.seed)
-    print("\npaired bootstrap: estimated rho minus The Book's implied rho")
-    print(paired_book.to_string(index=False, float_format="%.5f"))
-
     # the two head-to-heads C.3 exists to settle: does a GBM beat the EB incumbent,
     # and does giving it process features (rather than the same inputs C.2 had) help
     paired_c3 = evaluation.paired_rmse_difference(frames["c3_gbm_full"],
@@ -460,7 +464,6 @@ def main():
     scored.to_csv(out_dir / "c_claim1_scores.csv", index=False)
     paired.to_csv(out_dir / "c2_vs_c1_bucketed_paired.csv", index=False)
     paired_raw.to_csv(out_dir / "c2_vs_c1_raw_paired.csv", index=False)
-    paired_book.to_csv(out_dir / "c2_vs_book_rho_paired.csv", index=False)
     exposure.to_csv(out_dir / "c2_exposure_talent_correlation.csv", index=False)
     decoded.to_csv(out_dir / "c_decode_sample.csv", index=False)
     paired_c3.to_csv(out_dir / "c3_vs_c2_paired.csv", index=False)
@@ -472,7 +475,7 @@ def main():
     bias.to_csv(out_dir / "c_prediction_bias.csv", index=False)
     debiased.to_csv(out_dir / "c3_vs_c2_oracle_debiased.csv", index=False)
     (out_dir / "c_coverage.json").write_text(json.dumps(coverage, indent=2))
-    print(f"\nwrote 15 files to {out_dir}")
+    print(f"\nwrote 14 files to {out_dir}")
 
 
 if __name__ == "__main__":
