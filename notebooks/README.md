@@ -17,7 +17,8 @@ Move to source code once:
 
 ## Naming Convention
 
-- `phase_X_*.ipynb` — exploratory work for that phase
+- `NN_topic.ipynb` — numbered in build order, one per phase or measurement block
+  (`01_statcast_profiling`, `02_feature_value`, `03_baselines`)
 - `exploratory_*.ipynb` — ad-hoc investigation (label by topic)
 - `paper_figure_*.ipynb` — analysis for paper figures/tables (archive once finalized)
 

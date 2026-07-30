@@ -72,8 +72,8 @@ def league_average(window):
 def trailing_woba(window):
     """Each hitter's observed wOBA and PA against each pitcher hand over the window."""
     out = aggregate(window, by=("batter", "p_throws"))
-    return out[["batter", "p_throws", "woba", "pa"]].rename(
-        columns={"woba": "trailing_woba", "pa": "trailing_pa"}
+    return out[["batter", "p_throws", "woba", "denominator"]].rename(
+        columns={"woba": "trailing_woba", "denominator": "trailing_pa"}
     )
 
 

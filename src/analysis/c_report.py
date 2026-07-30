@@ -9,9 +9,13 @@ What it produces:
   1. the fitted C.2 prior per batter type, with a bootstrap CI on rho
   2. the implied split-regression constant against The Book's 2200 / 1000
   3. claim-1 scores for every Phase C baseline on the same eval frame
-  4. the paired C.2-vs-C.1 bootstrap, which is the actual head-to-head claim
-  5. two honesty diagnostics: exposure-talent correlation, and a decode-one-hitter
-     table for eyeballing against the source
+  4. the paired bootstraps that are the actual head-to-head claims — C.2 vs C.1 in
+     both variants (raw and bucketed), C.3 vs C.2, and C.3's process ablation — on
+     BOTH frozen metrics: RMSE per comparison, and rank correlation in one table
+     (`c_rank_paired.csv`)
+  5. the diagnostics that keep those claims honest: a label-shuffle null, per-stratum
+     prediction bias, an oracle level-corrected bound, exposure-talent correlation,
+     and a decode-one-hitter table for eyeballing against the source
 """
 
 import json
@@ -155,6 +159,75 @@ def shuffle_null_table(pa_df, process_seasons, reference_frame, eval_season, see
             .reset_index())
 
 
+def min_eval_pa_sensitivity(pa_df, predictions, eval_season, seed,
+                            thresholds=evaluation.MIN_EVAL_PA_SENSITIVITY):
+    """
+    Does the headline survive the eval filter, or is it an artifact of it?
+
+    MIN_EVAL_PA censors on eval-season playing time — decided after the projection and
+    partly by the hitter's own performance — and it bites hardest in the low stratum
+    the thesis is graded on. A threshold chosen once and never varied is an untested
+    assumption sitting upstream of every Phase C number, so the headline C.3-vs-C.2
+    comparison is re-scored across a range of it and the result is committed.
+
+    Cheap by construction: predictions do not depend on the threshold, so nothing is
+    refit — only the eval frame is rebuilt. Reports, per threshold and stratum, the
+    RMSE margin with its CI, the ordering margin with its CI, both models' level bias,
+    and the oracle share (how much of the RMSE margin is level rather than ordering),
+    which is the quantity most exposed to the filter.
+    """
+    rows = []
+    for threshold in thresholds:
+        frames = {name: evaluation.build_eval_frame(pa_df, prediction, eval_season,
+                                                    min_eval_pa=threshold)[0]
+                  for name, prediction in predictions.items()}
+        c3, c2 = frames["c3_gbm_full"], frames["c2_bivariate"]
+        rmse = evaluation.paired_rmse_difference(c3, c2, seed=seed).set_index("stratum")
+        rank = evaluation.paired_rank_difference(c3, c2, seed=seed).set_index("stratum")
+        oracle = evaluation.paired_rmse_difference(oracle_debias(c3), oracle_debias(c2),
+                                                  seed=seed).set_index("stratum")
+        bias = prediction_bias({k: frames[k] for k in ("c3_gbm_full", "c2_bivariate")})
+        bias = bias.set_index(["model", "stratum"])["bias"]
+
+        for stratum in rmse.index:
+            reported, debiased = rmse.loc[stratum, "rmse_difference"], oracle.loc[stratum, "rmse_difference"]
+            rows.append({
+                "min_eval_pa": threshold,
+                "stratum": stratum,
+                "n_hitters": int(rmse.loc[stratum, "n_hitters"]),
+                "rmse_difference": reported,
+                "rmse_ci_low": rmse.loc[stratum, "ci_low"],
+                "rmse_ci_high": rmse.loc[stratum, "ci_high"],
+                "rmse_favours_c3": rmse.loc[stratum, "favours_a_share"],
+                "rank_difference": rank.loc[stratum, "rank_difference"],
+                "rank_ci_low": rank.loc[stratum, "ci_low"],
+                "rank_ci_high": rank.loc[stratum, "ci_high"],
+                "bias_c2": bias.get(("c2_bivariate", stratum), np.nan),
+                "bias_c3": bias.get(("c3_gbm_full", stratum), np.nan),
+                "oracle_share_level": 1 - debiased / reported if reported else np.nan,
+            })
+    return pd.DataFrame(rows)
+
+
+def rank_paired_table(frames, comparisons, seed):
+    """
+    The ordering head-to-heads, each with an interval.
+
+    Every RMSE claim in this report goes through a paired bootstrap; until now the
+    rank claims did not, and they are the noisier of the two metrics. Quoting a pair
+    of bare rank correlations as evidence that two models order hitters differently
+    holds the ordering metric to a lower bar than the calibration metric — which
+    matters most in the low stratum, where the thesis is graded and where the gap
+    between any two models sits inside its own resampling interval.
+    """
+    tables = []
+    for label, (name_a, name_b) in comparisons.items():
+        table = evaluation.paired_rank_difference(frames[name_a], frames[name_b], seed=seed)
+        table.insert(0, "comparison", label)
+        tables.append(table)
+    return pd.concat(tables, ignore_index=True)
+
+
 def oracle_debias(frame):
     """
     Recenter a model's predictions to zero PA-weighted bias within each stratum,
@@ -168,7 +241,7 @@ def oracle_debias(frame):
         mask = out["stratum"] == stratum
         if not mask.any():
             continue
-        weight = out.loc[mask, "pa"].astype(float)
+        weight = out.loc[mask, "denominator"].astype(float)
         bias = np.average(out.loc[mask, "pred_woba"] - out.loc[mask, "woba"], weights=weight)
         out.loc[mask, "pred_woba"] -= bias
     return out
@@ -189,7 +262,7 @@ def prediction_bias(frames):
             part = frame[frame["stratum"] == stratum]
             if not len(part):
                 continue
-            weight = part["pa"].astype(float)
+            weight = part["denominator"].astype(float)
             rows.append({
                 "model": name, "stratum": stratum,
                 "bias": float(np.average(part["pred_woba"] - part["woba"], weights=weight)),
@@ -288,6 +361,13 @@ def main():
     print("\npaired bootstrap: C.2 bivariate minus C.1 bucketed (negative favours C.2)")
     print(paired.to_string(index=False, float_format="%.5f"))
 
+    # C.1 raw is the same trailing record with no shrinkage at all, so this pair prices
+    # regularization itself rather than the quality of it — the step C.1 bucketed splits in half
+    paired_raw = evaluation.paired_rmse_difference(frames["c2_bivariate"], frames["c1_raw"],
+                                                   seed=args.seed)
+    print("\npaired bootstrap: C.2 bivariate minus C.1 raw (negative favours C.2)")
+    print(paired_raw.to_string(index=False, float_format="%.5f"))
+
     paired_book = evaluation.paired_rmse_difference(frames["c2_bivariate"],
                                                     frames["c2_book_rho_reference"], seed=args.seed)
     print("\npaired bootstrap: estimated rho minus The Book's implied rho")
@@ -330,6 +410,34 @@ def main():
     print(f"  low stratum: {1 - debiased_low / reported_low:.0%} of C.3's reported margin "
           "is the level correction, not ordering")
 
+    # the same head-to-heads on the ORDERING metric, which Layer 2 actually consumes
+    rank_paired = rank_paired_table(frames, {
+        "c3_full_vs_c2": ("c3_gbm_full", "c2_bivariate"),
+        "c3_full_vs_c3_outcome": ("c3_gbm_full", "c3_gbm_outcome"),
+        "c2_vs_c1_bucketed": ("c2_bivariate", "c1_bucketed"),
+        "c2_vs_c1_raw": ("c2_bivariate", "c1_raw"),
+    }, args.seed)
+    print("\npaired bootstrap on RANK CORRELATION (positive favours A; batters resampled)")
+    print(rank_paired.to_string(index=False, float_format="%.4f"))
+    headline = rank_paired[(rank_paired["comparison"] == "c3_full_vs_c2")
+                           & (rank_paired["stratum"] == "low")].iloc[0]
+    print(f"  low stratum ordering: C.3 full {headline['rank_a']:.3f} vs C.2 "
+          f"{headline['rank_b']:.3f}, difference {headline['rank_difference']:+.3f} "
+          f"CI [{headline['ci_low']:+.3f}, {headline['ci_high']:+.3f}] -> "
+          + ("C.3 orders better" if headline["ci_low"] > 0 else
+             "C.2 orders better" if headline["ci_high"] < 0 else
+             "NEITHER model demonstrably orders better"))
+
+    sensitivity = min_eval_pa_sensitivity(pa_df, predictions, args.eval_season, args.seed)
+    print("\nMIN_EVAL_PA sensitivity: C.3 full vs C.2 across the eval filter")
+    print(sensitivity.to_string(index=False, float_format="%.4f"))
+    low = sensitivity[sensitivity["stratum"] == "low"]
+    span = low["rmse_difference"].max() - low["rmse_difference"].min()
+    print(f"  low-stratum RMSE margin ranges {low['rmse_difference'].min():+.5f} to "
+          f"{low['rmse_difference'].max():+.5f} (span {span:.5f}) across "
+          f"min_eval_pa {list(low['min_eval_pa'])}; "
+          + ("sign is stable" if (low["rmse_difference"] < 0).all() else "SIGN FLIPS — the margin is a filter artifact"))
+
     bias = prediction_bias(frames)
     print("\nprediction bias by stratum (mean predicted minus mean actual, PA-weighted)")
     print(bias.pivot(index="model", columns="stratum", values="bias").to_string(float_format="%.4f"))
@@ -350,18 +458,21 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     parameter_table.to_csv(out_dir / "c2_prior_parameters.csv", index=False)
     scored.to_csv(out_dir / "c_claim1_scores.csv", index=False)
-    paired.to_csv(out_dir / "c2_vs_c1_paired.csv", index=False)
+    paired.to_csv(out_dir / "c2_vs_c1_bucketed_paired.csv", index=False)
+    paired_raw.to_csv(out_dir / "c2_vs_c1_raw_paired.csv", index=False)
     paired_book.to_csv(out_dir / "c2_vs_book_rho_paired.csv", index=False)
     exposure.to_csv(out_dir / "c2_exposure_talent_correlation.csv", index=False)
     decoded.to_csv(out_dir / "c_decode_sample.csv", index=False)
     paired_c3.to_csv(out_dir / "c3_vs_c2_paired.csv", index=False)
     paired_c3_ablation.to_csv(out_dir / "c3_process_ablation_paired.csv", index=False)
+    rank_paired.to_csv(out_dir / "c_rank_paired.csv", index=False)
+    sensitivity.to_csv(out_dir / "c_min_eval_pa_sensitivity.csv", index=False)
     importance.to_csv(out_dir / "c3_feature_importance.csv", index=False)
     shuffle.to_csv(out_dir / "c3_shuffle_null.csv", index=False)
     bias.to_csv(out_dir / "c_prediction_bias.csv", index=False)
     debiased.to_csv(out_dir / "c3_vs_c2_oracle_debiased.csv", index=False)
     (out_dir / "c_coverage.json").write_text(json.dumps(coverage, indent=2))
-    print(f"\nwrote 12 files to {out_dir}")
+    print(f"\nwrote 15 files to {out_dir}")
 
 
 if __name__ == "__main__":

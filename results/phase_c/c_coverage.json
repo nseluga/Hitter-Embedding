@@ -1,8 +1,31 @@
 {
   "eval_season": 2024,
   "actual_groups": 1279,
-  "dropped_below_min_eval_pa": 264,
-  "min_eval_pa": 25,
+  "dropped_below_min_eval_pa": 130,
+  "min_eval_pa": 10,
   "dropped_no_prediction": 0,
-  "scored_groups": 1015
+  "scored_groups": 1149,
+  "by_stratum": {
+    "low": {
+      "scored": 380,
+      "dropped": 85,
+      "share_dropped": 0.1827956989247312,
+      "mean_woba_scored": 0.2715274403871476,
+      "mean_woba_dropped": 0.1978559710550887
+    },
+    "medium": {
+      "scored": 280,
+      "dropped": 33,
+      "share_dropped": 0.10543130990415335,
+      "mean_woba_scored": 0.2861702757268614,
+      "mean_woba_dropped": 0.22453930976430975
+    },
+    "high": {
+      "scored": 489,
+      "dropped": 12,
+      "share_dropped": 0.023952095808383235,
+      "mean_woba_scored": 0.3042298857630782,
+      "mean_woba_dropped": 0.17301157407407408
+    }
+  }
 }

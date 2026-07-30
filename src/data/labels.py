@@ -52,9 +52,24 @@ IN_PLAY_DESCRIPTION = "hit_into_play"
 # physically impossible. Those rows are a near-plate coordinate artifact: when hit
 # coords sit near the plate origin the angle formula blows up. The spray label is
 # unreliable there and is nulled; EV/LA come from launch tracking (not hit coords)
-# and stay valid. Effect measured in results/phase_b/spray_clipping.csv (VC n*
-# 82->73); the physical argument, not the small n* gain, is the reason.
+# and stay valid. The physical argument, not the n* gain, is the reason.
 # (2026-07-22 decision, Phase B.)
+#
+# Measured effect, results/phase_b/spray_clipping.csv (2026-07-29 run, VC n* at
+# r=0.5): 88.4 unclipped -> 81.7 clipped at the limit -> 77.4 dropped, on 9,575
+# artifacts out of 1,004,409 BBIP (0.95%). Nulling — what this constant does — is the
+# `dropped` row. Intervals overlap heavily ([78.6, 98.9] vs [68.6, 87.0]), so the
+# gain is directional, not established; the decision does not rest on it.
+#
+# These supersede the "82 -> 73" figure this comment carried until 2026-07-29. That
+# number was honestly measured on 2026-07-21, when the clip still lived downstream
+# and the check could see the artifacts. Moving the clip here on 2026-07-22 silently
+# turned that check into a no-op — it began comparing three copies of the already
+# nulled data — so the 2026-07-27 regeneration overwrote the file with three
+# identical rows while the citation above still pointed at it. The check now rebuilds
+# the pre-clip angle from hit coordinates and asserts it can still see artifacts
+# (b1_report.unclipped_spray). The level also moved because the pitcher-batter
+# exclusion (2026-07-27) changed the hitter population every n* is estimated on.
 SPRAY_ABS_MAX = 90.0
 
 

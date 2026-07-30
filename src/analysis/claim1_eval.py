@@ -16,11 +16,33 @@ What it computes (architecture §5.2):
   - PA-weighted RMSE — calibration. Weighted because a hitter with 400 held-out PA
     has a far less noisy observed wOBA than one with 20; unweighted, the noisiest
     observations dominate the error and the metric mostly measures luck.
+
+WHICH PA. Two counts exist per group and they are not interchangeable: `pa`, every
+completed plate appearance, and `denominator`, the wOBA denominator, which excludes
+intentional walks, sac bunts, and interference (~0.8% of PA). wOBA is
+numerator/denominator, so the DENOMINATOR is what sets how precisely a group's wOBA
+is measured — Var(observed wOBA) = within-group variance / denominator. Everything
+that expresses "how much this group's observation is worth" therefore uses the
+denominator: the min-PA filter, the RMSE weight, the noise-floor weight, the paired
+bootstrap, prior exposure, and the stratum boundaries (whose n* was itself estimated
+in denominator units). `pa` is retained and reported, but only as description.
+
+Until 2026-07-29 the filter and the RMSE weight used total `pa` while the noise floor
+and the strata used the denominator. The effect was ~1% and second-order, but it was
+systematic rather than noise — intentional walks accrue to the best hitters, sac bunts
+to the weakest — so it slightly over-weighted the top of the distribution relative to
+the precision of what was being weighted. C.1, C.2 and C.3 were already denominator-
+based internally, so this also removed a units boundary between the referee and the
+models it grades.
   - Rank correlation (Spearman) — ordering. Layer 2 consumes the ORDER (which
     hitters to acquire), not the level. A model can be badly calibrated yet rank
     correctly and still be useful downstream, so both are reported and they are
     allowed to disagree. Rank correlation is unweighted by construction (ranks
     carry no PA), so it is the more noise-exposed of the two — stated, not hidden.
+    Because it is the noisier metric, a claim that two models ORDER differently
+    goes through `paired_rank_difference`, never through two bare numbers: at the
+    low stratum's n, the gap between two models' rank correlations is comfortably
+    inside its own resampling interval.
   - Both, stratified by PRIOR side-specific exposure. This is the headline, not a
     breakdown: manifest frozen rule #1 defines beating the baselines only on
     high-exposure veterans as a NULL RESULT.
@@ -81,7 +103,34 @@ STRATUM_NAMES = ("low", "medium", "high")
 # A hitter with a handful of held-out PA has an essentially random observed wOBA;
 # scoring against it measures the target's noise, not the model. Hitters below this
 # are dropped from scoring and the drop count is REPORTED (never silent — §6).
-MIN_EVAL_PA = 25
+#
+# This filter is NOT free and is not a neutral hygiene step. It conditions on
+# eval-season playing time, which is decided AFTER the projection is made and partly
+# BY how the hitter performed — the same deployment/selection bias documented above as
+# the reason not to stratify on held-out PA. Even at 10 it removes 18.3% of the low
+# stratum against 2.4% of the high — it trims the headline stratum's worst performers
+# and so flatters every model's level, and no threshold makes that go away (a hitter
+# who never played cannot be scored). At 25 those figures were 36.6% and 6.2%. It is
+# therefore accompanied by a reported sensitivity: `c_report.py` re-scores the headline
+# comparison across MIN_EVAL_PA_SENSITIVITY and commits the result
+# (results/phase_c/c_min_eval_pa_sensitivity.csv), so a conclusion that depends on the
+# cut is visible rather than assumed away.
+#
+# Set to 10, revised from 25 on 2026-07-29 (Nate's call, decision log). The reason is
+# POPULATION COVERAGE, not the score: at 25 the filter removed 36.6% of the low
+# stratum, and hitters with little playing time are the object of study, so a frame
+# that discards a third of them measures a different population than the one claim 1
+# is about. At 10 the low-stratum drop is 18.3%. In side-specific terms 10 PA is a
+# median ~8 games of exposure against that hand (1.6 PA/game vs LHP, 2.0 vs RHP), not
+# 2-3 — these are per-hand counts, not whole-season ones.
+#
+# Stated plainly because it cannot be inferred later: C.3's margin over C.2 is LARGER
+# at 10 than at 25 (-0.0031 vs -0.0026), and that was known before the change. The cut
+# was not chosen for it. The guard against that hazard is that 25 and 50 remain in the
+# committed sweep, so the claim is shown to hold across a 3x swing in censoring rather
+# than resting on the chosen frame.
+MIN_EVAL_PA = 10
+MIN_EVAL_PA_SENSITIVITY = (10, 25, 50)
 
 KEY = ["batter", "season", "p_throws"]
 
@@ -158,17 +207,26 @@ def build_eval_frame(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
     actuals = actuals[actuals["season"] == eval_season]
     n_actual_groups = len(actuals)
 
+    # Strata are attached BEFORE the min-PA filter, not after, so the coverage report
+    # can say which strata the dropped groups came from. The aggregate drop count on
+    # its own is misleading here: the filter is far from uniform across strata (it
+    # removes ~37% of the low stratum against ~6% of the high), and low is the
+    # stratum the thesis is graded on. Stratification uses PRIOR exposure, so
+    # computing it for dropped groups leaks nothing.
+    actuals = actuals.merge(prior_exposure(pa_df, eval_season), on=["batter", "p_throws"],
+                            how="left")
+    # a hitter with no prior-season PA vs that hand has zero exposure, not missing
+    actuals["prior_pa"] = actuals["prior_pa"].fillna(0.0)
+    actuals["stratum"] = assign_stratum(actuals["prior_pa"], boundaries)
+
     # low-PA held-out groups measure target noise, not model skill
-    scorable = actuals[actuals["pa"] >= min_eval_pa]
+    scorable = actuals[actuals["denominator"] >= min_eval_pa]
+    dropped = actuals[actuals["denominator"] < min_eval_pa]
 
     frame = scorable.merge(predictions[KEY + ["pred_woba"]], on=KEY, how="inner")
     n_unpredicted = len(scorable) - len(frame)
 
     frame = frame.merge(sampling_noise(pa_df, eval_season), on=["batter", "p_throws"], how="left")
-    frame = frame.merge(prior_exposure(pa_df, eval_season), on=["batter", "p_throws"], how="left")
-    # a hitter with no prior-season PA vs that hand has zero exposure, not missing
-    frame["prior_pa"] = frame["prior_pa"].fillna(0.0)
-    frame["stratum"] = assign_stratum(frame["prior_pa"], boundaries)
 
     assert frame["stratum"].notna().all(), "every scored row must land in exactly one stratum"
     assert frame["pred_woba"].notna().all(), "predictions contain nulls"
@@ -181,12 +239,45 @@ def build_eval_frame(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
         "min_eval_pa": int(min_eval_pa),
         "dropped_no_prediction": int(n_unpredicted),
         "scored_groups": int(len(frame)),
+        "by_stratum": stratum_coverage(scorable, dropped),
     }
     return frame, coverage
 
 
+def stratum_coverage(scorable, dropped):
+    """
+    Per-stratum accounting for the min-PA filter: how many groups it removed, and how
+    the removed hitters actually hit.
+
+    This exists because the filter censors on a POST-projection quantity — how much
+    the manager chose to play him in the evaluated season — and managers bench hitters
+    who are going badly. So the drop is concentrated in the low-exposure stratum and
+    removes its worst performers, which raises every stratum's observed mean and
+    therefore UNDERSTATES the over-prediction bias every shrink-to-league-average
+    baseline carries. Reporting one aggregate drop count hides all of that (§6:
+    a coverage shortcut is stated where the result is stated).
+    """
+    out = {}
+    for name in STRATUM_NAMES:
+        kept, cut = scorable[scorable["stratum"] == name], dropped[dropped["stratum"] == name]
+        total = len(kept) + len(cut)
+        out[name] = {
+            "scored": int(len(kept)),
+            "dropped": int(len(cut)),
+            "share_dropped": float(len(cut) / total) if total else float("nan"),
+            "mean_woba_scored": float(kept["woba"].mean()) if len(kept) else float("nan"),
+            "mean_woba_dropped": float(cut["woba"].mean()) if len(cut) else float("nan"),
+        }
+    return out
+
+
 def pa_weighted_rmse(actual, predicted, pa):
-    """Root mean squared error weighting each hitter-hand group by its held-out PA."""
+    """
+    Root mean squared error weighting each hitter-hand group by its held-out PA.
+    Callers pass the wOBA DENOMINATOR, not total PA — that is the count wOBA is a
+    mean over, so it is the one that sets the observation's precision (see the
+    module docstring's "WHICH PA").
+    """
     actual, predicted, pa = np.asarray(actual), np.asarray(predicted), np.asarray(pa, dtype=float)
     assert actual.shape == predicted.shape == pa.shape, \
         f"shape mismatch: {actual.shape} {predicted.shape} {pa.shape}"
@@ -216,12 +307,13 @@ def score(eval_frame):
             rows.append({"stratum": name, "n_hitters": 0, "pa": 0.0,
                          "pa_weighted_rmse": float("nan"), "rank_corr": float("nan")})
             continue
-        rmse = pa_weighted_rmse(part["woba"], part["pred_woba"], part["pa"])
+        rmse = pa_weighted_rmse(part["woba"], part["pred_woba"], part["denominator"])
         floor = noise_floor(part)
         rows.append({
             "stratum": name,
             "n_hitters": len(part),
             "pa": float(part["pa"].sum()),
+            "scoring_pa": float(part["denominator"].sum()),
             "pa_weighted_rmse": rmse,
             "noise_floor": floor,
             "model_rmse": deconvolve(rmse, floor),
@@ -232,7 +324,7 @@ def score(eval_frame):
 
 def noise_floor(part):
     """PA-weighted irreducible RMSE contributed by noise in the held-out target."""
-    weight = part["pa"].astype(float)
+    weight = part["denominator"].astype(float)
     return float(np.sqrt((weight * part["noise_var"]).sum() / weight.sum()))
 
 
@@ -245,9 +337,42 @@ def deconvolve(rmse, floor):
     return float(np.sqrt(max(0.0, rmse**2 - floor**2)))
 
 
+def batter_clusters(part):
+    """
+    Row indices grouped by batter — the independent unit for resampling.
+
+    A hitter contributes up to TWO rows to the eval frame (vs LHP and vs RHP), and
+    their errors are not independent: both are driven by the same underlying talent,
+    the same season of health and aging, the same home park. Resampling rows would
+    count a batter's two rows as two independent draws and understate every interval.
+    On the 2024 frame the inflation is real but modest — the low stratum's 295 rows
+    come from 205 batters, the full frame's 1015 from 563.
+
+    Returns a list of index arrays, one per batter, for `_resample`.
+    """
+    codes = pd.factorize(np.asarray(part["batter"]))[0]
+    order = np.argsort(codes, kind="stable")
+    return np.split(order, np.flatnonzero(np.diff(codes[order])) + 1)
+
+
+def _resample(clusters, rng):
+    """One bootstrap replicate: draw batters with replacement, keep all their rows."""
+    picks = rng.integers(0, len(clusters), len(clusters))
+    return np.concatenate([clusters[i] for i in picks])
+
+
+def _paired_setup(frame_a, frame_b, seed):
+    """Shared preamble for the paired comparisons: merge, verify alignment, seed."""
+    merged = frame_a.merge(frame_b[KEY + ["pred_woba"]], on=KEY, suffixes=("_a", "_b"))
+    assert len(merged) == len(frame_a) == len(frame_b), \
+        "paired comparison requires both models to score exactly the same groups"
+    return merged, np.random.default_rng(seed)
+
+
 def paired_rmse_difference(frame_a, frame_b, n_boot=2000, seed=0, ci=(2.5, 97.5)):
     """
-    Head-to-head model comparison as a PAIRED bootstrap (Diebold-Mariano in spirit).
+    Head-to-head CALIBRATION comparison as a PAIRED bootstrap (Diebold-Mariano in
+    spirit).
 
     Comparing two absolute RMSEs is weak here: each is ~60-70% the SAME target noise,
     so a real improvement reads as rounding and neither number carries an interval.
@@ -256,35 +381,93 @@ def paired_rmse_difference(frame_a, frame_b, n_boot=2000, seed=0, ci=(2.5, 97.5)
 
     frame_a, frame_b: build_eval_frame outputs for the two models. Returns one row per
     stratum with rmse_a, rmse_b, their difference (negative favours A), and a
-    percentile CI. Resamples HITTERS, the independent unit.
+    percentile CI. Resamples BATTERS, the independent unit (see `batter_clusters`).
     """
-    merged = frame_a.merge(frame_b[KEY + ["pred_woba"]], on=KEY, suffixes=("_a", "_b"))
-    assert len(merged) == len(frame_a) == len(frame_b), \
-        "paired comparison requires both models to score exactly the same groups"
-    rng = np.random.default_rng(seed)
+    merged, rng = _paired_setup(frame_a, frame_b, seed)
 
     rows = []
     for name in list(STRATUM_NAMES) + ["all"]:
         part = merged if name == "all" else merged[merged["stratum"] == name]
         if len(part) < 3:
             continue
-        actual, pa = part["woba"].to_numpy(), part["pa"].to_numpy(dtype=float)
+        actual, pa = part["woba"].to_numpy(), part["denominator"].to_numpy(dtype=float)
         error_a = (part["pred_woba_a"].to_numpy() - actual) ** 2
         error_b = (part["pred_woba_b"].to_numpy() - actual) ** 2
         weighted = lambda err, idx: float(np.sqrt(np.sum(pa[idx] * err[idx]) / pa[idx].sum()))
 
+        clusters = batter_clusters(part)
         full = np.arange(len(part))
         draws = [weighted(error_a, i) - weighted(error_b, i)
-                 for i in (rng.integers(0, len(part), len(part)) for _ in range(n_boot))]
+                 for i in (_resample(clusters, rng) for _ in range(n_boot))]
         rows.append({
             "stratum": name,
             "n_hitters": len(part),
+            "n_batters": len(clusters),
             "rmse_a": weighted(error_a, full),
             "rmse_b": weighted(error_b, full),
             "rmse_difference": weighted(error_a, full) - weighted(error_b, full),
             "ci_low": float(np.percentile(draws, ci[0])),
             "ci_high": float(np.percentile(draws, ci[1])),
             "favours_a_share": float(np.mean(np.asarray(draws) < 0)),
+        })
+    return pd.DataFrame(rows)
+
+
+def paired_rank_difference(frame_a, frame_b, n_boot=2000, seed=0, ci=(2.5, 97.5)):
+    """
+    Head-to-head ORDERING comparison — the rank counterpart of
+    paired_rmse_difference, and required for exactly the same reason.
+
+    Two bare rank correlations are the weakest comparison in this project, not the
+    strongest: ranks are unweighted, so a 25-PA hitter's near-random ordering gets the
+    same vote as a 400-PA hitter's, and both models are ranked against the SAME noisy
+    answer key. Quoting "0.169 vs 0.102" as a disagreement between the two frozen
+    metrics is an inference about a difference, and a difference needs an interval —
+    the same standard `paired_rmse_difference` was written to enforce on the other
+    metric. Without this, the ordering claim was the one number in Phase C held to a
+    lower evidentiary bar than the rest.
+
+    SIGN CONVENTION, deliberately opposite to the RMSE version because higher rank
+    correlation is better: `rank_difference` = rank_a - rank_b, so POSITIVE favours A.
+    `favours_a_share` keeps its meaning across both functions — the share of
+    resamples in which A is the better model.
+
+    Degenerate resamples (a replicate with fewer than 3 distinct predictions) yield
+    NaN and are dropped; `n_draws` reports how many survived so a stratum that is
+    mostly degenerate cannot masquerade as a tight interval.
+    """
+    merged, rng = _paired_setup(frame_a, frame_b, seed)
+
+    rows = []
+    for name in list(STRATUM_NAMES) + ["all"]:
+        part = merged if name == "all" else merged[merged["stratum"] == name]
+        if len(part) < 3:
+            continue
+        actual = part["woba"].to_numpy()
+        pred_a, pred_b = part["pred_woba_a"].to_numpy(), part["pred_woba_b"].to_numpy()
+
+        clusters = batter_clusters(part)
+        draws = np.array([
+            rank_correlation(actual[i], pred_a[i]) - rank_correlation(actual[i], pred_b[i])
+            for i in (_resample(clusters, rng) for _ in range(n_boot))
+        ])
+        draws = draws[np.isfinite(draws)]
+        assert len(draws) > n_boot // 2, \
+            f"stratum {name}: {n_boot - len(draws)} of {n_boot} resamples were degenerate"
+
+        rank_a = rank_correlation(actual, pred_a)
+        rank_b = rank_correlation(actual, pred_b)
+        rows.append({
+            "stratum": name,
+            "n_hitters": len(part),
+            "n_batters": len(clusters),
+            "n_draws": len(draws),
+            "rank_a": rank_a,
+            "rank_b": rank_b,
+            "rank_difference": rank_a - rank_b,
+            "ci_low": float(np.percentile(draws, ci[0])),
+            "ci_high": float(np.percentile(draws, ci[1])),
+            "favours_a_share": float(np.mean(draws > 0)),
         })
     return pd.DataFrame(rows)
 

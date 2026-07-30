@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from src.analysis import stabilization as stab
+from src.data import labels
 from src.data.eval_targets import primarily_pitchers
 
 OUT = "results/phase_b"
@@ -87,23 +88,62 @@ def ranking(panel, factors):
     return pd.DataFrame(rows).sort_values("vc_n50_pa_equiv").reset_index(drop=True)
 
 
+def unclipped_spray(labeled):
+    """
+    Rebuild the PRE-CLIP spray angle from hit coordinates, for the clipping check.
+
+    This exists because reading the `spray` LABEL cannot answer the question the
+    check asks. `labels.py` nulls |spray| > SPRAY_ABS_MAX at label time, so the
+    committed label carries no survivors, and comparing "unclipped / clipped /
+    dropped" on it compares three identical datasets. That is exactly what happened:
+    the 2026-07-27 run returned n* = 77.4278 on 994,834 BBIP for all three
+    treatments, and the identical row counts across a treatment that is supposed to
+    DELETE rows were the tell. A diagnostic that cannot fail is worse than no
+    diagnostic, so the comparison is rebuilt from the columns the clip is applied to.
+
+    Returns the in-play rows with a `spray_raw` column, and asserts there is
+    something for the check to detect — if `labels.py` ever moves the clip again,
+    this fails loudly instead of quietly reporting three copies of one number.
+    """
+    in_play = labeled["description"] == labels.IN_PLAY_DESCRIPTION
+    # same mirroring as labels.add_contact_quality_labels: positive = pull, both hands
+    pull_sign = np.where(labeled["stand"] == "R", -1.0, 1.0)
+    raw = pd.Series(labels.field_side_angle(labeled) * pull_sign, index=labeled.index)
+
+    out = labeled.assign(spray_raw=raw.where(in_play, other=np.nan))
+    out = out[out["spray_raw"].notna()].copy()
+    assert (out["spray_raw"].abs() > labels.SPRAY_ABS_MAX).any(), (
+        "no |spray| > 90 rows survive to compare — the clipping check has become a "
+        "no-op again; the clip has moved upstream of this reconstruction"
+    )
+    return out
+
+
 def spray_clipping(labeled):
     """Spray-clipping check (#5): does clipping the ~1% near-plate artifact (|spray|>90)
-    speed up spray stabilization? Compare unclipped / clipped-at-90 / dropped(>90)."""
-    sprayed = labeled[labeled["spray"].notna()].copy()
+    speed up spray stabilization? Compare unclipped / clipped-at-90 / dropped(>90),
+    all built from the pre-clip angle (see `unclipped_spray`)."""
+    limit = labels.SPRAY_ABS_MAX
+    sprayed = unclipped_spray(labeled)
+    extreme = sprayed["spray_raw"].abs() > limit
     treatments = {
-        "unclipped": sprayed,
-        "clipped_90": sprayed.assign(spray=sprayed["spray"].clip(-90, 90)),
-        "dropped_gt90": sprayed[sprayed["spray"].abs() <= 90],
+        "unclipped": sprayed.assign(spray=sprayed["spray_raw"]),
+        "clipped_90": sprayed.assign(spray=sprayed["spray_raw"].clip(-limit, limit)),
+        "dropped_gt90": sprayed[~extreme].assign(spray=sprayed.loc[~extreme, "spray_raw"]),
     }
     rows = []
     for name, df in treatments.items():
         stats = stab.hitter_stats(df, "batter", "spray")
         p50, lo, hi = stab.stabilization_ci(stats, 0.5, n_boot=N_BOOT, seed=SEED)
         rand = stab.stabilization_point(stab.stabilization_curve(df, "batter", stab.mean_metric("spray"), GRID, seed=SEED, n_resamples=5), 0.5)
-        rows.append({"treatment": name, "n_bbip": len(df), "n_hitters": len(stats),
+        rows.append({"treatment": name, "n_bbip": len(df),
+                     "n_gt90": int((df["spray_raw"].abs() > limit).sum()),
+                     "n_hitters": len(stats),
                      "vc_n50": p50, "vc_n50_lo": lo, "vc_n50_hi": hi, "splithalf_random_50": rand})
-    return pd.DataFrame(rows)
+    table = pd.DataFrame(rows)
+    assert table["vc_n50"].nunique() > 1, \
+        "all three treatments returned the same n* — the check is not measuring anything"
+    return table
 
 
 def woba_survivorship(pa):
@@ -174,7 +214,10 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     labeled = pd.read_parquet("data/processed/pitch_events_labeled.parquet",
                               columns=["batter", "season", "p_throws", "game_pk", "at_bat_number",
-                                       "swing", "contact", "ev", "la", "spray"])
+                                       "swing", "contact", "ev", "la", "spray",
+                                       # source columns for the pre-clip spray angle the
+                                       # clipping check rebuilds (see `unclipped_spray`)
+                                       "hc_x", "hc_y", "stand", "description"])
     labeled = labeled[labeled["season"] <= MAX_TRAIN_SEASON]
     pa = pd.read_parquet("data/processed/eval_targets_pa.parquet")
     pa = pa[(pa["season"] <= MAX_TRAIN_SEASON) & (pa["in_denominator"] == 1)]
