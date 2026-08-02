@@ -1,0 +1,13 @@
+stratum,rows,hitters,cold_start_rows,cold_start_share,case
+low,380,239,162,0.4263157894736842,2024 (trained through 2023)
+medium,280,238,0,0.0,2024 (trained through 2023)
+high,489,318,0,0.0,2024 (trained through 2023)
+all,1149,604,162,0.1409921671018277,2024 (trained through 2023)
+low,384,246,288,0.75,2025 (trained through 2023)
+medium,280,236,26,0.09285714285714286,2025 (trained through 2023)
+high,493,321,1,0.002028397565922921,2025 (trained through 2023)
+all,1157,618,315,0.2722558340535869,2025 (trained through 2023)
+low,384,246,164,0.4270833333333333,2025 (trained through 2024)
+medium,280,236,0,0.0,2025 (trained through 2024)
+high,493,321,0,0.0,2025 (trained through 2024)
+all,1157,618,164,0.14174589455488332,2025 (trained through 2024)

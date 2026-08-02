@@ -89,6 +89,63 @@ def test_rank_correlation_ignores_calibration():
     assert ce.rank_correlation(actual, wildly_off_but_ordered) == pytest.approx(1.0)
 
 
+def test_weighted_ranks_reduce_to_midranks_at_equal_weights():
+    """
+    The reduction wCorr's formula guarantees: with every weight equal, the weighted
+    rank is the ordinary mid-rank, ties included. This is the anchor the whole
+    weighted statistic rests on — if it fails, nothing else about it is trustworthy.
+    """
+    values = [0.30, 0.10, 0.20, 0.20, 0.50]
+    expected = pd.Series(values).rank(method="average").to_numpy()
+    assert np.allclose(ce.weighted_ranks(values, np.ones(len(values))), expected)
+    # the weights need only be EQUAL, not one
+    assert np.allclose(ce.weighted_ranks(values, np.full(len(values), 7.0)) / 7.0, expected)
+
+
+def test_weighted_rank_correlation_equals_unweighted_at_equal_weights():
+    """
+    The two-sided gate. An estimator that ignored its weights would also pass the
+    equal-weight case, so the second half asserts that UNEQUAL weights actually move
+    the number — otherwise `rank_corr_weighted` would be a silent duplicate column.
+    """
+    rng = np.random.default_rng(0)
+    actual = rng.normal(0.320, 0.040, size=60)
+    predicted = actual + rng.normal(0, 0.030, size=60)
+    equal = ce.weighted_rank_correlation(actual, predicted, np.full(60, 3.0))
+    assert equal == pytest.approx(ce.rank_correlation(actual, predicted), abs=1e-12)
+
+    uneven = ce.weighted_rank_correlation(actual, predicted,
+                                          rng.integers(10, 600, size=60).astype(float))
+    assert uneven != pytest.approx(equal, abs=1e-6)
+
+
+def test_weighted_rank_correlation_downweights_a_noisy_low_pa_tail():
+    """
+    The reason the statistic exists. Well-measured groups are ordered correctly and a
+    low-denominator tail is ordered at random; weighting must score the frame closer
+    to the signal than the unweighted coefficient, which gives the tail equal votes.
+    """
+    rng = np.random.default_rng(1)
+    signal_actual = np.linspace(0.260, 0.400, 40)
+    tail_actual = rng.permutation(np.linspace(0.260, 0.400, 40))
+    actual = np.concatenate([signal_actual, tail_actual])
+    predicted = np.concatenate([signal_actual, np.linspace(0.260, 0.400, 40)])
+    weights = np.concatenate([np.full(40, 500.0), np.full(40, 11.0)])
+
+    assert (ce.weighted_rank_correlation(actual, predicted, weights)
+            > ce.rank_correlation(actual, predicted))
+
+
+def test_weighted_rank_correlation_is_calibration_invariant():
+    """Ordering only: rescaling the predictions must not move the coefficient."""
+    rng = np.random.default_rng(2)
+    actual = rng.normal(0.320, 0.040, size=40)
+    predicted = actual + rng.normal(0, 0.020, size=40)
+    weights = rng.integers(10, 600, size=40).astype(float)
+    assert (ce.weighted_rank_correlation(actual, predicted * 2.0 + 0.1, weights)
+            == pytest.approx(ce.weighted_rank_correlation(actual, predicted, weights)))
+
+
 def test_rank_correlation_degenerate_returns_nan():
     assert np.isnan(ce.rank_correlation([0.3, 0.3, 0.3], [0.1, 0.2, 0.3]))
     assert np.isnan(ce.rank_correlation([0.3], [0.1]))
@@ -364,6 +421,38 @@ def test_paired_rank_sign_is_opposite_to_rmse():
     assert rmse.loc["all", "rmse_difference"] < 0
     assert rank.loc["all", "favours_a_share"] > 0.95
     assert rank.loc["all", "ci_low"] > 0
+
+
+def test_test_season_guard_blocks_by_default_and_opens_only_when_asked():
+    """
+    The guard must stay closed for every ordinary call and open only on an explicit
+    final_run. A guard that could be satisfied by any other argument would not be a
+    guard — the 2026-08-01 frame puts the headline on the test season, so exactly one
+    caller may ever pass through.
+    """
+    config = {"split": {"train": [2015, 2023], "val": [2024], "test": [2025]}}
+    ce.assert_not_test_season(2024, config=config)
+    with pytest.raises(AssertionError, match="frozen TEST season"):
+        ce.assert_not_test_season(2025, config=config)
+    ce.assert_not_test_season(2025, config=config, final_run=True)
+
+
+def test_paired_rank_defaults_to_weighted_and_records_which():
+    """
+    The gate reads the weighted coefficient, so it must be the default, and the output
+    must say which statistic produced it — a results file that does not name its own
+    metric is how the two get conflated later.
+    """
+    frame_a, frame_b = paired_case()
+    default = ce.paired_rank_difference(frame_a, frame_b, n_boot=200, seed=0)
+    weighted = ce.paired_rank_difference(frame_a, frame_b, n_boot=200, seed=0, weighted=True)
+    unweighted = ce.paired_rank_difference(frame_a, frame_b, n_boot=200, seed=0, weighted=False)
+
+    assert default["weighted"].all()
+    assert not unweighted["weighted"].any()
+    assert np.allclose(default["rank_difference"], weighted["rank_difference"])
+    # A still wins under either statistic; only the coefficient's value should differ
+    assert (default["rank_difference"] > 0).all() and (unweighted["rank_difference"] > 0).all()
 
 
 def test_paired_rank_is_calibration_invariant():

@@ -37,12 +37,20 @@ models it grades.
   - Rank correlation (Spearman) — ordering. Layer 2 consumes the ORDER (which
     hitters to acquire), not the level. A model can be badly calibrated yet rank
     correctly and still be useful downstream, so both are reported and they are
-    allowed to disagree. Rank correlation is unweighted by construction (ranks
-    carry no PA), so it is the more noise-exposed of the two — stated, not hidden.
-    Because it is the noisier metric, a claim that two models ORDER differently
-    goes through `paired_rank_difference`, never through two bare numbers: at the
-    low stratum's n, the gap between two models' rank correlations is comfortably
-    inside its own resampling interval.
+    allowed to disagree. Reported in two forms. The DENOMINATOR-WEIGHTED
+    coefficient is the headline: an 11-PA group's observed wOBA is close to a coin
+    flip, and unweighted it casts the same vote as a 500-PA group's, so the
+    unweighted statistic is dominated by the answer key's noise in exactly the
+    stratum the thesis is about. The unweighted coefficient is retained beside it
+    because it is what §5.2 names and what every Phase C number was first reported
+    under. Either way a claim that two models ORDER differently goes through
+    `paired_rank_difference`, never through two bare numbers.
+
+    Until 2026-08-01 only the unweighted form existed, on the stated grounds that
+    rank correlation is "unweighted by construction (ranks carry no PA)". Ranks
+    carry no PA, but the correlation computed OVER those ranks takes weights like
+    any other, so the weighted form was never rejected — it was assumed
+    unavailable. See `weighted_rank_correlation` for the estimator and its source.
   - Both, stratified by PRIOR side-specific exposure. This is the headline, not a
     breakdown: manifest frozen rule #1 defines beating the baselines only on
     high-exposure veterans as a NULL RESULT.
@@ -294,6 +302,73 @@ def rank_correlation(actual, predicted):
     return float(actual.corr(predicted, method="spearman"))
 
 
+def weighted_ranks(values, weights):
+    """
+    Weighted ranks per wCorr: a value's rank is the total weight strictly below it,
+    plus a tie term. values/weights: equal-length arrays. Returns one rank per row.
+
+    rank_j = a_j + b_j, where a_j = sum of weights of all smaller values and
+    b_j = ((m+1)/2) * mean weight of the m units tied at this value. With every
+    weight equal to 1 this collapses to the ordinary mid-rank, which is the
+    property the equal-weights test asserts.
+
+    Reading the scale: a rank is CUMULATIVE WEIGHT — the PA below a group plus its
+    own — rather than a position in a roster list, so the coefficient responds to how
+    the model orders plate appearances rather than row labels. Treat that as the
+    analogy it is, not an identity. Replicating each row w times and taking an
+    ordinary Spearman gives a slightly different number (~1e-2 on 12-row cases),
+    because that convention mid-ranks the w copies while wCorr places a unit at the
+    top of its own weight block, as the unweighted convention does. Neither is
+    biased: under independent inputs this estimator centres on zero at weight
+    spreads from equal through 10000:1, at n = 30 and n = 380.
+    """
+    frame = pd.DataFrame({"value": np.asarray(values), "weight": np.asarray(weights, dtype=float)})
+    assert (frame["weight"] > 0).all(), "weighted ranks need strictly positive weights"
+    by_value = frame.groupby("value")["weight"]
+    # groupby sorts by key, so shifting the group totals down and accumulating gives
+    # each distinct value the total weight lying strictly below it
+    below = by_value.sum().shift(1).fillna(0.0).cumsum()
+    tie_term = (by_value.size() + 1) / 2 * by_value.mean()
+    return frame["value"].map(below + tie_term).to_numpy()
+
+
+def weighted_pearson(x, y, weights):
+    """Pearson correlation with observation weights, using weighted means and moments."""
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    weight = np.asarray(weights, dtype=float) / np.sum(weights)
+    x_centered, y_centered = x - np.sum(weight * x), y - np.sum(weight * y)
+    spread = np.sum(weight * x_centered ** 2) * np.sum(weight * y_centered ** 2)
+    if spread <= 0:
+        return float("nan")
+    return float(np.sum(weight * x_centered * y_centered) / np.sqrt(spread))
+
+
+def weighted_rank_correlation(actual, predicted, weights):
+    """
+    Denominator-weighted Spearman correlation — the ordering metric the Phase D gate
+    reads. Callers pass the wOBA denominator, per the module docstring's "WHICH PA".
+
+    Both steps are weighted: ranks by `weighted_ranks`, then a weighted Pearson over
+    those ranks. This is wCorr's construction, adopted rather than invented because
+    it is the only documented implementation and it reduces exactly to the unweighted
+    Spearman when all weights are equal. wCorr's own weights are inverse-probability
+    sampling weights and ours are precision weights, so the ESTIMATOR transfers but
+    its consistency results, which are stated for the sampling interpretation, do not.
+
+    Reference: Bailey, Emad, Zhang & Xie, "wCorr Formulas" (2023) — which also states
+    outright that no commonly accepted weighted Spearman coefficient exists, Stata
+    does not estimate one, and SAS does not document its method.
+    """
+    actual, predicted = np.asarray(actual), np.asarray(predicted)
+    weights = np.asarray(weights, dtype=float)
+    assert actual.shape == predicted.shape == weights.shape, \
+        f"shape mismatch: {actual.shape} {predicted.shape} {weights.shape}"
+    if len(actual) < 3 or len(np.unique(actual)) < 2 or len(np.unique(predicted)) < 2:
+        return float("nan")
+    return weighted_pearson(weighted_ranks(actual, weights),
+                            weighted_ranks(predicted, weights), weights)
+
+
 def score(eval_frame):
     """
     Compute the claim-1 metrics overall and within each exposure stratum.
@@ -305,7 +380,8 @@ def score(eval_frame):
         part = eval_frame if name == "all" else eval_frame[eval_frame["stratum"] == name]
         if len(part) == 0:
             rows.append({"stratum": name, "n_hitters": 0, "pa": 0.0,
-                         "pa_weighted_rmse": float("nan"), "rank_corr": float("nan")})
+                         "pa_weighted_rmse": float("nan"), "rank_corr": float("nan"),
+                         "rank_corr_weighted": float("nan")})
             continue
         rmse = pa_weighted_rmse(part["woba"], part["pred_woba"], part["denominator"])
         floor = noise_floor(part)
@@ -318,6 +394,8 @@ def score(eval_frame):
             "noise_floor": floor,
             "model_rmse": deconvolve(rmse, floor),
             "rank_corr": rank_correlation(part["woba"], part["pred_woba"]),
+            "rank_corr_weighted": weighted_rank_correlation(
+                part["woba"], part["pred_woba"], part["denominator"]),
         })
     return pd.DataFrame(rows)
 
@@ -413,19 +491,25 @@ def paired_rmse_difference(frame_a, frame_b, n_boot=2000, seed=0, ci=(2.5, 97.5)
     return pd.DataFrame(rows)
 
 
-def paired_rank_difference(frame_a, frame_b, n_boot=2000, seed=0, ci=(2.5, 97.5)):
+def paired_rank_difference(frame_a, frame_b, n_boot=2000, seed=0, ci=(2.5, 97.5),
+                           weighted=True):
     """
     Head-to-head ORDERING comparison — the rank counterpart of
     paired_rmse_difference, and required for exactly the same reason.
 
     Two bare rank correlations are the weakest comparison in this project, not the
-    strongest: ranks are unweighted, so a 25-PA hitter's near-random ordering gets the
-    same vote as a 400-PA hitter's, and both models are ranked against the SAME noisy
-    answer key. Quoting "0.169 vs 0.102" as a disagreement between the two frozen
-    metrics is an inference about a difference, and a difference needs an interval —
-    the same standard `paired_rmse_difference` was written to enforce on the other
-    metric. Without this, the ordering claim was the one number in Phase C held to a
-    lower evidentiary bar than the rest.
+    strongest: both models are ranked against the SAME noisy answer key. Quoting
+    "0.169 vs 0.102" as a disagreement between the two frozen metrics is an inference
+    about a difference, and a difference needs an interval — the same standard
+    `paired_rmse_difference` was written to enforce on the other metric. Without this,
+    the ordering claim was the one number in Phase C held to a lower evidentiary bar
+    than the rest.
+
+    `weighted` selects the coefficient. The default is the denominator-weighted
+    Spearman, which the Phase D ordering gate reads; pass False for the unweighted
+    §5.2 statistic, which is what Phase C first reported. Weighting removes one of
+    the two noise sources — a low-denominator group no longer votes as loudly as a
+    well-measured one — but not the other, since the target itself stays noisy.
 
     SIGN CONVENTION, deliberately opposite to the RMSE version because higher rank
     correlation is better: `rank_difference` = rank_a - rank_b, so POSITIVE favours A.
@@ -445,23 +529,30 @@ def paired_rank_difference(frame_a, frame_b, n_boot=2000, seed=0, ci=(2.5, 97.5)
             continue
         actual = part["woba"].to_numpy()
         pred_a, pred_b = part["pred_woba_a"].to_numpy(), part["pred_woba_b"].to_numpy()
+        weight = part["denominator"].to_numpy(dtype=float)
+
+        def coefficient(predicted, rows=slice(None)):
+            if weighted:
+                return weighted_rank_correlation(actual[rows], predicted[rows], weight[rows])
+            return rank_correlation(actual[rows], predicted[rows])
 
         clusters = batter_clusters(part)
         draws = np.array([
-            rank_correlation(actual[i], pred_a[i]) - rank_correlation(actual[i], pred_b[i])
+            coefficient(pred_a, i) - coefficient(pred_b, i)
             for i in (_resample(clusters, rng) for _ in range(n_boot))
         ])
         draws = draws[np.isfinite(draws)]
         assert len(draws) > n_boot // 2, \
             f"stratum {name}: {n_boot - len(draws)} of {n_boot} resamples were degenerate"
 
-        rank_a = rank_correlation(actual, pred_a)
-        rank_b = rank_correlation(actual, pred_b)
+        rank_a = coefficient(pred_a)
+        rank_b = coefficient(pred_b)
         rows.append({
             "stratum": name,
             "n_hitters": len(part),
             "n_batters": len(clusters),
             "n_draws": len(draws),
+            "weighted": bool(weighted),
             "rank_a": rank_a,
             "rank_b": rank_b,
             "rank_difference": rank_a - rank_b,
@@ -495,11 +586,22 @@ def evaluate(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
     return score(frame), coverage
 
 
-def assert_not_test_season(eval_season, config=None):
-    """Guard: refuse to score against the frozen test season outside a final run."""
+def assert_not_test_season(eval_season, config=None, final_run=False):
+    """
+    Guard: refuse to score against the frozen test season outside a final run.
+
+    `final_run` is the deliberate escape, not a bypass. The 2026-08-01 selection
+    frame puts Phase D's headline on the test season, so this call must be reachable
+    exactly once — with the flag set explicitly by a caller that means it. Deleting
+    the guard instead would leave nothing between an exploratory re-run and spending
+    the season, which is the failure it exists to prevent.
+    """
     config = config or load_splits()
     test_seasons = config["split"]["test"]
+    if final_run:
+        return
     assert eval_season not in test_seasons, (
         f"season {eval_season} is the frozen TEST season {test_seasons}. Test is read once, "
-        "for the final reported result — never for model selection or iteration."
+        "for the final reported result — never for model selection or iteration. "
+        "A genuine final run passes final_run=True (--final-run)."
     )

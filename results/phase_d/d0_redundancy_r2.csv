@@ -1,0 +1,14 @@
+feature,r2,n_rows,verdict,given
+effective_speed,0.9760875528635384,994552,survives to D.8,kept ten only
+spin_axis_sin,0.8310105117199879,879448,survives to D.8,kept ten only
+spin_axis_cos,0.7848016030930176,879448,survives to D.8,kept ten only
+release_spin_rate,0.46494529914183136,974134,survives to D.8,kept ten only
+release_pos_z,0.10966229661758953,1000000,survives to D.8,kept ten only
+release_extension,0.08056761959221692,995126,survives to D.8,kept ten only
+release_pos_y,0.04938859389040717,1000000,survives to D.8,kept ten only
+effective_speed,0.9929658694848924,994552,redundant,release_extension
+spin_axis_sin,0.8310252882323509,879294,survives to D.8,release_extension
+spin_axis_cos,0.7849011726574464,879294,survives to D.8,release_extension
+release_pos_y,0.7618243350966045,995126,survives to D.8,release_extension
+release_spin_rate,0.4679843330281386,973980,survives to D.8,release_extension
+release_pos_z,0.13423172476889034,995126,survives to D.8,release_extension

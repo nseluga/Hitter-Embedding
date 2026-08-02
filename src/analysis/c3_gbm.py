@@ -36,16 +36,20 @@ LEAKAGE DISCIPLINE (the gate that matters most here — rolling-window features
 are the classic silent offender). Every feature for a row with target season s is
 computed from seasons strictly in [s - 3, s), the same 3-season window C.1 and
 C.2 use. Enforced in `window_features` by assertion, not by convention. The
-evaluated season 2024 appears in no training row, as a target or in any feature
+evaluated season appears in no training row, as a target or in any feature
 window; `build_training_frame` asserts it.
 
-TUNING PROTOCOL. Training rows are target seasons 2016-2022; the number of
-boosting rounds is chosen by early stopping on target season 2023, held out from
-fitting. The evaluated season is never read for model selection. The final model
-is then refit on 2016-2023 at the chosen round count, because a projection task
-should not throw away its most recent season — the round count is the only
-quantity reused, and that reuse is stated here rather than hidden (the same
-accepted-and-declared compromise as B.2's shared VAL).
+TUNING PROTOCOL. For an evaluated season e, training rows are target seasons
+2016 through e-1; the number of boosting rounds is chosen by early stopping on
+target season e-1, the most recent and therefore the closest in distribution to
+what is being projected, held out from fitting. The evaluated season is never
+read for model selection. The final model is then refit on all training rows at
+the chosen round count, because a projection task should not throw away its most
+recent season — the round count is the only quantity reused, and that reuse is
+stated here rather than hidden (the same accepted-and-declared compromise as
+B.2's shared VAL). The inner-val season is derived from the training frame rather
+than fixed, so re-scoring on a different evaluated season moves it in step; a
+constant here would early-stop on stale data while fitting on newer.
 
 Hyperparameters are pre-registered small-data settings (depth 3, heavy
 regularization) fixed in PARAMS before the first run: ~12k training rows is a
@@ -86,7 +90,6 @@ PARAMS = dict(
     n_jobs=1,               # fixed thread count: reproducibility gate depends on it
 )
 EARLY_STOPPING_ROUNDS = 50
-INNER_VAL_SEASON = 2023     # held out from fitting to choose the round count
 MIN_TARGET_SEASON = 2016    # first season with any prior season to build features from
 
 # Statcast pitch_type -> the three context groups the whiff/EV slices use.
@@ -354,15 +357,23 @@ def _weights(pa):
     return weight / weight.mean()
 
 
-def fit(training, feature_set="full", inner_val_season=INNER_VAL_SEASON, seed=0,
+def fit(training, feature_set="full", inner_val_season=None, seed=0,
         params=None, n_rounds=None):
     """
     Fit the C.3 GBM: choose the round count by early stopping on
     inner_val_season, then refit on all training rows at that count.
     n_rounds forces the count and skips the search (used by the wiring gate).
     Returns (model, n_rounds).
+
+    inner_val_season defaults to the LATEST training season, which is the protocol
+    this module documents — hold out the most recent season, whose distribution is
+    closest to the one being projected. Passing an interior season instead would
+    early-stop on stale data while silently fitting on the most recent, so the
+    default is derived from the frame rather than fixed to a constant.
     """
     assert feature_set in FEATURE_SETS, f"unknown feature set {feature_set!r}"
+    if inner_val_season is None:
+        inner_val_season = int(training["season"].max())
     assert inner_val_season in set(training["season"]), \
         f"inner-val season {inner_val_season} is not in the training frame"
     settings = dict(PARAMS if params is None else params)

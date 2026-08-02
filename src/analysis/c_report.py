@@ -333,10 +333,14 @@ def main():
     parser.add_argument("--eval-season", type=int, default=DEFAULT_EVAL_SEASON)
     parser.add_argument("--out-dir", default=str(OUT_DIR))
     parser.add_argument("--seed", type=int, default=0)
+    # the frozen test season is scored ONCE, for the final reported result;
+    # this flag is the deliberate act of doing so, never a convenience
+    parser.add_argument("--final-run", action="store_true",
+                        help="permit scoring the frozen TEST season")
     args = parser.parse_args()
 
     # never score against the frozen test season outside a final run
-    evaluation.assert_not_test_season(args.eval_season)
+    evaluation.assert_not_test_season(args.eval_season, final_run=args.final_run)
     pa_df = load_targets(args.eval_targets)
 
     params, parameter_table, rho_ci = fit_and_describe(pa_df, args.eval_season, args.seed)
@@ -357,7 +361,7 @@ def main():
                                                process_seasons, seed=args.seed)
     for feature_set, (_, n_rounds) in c3_models.items():
         print(f"C.3 [{feature_set}]: {n_rounds} boosting rounds "
-              f"(early-stopped on target season {c3.INNER_VAL_SEASON})")
+              f"(early-stopped on target season {args.eval_season - 1})")
 
     frames, scored, coverage = score_all(pa_df, predictions, args.eval_season)
     print("\nclaim-1 scores")

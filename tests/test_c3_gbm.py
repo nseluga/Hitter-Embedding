@@ -320,6 +320,27 @@ def test_g7_feature_sets_are_nested_and_the_matrix_shape_is_asserted():
         c3.fit(training, feature_set="full", inner_val_season=1999)
 
 
+def test_inner_val_season_defaults_to_the_latest_training_season():
+    """
+    Re-scoring on a different evaluated season must move the inner-val season with
+    it. A constant would early-stop on an interior season while fitting on newer
+    rows — not a leak, but it silently stops matching the documented protocol.
+    """
+    training = training_stub(n_rows=60)
+    latest = int(training["season"].max())
+    _, derived_rounds = c3.fit(training, feature_set="outcome", seed=0)
+    _, latest_rounds = c3.fit(training, feature_set="outcome",
+                              inner_val_season=latest, seed=0)
+    assert derived_rounds == latest_rounds
+
+    # and it must track the frame: drop the last season and the default moves with it
+    earlier = training[training["season"] < latest]
+    _, earlier_rounds = c3.fit(earlier, feature_set="outcome", seed=0)
+    _, explicit_rounds = c3.fit(earlier, feature_set="outcome",
+                                inner_val_season=int(earlier["season"].max()), seed=0)
+    assert earlier_rounds == explicit_rounds
+
+
 # ---------------------------------------------------------------------------
 # G8 — the label-shuffle null must not hand the null model a free advantage
 # ---------------------------------------------------------------------------

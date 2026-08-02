@@ -11,3 +11,4 @@ __pycache__/
 data/raw/
 data/processed/
 *.parquet
+data/processed/phase_d/
