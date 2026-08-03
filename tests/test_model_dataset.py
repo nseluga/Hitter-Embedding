@@ -249,3 +249,42 @@ def test_round_trip_through_disk_preserves_every_array(tmp_path):
     assert set(reloaded) == set(arrays)
     for name, array in arrays.items():
         assert np.array_equal(np.asarray(reloaded[name]), array)
+
+
+# ---- gate: what is written is row-major, whatever order it was built in ----
+
+def test_saved_arrays_are_row_major_even_when_built_column_major(tmp_path):
+    """
+    A training step gathers random rows. Column-major storage puts one pitch's
+    features a whole column apart, which costs 8.74 s per batch memmapped against
+    0.033 s row-major, and nothing about the values looks wrong while it happens.
+    The two-sided part: context arrives column-major, so this asserts the defect
+    exists upstream and that save() is what removes it.
+    """
+    arrays, manifest = built()
+    assert arrays["context"].flags.f_contiguous, "context no longer arrives column-major"
+
+    reloaded, _ = md.load(md.save(arrays, manifest, tmp_path / "d1"))
+    for name, array in reloaded.items():
+        assert array.flags.c_contiguous, f"{name} was written column-major"
+
+
+# ---- gate: the batter -> embedding row map survives to disk ----
+
+def test_the_manifest_carries_the_vocabulary_that_built_the_hitter_column():
+    """
+    Without this map a trained embedding table is 1,763 anonymous rows: the §5.1
+    probe, the query machinery, and the ‖e_h‖-vs-n_h diagnostic all join on batter
+    id. Re-deriving it downstream would put one definition in two places.
+    """
+    frame = synthetic_pitches()
+    arrays, manifest = built(frame)
+    vocabulary = {int(batter): row for batter, row in manifest["vocabulary"].items()}
+
+    assert len(vocabulary) == manifest["n_hitters"]
+    assert set(vocabulary.values()) == set(range(1, manifest["n_hitters"] + 1))
+    assert md.RESERVED_HITTER_INDEX not in vocabulary.values()
+
+    # the map must reproduce the hitter column it was built from, not merely be well formed
+    rebuilt = md.hitter_indices(md.drop_pitcher_at_bats(frame, set()), vocabulary)
+    assert np.array_equal(rebuilt, arrays["hitter"])

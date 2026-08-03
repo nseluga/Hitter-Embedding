@@ -12,3 +12,8 @@ data/raw/
 data/processed/
 *.parquet
 data/processed/phase_d/
+
+# Experiment tracking and model weights — the metrics that get reviewed are in results/
+mlruns/
+mlflow.db
+results/checkpoints/

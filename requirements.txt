@@ -8,6 +8,13 @@ xgboost==3.3.0
 scikit-learn==1.9.0
 shap==0.52.0
 
+# Phase D model
+# mlflow-skinny, not mlflow: the full package requires pandas<3 and would silently
+# downgrade this project's pandas 3.0.3. Skinny is the tracking client only; the
+# dashboard is served from a separate venv reading the same store (docs/phase-d-spec.md).
+torch==2.13.0
+mlflow-skinny==3.15.0
+
 # Notebooks and tests
 pytest==9.1.1
 nbconvert==7.17.1

@@ -89,7 +89,14 @@ Width and depth are pre-registered, not swept (2026-08-01): both sit inside §2.
 stated ranges, and the first hidden layer is at least as wide as its 160-wide input.
 
 **Ablation (§2.1, and the §8 mitigation for the interaction-learning risk):** add a
-bilinear term `e_hᵀ W_b z_c`, projected to the trunk's width. Toggled at D.8; the
+bilinear term, built low-rank (2026-08-03) rather than as the full `e_hᵀ W_b z_c`:
+
+```
+t = t + W_b (P_e e_h ⊙ P_z z_c)      P_e ∈ ℝ^(r × d), P_z ∈ ℝ^(r × 128),
+                                     W_b ∈ ℝ^(256 × r),  r = 32, no biases
+```
+
+13,312 parameters at `d = 32` against the full form's 1,048,832. Toggled at D.8; the
 failure mode it targets is the model learning hitter main effects plus context main
 effects and no interaction, which would make every platoon query return the league
 average context penalty.
@@ -242,8 +249,14 @@ wall-clock is the unknown and §6 budgets minutes-to-hours.
 | trunk 2×256, context 2×128 | pre-registered 2026-08-01, not swept |
 | AdamW, plateau, batch 8,192, decay 1e-2 | pre-registered 2026-08-01, not swept |
 | embedding dim `d` | swept {16, 32, 64} at D.8, default 32 |
-| bilinear interaction term | ablated at D.8 |
+| bilinear interaction term | low-rank form (`r = 32`) pre-registered 2026-08-03; ablated at D.8, default off |
 | B.2's flagged five | ablated at D.8 as one block |
 | spray as a quality dimension | ablated at D.8 per §1.5 |
 | per-head mean loss weighting | ablated at D.8, expected null |
 | inverse-frequency within the contact head | ablated at D.8, expected null |
+| ReLU activations, dropout 0.1 on the trunk | pre-registered 2026-08-02, not swept |
+| ranked probability score over all five factors | built behind a `rule` flag; promote-only screen before D.6, then D.8 if it fires (2026-08-02) |
+| LA and spray masks nested on their conditioning bins | pre-registered 2026-08-02 |
+
+Amendments after approval are recorded in `docs/decision-log.md`, which remains the authority;
+rows above added later name their entry's date.

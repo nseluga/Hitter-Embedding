@@ -242,6 +242,11 @@ def build(pitch_df, train_seasons=None, n_bins=DEFAULT_QUALITY_BINS,
         "n_pitches": int(len(pitch_df)),
         "n_pitcher_at_bat_pitches_dropped": int(n_source - len(pitch_df)),
         "n_hitters": len(vocabulary),
+        # the batter -> embedding row map, kept rather than discarded: without it a
+        # trained embedding table cannot be joined back to hitters, which the §5.1
+        # probe, the query machinery, and the ‖e_h‖-vs-n_h diagnostic all require.
+        # JSON keys are strings; callers cast back to int.
+        "vocabulary": {str(batter): int(row) for batter, row in vocabulary.items()},
         "reserved_hitter_index": RESERVED_HITTER_INDEX,
         "n_quality_bins": n_bins,
         "quality_bin_edges": edges,
@@ -258,7 +263,12 @@ def save(arrays, manifest, out_dir):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, array in arrays.items():
-        np.save(out_dir / f"{name}.npy", array)
+        # row-major, always. `context` arrives F-contiguous because it is built by
+        # column selection, and np.save preserves order, which puts one pitch's 46
+        # floats ~29 MB apart: a gather of 8,192 training rows measured 8.74 s
+        # memmapped against 0.033 s row-major in RAM. The refit rebuilds through
+        # this same function, so the fix belongs here rather than in a loader.
+        np.save(out_dir / f"{name}.npy", np.ascontiguousarray(array))
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     return out_dir
 
