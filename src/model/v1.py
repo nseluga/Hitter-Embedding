@@ -61,6 +61,7 @@ BINARY_FACTORS = ("swing", "contact")
 QUALITY_FACTORS = ("ev", "la", "spray")
 FACTORS = BINARY_FACTORS + QUALITY_FACTORS
 LOSS_RULES = ("log", "rps")
+WEIGHTINGS = ("sum", "mean")
 
 
 class HitterEmbeddingV1(nn.Module):
@@ -164,13 +165,16 @@ def factor_masks(labels):
     return {"swing": swing, "contact": contact, "ev": ev, "la": la, "spray": spray}
 
 
-def _binary_loss(logit, target, mask, rule):
+def _binary_loss(logit, target, mask, rule, pos_weight=None):
+    """pos_weight scales the positive class only, which is §2.2's inverse-frequency arm."""
     if not bool(mask.any()):
         return (logit * 0.0).sum()
     selected, observed = logit[mask], target[mask].to(torch.float32)
     if rule == "log":
-        return F.binary_cross_entropy_with_logits(selected, observed, reduction="sum")
-    return ((torch.sigmoid(selected) - observed) ** 2).sum()
+        return F.binary_cross_entropy_with_logits(selected, observed, reduction="sum",
+                                                  pos_weight=pos_weight)
+    weight = 1.0 if pos_weight is None else torch.where(observed > 0, pos_weight, 1.0)
+    return (weight * (torch.sigmoid(selected) - observed) ** 2).sum()
 
 
 def _quality_loss(logits, target, mask, rule):
@@ -187,20 +191,32 @@ def _quality_loss(logits, target, mask, rule):
     return ((predicted - step) ** 2).sum()
 
 
-def factorized_loss(outputs, labels, rule="log"):
+def factorized_loss(outputs, labels, rule="log", weighting="sum", contact_pos_weight=None):
     """
     Sum of the five factor losses over the rows each factor is defined on (spec §4).
     outputs: head logits; labels: int64 targets with MASKED where undefined;
     rule: "log" for the likelihood, "rps" for the ranked probability score.
-    Returns (total, per-factor dict). Raw sums, never per-head means.
+
+    weighting and contact_pos_weight are the two §7 D.8 arms, both DEFAULT OFF and both
+    departures from the likelihood the 2026-08-01 entry argued for keeping. "mean"
+    averages each factor over its own valid rows before summing, which re-weights the
+    heads away from the evidence available to them. contact_pos_weight scales the
+    positive class of the contact head, which is §2.2's inverse-frequency item.
+    Returned parts are always the RAW per-factor sums so a weighted run and an
+    unweighted one stay comparable head by head; only the total carries the weighting.
     """
     assert rule in LOSS_RULES, f"unknown loss rule {rule!r}"
+    assert weighting in WEIGHTINGS, f"unknown weighting {weighting!r}"
     masks = factor_masks(labels)
     parts = {}
     for name in BINARY_FACTORS:
-        parts[name] = _binary_loss(outputs[name], labels[name], masks[name], rule)
+        weight = contact_pos_weight if name == "contact" else None
+        parts[name] = _binary_loss(outputs[name], labels[name], masks[name], rule, weight)
     for name in QUALITY_FACTORS:
         parts[name] = _quality_loss(outputs[name], labels[name], masks[name], rule)
+    if weighting == "mean":
+        total = sum(part / max(int(masks[name].sum()), 1) for name, part in parts.items())
+        return total, parts
     total = sum(parts.values())
     return total, parts
 

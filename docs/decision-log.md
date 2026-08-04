@@ -337,3 +337,21 @@ Append-only. Format fixed by `~/os/knowledge/frameworks/research-standards.md`
 - **Rationale:** The full form learns all 4,096 hitter-by-context pairings independently; the low-rank form spends its budget on 32 shared interaction directions instead, which is the reduced-rank random-slope structure the term is meant to express — each hitter gets context-dependent strengths drawn from a small common set rather than 4,096 free ones. On synthetic data with a planted interaction the rank-32 form recovered 98.1% of interaction variance against the additive model's 92.5% (weak) and 99.7% against 94.9% (strong), and both forms are identical at zero interaction, so the arm cannot cost anything when the failure mode it targets is absent.
 - **Reference:** `docs/phase-d-spec.md` §3.3 and §8's interaction-learning risk; parameter counts and recovery fractions measured directly; the reduced-rank / factor-analytic random-slope analogue is standard mixed-model practice and is unverified, not in the project library.
 - **Revisit if:** the D.8 arm fires — the interaction term improving the claim-1 metric — which makes rank itself a quantity worth measuring and requires a new entry naming this one.
+
+---
+
+## 2026-08-03 — Phase D runs locally on CPU, one device per comparison set
+- **Decision:** Every Phase D training run executes on this machine's CPU, and a comparison set — the five seeds of an arm, and all arms compared against one another — stays on one device and one thread setting. Runs are queued sequentially, never in parallel.
+- **Alternatives:** MPS (rejected: 66-81 s/epoch against the CPU's 63-74, a difference inside run-to-run noise). Rented GPU (rejected: the sweep fits in roughly three overnight sessions at no cost, leaving the <$200 budget untouched). Two concurrent runs (rejected: thread oversubscription on 8 cores, which already stalls the test suite the same way).
+- **Rationale:** One epoch over 5.88M pitches costs about 70 s with ±15% run-to-run variation, so the device changes nothing measurable. CPU and MPS agree on loss to five decimals after a full epoch but are not bit-identical, since different kernels accumulate floats in a different order — mixing them inside a comparison set would put backend noise into the seed-to-seed spread the ensemble reports as variance.
+- **Reference:** nine benchmark runs in `results/phase_d/d3_benchmark.csv`; peak RSS 1.2-1.6 GB of 8.6 GB.
+- **Revisit if:** the epoch count or the arm count takes the sweep past what overnight sessions absorb, at which point rented compute is priced against the budget.
+
+---
+
+## 2026-08-03 — Interrupted runs are redone, never resumed
+- **Decision:** The overnight driver records only completed runs and redoes anything interrupted. No optimizer, scheduler, or RNG state is ever restored mid-run.
+- **Alternatives:** Mid-run checkpoint and resume (rejected: restoring weights without AdamW's moment estimates and both RNG streams produces a run that trains normally and is no longer the run its seed names).
+- **Rationale:** At roughly 25 minutes per run, redoing an interrupted one costs less than the reproducibility it would put at risk. The five-seed spread is only interpretable as seed variance if each seed determines its run completely.
+- **Reference:** `src/model/sweep.py`; the ledger is `results/phase_d/sweep_log.csv`.
+- **Revisit if:** a single run grows long enough that redoing it is expensive, which the refit on 2015-2024 is the first candidate for.
