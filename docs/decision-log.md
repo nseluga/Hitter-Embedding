@@ -355,3 +355,20 @@ Append-only. Format fixed by `~/os/knowledge/frameworks/research-standards.md`
 - **Rationale:** At roughly 25 minutes per run, redoing an interrupted one costs less than the reproducibility it would put at risk. The five-seed spread is only interpretable as seed variance if each seed determines its run completely.
 - **Reference:** `src/model/sweep.py`; the ledger is `results/phase_d/sweep_log.csv`.
 - **Revisit if:** a single run grows long enough that redoing it is expensive, which the refit on 2015-2024 is the first candidate for.
+
+---
+
+## 2026-08-08 — The RPS screen returns a decisive null; log loss stays v1's objective
+- **Decision:** RPS is not promoted to a claim-1 ablation. Scored on 2024 under the canonical objective the RPS arms reach 1.19715 against the log arms' 1.07582, which is 126x the 0.00096 seed noise floor. The `rule` flag stays in the code, defaulting to log.
+- **Alternatives:** Reading the arms' own recorded losses (rejected: 0.934 and 1.076 are in different units, so their ordering carries no information). Re-running the screen at more seeds (rejected: the gap is two orders of magnitude past anything seed variance produces).
+- **Rationale:** The log score is local, so only the mass on the bin that occurred is scored, while RPS is distance-sensitive and spends mass on neighbouring bins — exactly what a local rule charges for. On the binary factors RPS reduces to Brier, whose gradient penalises confident-wrong outcomes less, yielding less extreme probabilities that the log score then charges for again. Each rule wins on its own metric, as the 2026-08-02 restricted-capacity test measured, so this confirms the screen's deliberate asymmetry rather than ranking the two rules.
+- **Reference:** `results/phase_d/screen_scores.csv`; discharges the promote-only screen registered 2026-08-02.
+- **Revisit if:** a future factorisation makes bin adjacency load-bearing for the run-value mapping, which changes what the quality heads are asked to get right.
+
+---
+
+## 2026-08-08 — Reliability and resolution are not computed for the RPS screen
+- **Decision:** The screen closes on its first promotion clause alone, and no calibration/refinement decomposition is built at Phase D.
+- **Alternatives:** Building it to honour the 2026-08-02 wording (rejected: no value of either quantity is reachable that changes the outcome). Holding the screen's verdict until it exists (rejected: the verdict does not depend on it).
+- **Rationale:** The second clause promotes RPS only if it matches log loss at better reliability and equal resolution, and at 126x the noise floor it does not match, so the clause is unreachable rather than unmeasured. The machinery is owed exactly once, to §5.3's ensemble calibration check in the low-exposure strata, and belongs there where it is decision-bearing.
+- **Revisit if:** §5.3 is built, at which point the decomposition enters with that check rather than this one.

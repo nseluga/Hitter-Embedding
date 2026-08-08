@@ -1,0 +1,5 @@
+arm,seed,epoch,own_objective,reference
+log,0,17,1.07581,1.07581
+log,1,9,1.07582,1.07582
+rps,0,20,0.9341,1.19737
+rps,1,15,0.9336,1.19693
