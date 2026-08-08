@@ -372,3 +372,84 @@ Append-only. Format fixed by `~/os/knowledge/frameworks/research-standards.md`
 - **Alternatives:** Building it to honour the 2026-08-02 wording (rejected: no value of either quantity is reachable that changes the outcome). Holding the screen's verdict until it exists (rejected: the verdict does not depend on it).
 - **Rationale:** The second clause promotes RPS only if it matches log loss at better reliability and equal resolution, and at 126x the noise floor it does not match, so the clause is unreachable rather than unmeasured. The machinery is owed exactly once, to §5.3's ensemble calibration check in the low-exposure strata, and belongs there where it is decision-bearing.
 - **Revisit if:** §5.3 is built, at which point the decomposition enters with that check rather than this one.
+
+---
+
+## 2026-08-08 — D.5's pitcher repertoire and called-strike surface are keyed on batter handedness
+- **Decision:** D.5 resamples whole real pitch rows grouped by `(pitcher, stand, balls, strikes)`, and the empirical called-strike model is fit as a separate surface per batter-hand × pitcher-hand combination rather than one pooled surface.
+- **Alternatives:** Grouping on `(pitcher, balls, strikes)` and overwriting the `stand` one-hot to match the queried hitter (rejected: context columns 37-38 are that one-hot, so the overwrite submits a pitch row that never existed, and the repertoire would be averaged over whatever batter-hand mix the pitcher happened to face rather than the one the query asks about). A single pooled called-strike surface (rejected on the same evidence).
+- **Rationale:** League pitch mix for right-handed pitchers differs sharply by batter hand — offspeed 20.8% against LHB against 8.0% against RHB, breaking 25.9% against 36.2%, sinker 9.7% against 19.5% — so a pooled repertoire would sample offspeed to same-handed batters at 2.6x its real rate. Taken-pitch location differs across the four handedness cells by the same mechanism, which is why the peer-reviewed precedent fits one surface per cell instead of pooling. The cost is sparser cells, absorbed by the smoothing toward pitch-type pools.
+- **Reference:** Clemens, "Let's Take a Peek at Some Early 2025 Pitch Usage Trends," FanGraphs 2025-05-01 — usage splits, unreviewed blog post, cited for descriptive tables only. Deshpande & Wyner (2017), JQAS 13(3):95-112, Fig. 3 and the four separate called-strike surfaces its handedness differences motivate.
+- **Revisit if:** a per-hand cell is too sparse for the smoothing to leave the pitcher's own mix visible, which would make the split cost more precision than the pooling bias it removes.
+
+---
+
+## 2026-08-08 — D.5 composes the count chain by exact solve, not Monte Carlo simulation
+- **Decision:** The 12 non-terminal ball-strike states are solved by backward induction over repertoire-averaged transition probabilities, with the two-strike foul self-loop divided out in closed form as `W(b,2) = A / (1 - E[P_foul])`. No plate appearances are simulated and no iteration cap exists.
+- **Alternatives:** Monte Carlo simulation with an explicit cap and reported truncation, which `docs/phase-d-spec.md` §6 pre-registered (rejected: it adds sampling noise to a frame whose measured seed noise floor is 0.00096, and the cap is itself a coverage shortcut standards §6 would require reporting). Truncating the foul loop at fixed depth (rejected: the closed form is exact and cheaper).
+- **Rationale:** The pitch draw is independent given the count, so the repertoire-averaged transition matrix is exactly Markov in count and the chain admits a linear solve. Transitions only ever raise balls or strikes apart from the single self-loop, so backward induction over decreasing `b+s` needs no matrix inversion. Every terminal state sits inside the wOBA denominator, so `pred_woba = W(0,0)` with no renormalization.
+- **Reference:** Yonushonis (2011), SABR BRJ — closes the two-strike foul with an infinite geometric series rather than truncating; he never frames it as a Markov chain, so the identification with `(I - Q)^-1` is this project's inference. Tenneal (2015), FanGraphs Community — the 12-count absorbing chain solved exactly by the limit of `P^n`; unreviewed and in-sample only.
+- **Revisit if:** within-plate-appearance pitch sequencing enters the repertoire, which would make the pitch draw depend on the pitches already thrown and break the conditional independence the solve assumes.
+
+---
+
+## 2026-08-08 — The 24³ quality chain is enumerated exactly, not sampled
+- **Decision:** `E[wOBA points | in play, h, x]` is the exact sum `Σ_e p(e) Σ_l p(l|e) Σ_s p(s|e,l) · V[e,l,s]` over all 13,824 bin combinations, computed from one trunk forward pass per (hitter, pitch) by broadcast.
+- **Alternatives:** Sampling the chain once per simulated batted ball, which `docs/phase-d-spec.md` §6 pre-registered on the grounds that enumeration was prohibitive (rejected: the premise is false, and sampling adds variance to a quantity available in closed form).
+- **Rationale:** `head_la` and `head_spray` are plain linear layers over `[trunk ; onehot]`, so conditioning bins enter as added weight columns with no trunk interaction and the joint logits are an outer sum. Reconstructed logits agree with real forward calls to 9.5e-07 maximum absolute error, which is one float32 ULP at the observed logit scale of 8.21.
+- **Reference:** `src/model/v1.py:113-114`; agreement measured directly over all 576 conditioning pairs on 64 rows of `d6_baseline_s0`.
+- **Revisit if:** any quality head conditions on the bins through something other than concatenation into a linear layer, which would destroy the outer-sum structure.
+
+---
+
+## 2026-08-08 — A fourth factor splits contact three ways, and v1 is retrained to carry it
+- **Decision:** A three-class head over {foul, foul_tip, in_play} conditioned on contact is added to v1 and the model retrained. D.5 is built first on a league-average table for that split, and the retrained number is reported against it so the head's effect is measured rather than assumed.
+- **Alternatives:** A binary `p(in_play | contact)` head (rejected: a foul tip is a caught tip and therefore a strikeout at two strikes, so folding it into the foul class inflates two-strike survival by 68,244 of 1,373,659 non-in-play contact events). A probe on the frozen trunk (rejected: the trunk was trained on a loss with no reason to preserve foul-versus-in-play information, so weak recovery could not distinguish a missing representation from a weak probe, and D.5's output is the headline). The league table alone (rejected: it compresses the split to league average and risks a false null on the hitter effect).
+- **Rationale:** Architecture plan §1.3 treats contact as a terminal state, but `contact` is {foul, foul_tip, in_play}, so nothing in v1 predicts whether a plate appearance ends on contact and the chain cannot terminate. Foul and foul tip transition identically below two strikes and diverge only at two strikes, so the third class is exactly the distinction the chain needs and costs one logit.
+- **Reference:** Clemens (2025), FanGraphs — a count-conditional foul score repeats year over year at r ≈ 0.3, though "early count" is never defined so the construction is not reproducible from the text. Baumann (2024), FanGraphs — raw foul rate per swing relates weakly to hitter quality (max |r| 0.18) while fouls per whiff separates player types, and that ratio is recovered jointly by this head and the existing contact head. Tenneal (2015) measures in-zone contact fouling at 47% against out-of-zone at 55%, roughly four times his count effect, and his own null is on expected K%, a metric insensitive to batted-ball reallocation.
+- **Revisit if:** the retrained arm's claim-1 number does not separate from the league-table baseline by more than the seed noise floor, which would make the league table the honest reported form.
+
+---
+
+## 2026-08-08 — D.5's pitcher population is prior seasons only, weighted by batters faced
+- **Decision:** The simulator draws pitchers from the training seasons only (2015-2023), weighted by batters faced, and holds one pitcher for a whole simulated plate appearance. Pitches are not reweighted by season inside that window.
+- **Alternatives:** Including eval-season pitchers (rejected: a projection that reads the eval season's pitcher population is reading the season it predicts). Recency-weighting the pool to track within-window usage drift (deferred as a possible later improvement, not built for v1). Resampling a fresh pitcher per pitch (rejected: a plate appearance is against one pitcher, and pooling pitches across pitchers is the Jensen error §1.3 already refuses).
+- **Rationale:** Every Phase C rung is built from prior seasons only, so the Phase D query must be too or the comparison is not information-matched. Batters-faced weighting makes the simulated opponent distribution the one hitters actually face rather than one weighted by roster count.
+- **Reference:** `src/config/split_config.json` (frozen 2026-07-17); the batters-faced idiom at `src/data/eval_targets.py:156`. Clemens (2025) documents the drift the deferred recency weighting would address — right-handed pitchers' sinker usage against left-handed batters fell from 21.0% to 10.2% across 2015-2023 while their usage against right-handed batters stayed flat.
+- **Revisit if:** §5.4's composition validation shows league run scoring off in a direction traceable to the pool's season composition, which is what recency weighting would correct.
+
+---
+
+## 2026-08-08 — The five ensemble seeds are combined by averaging conditionals
+- **Decision:** The five seeds' per-pitch conditional probabilities are averaged and one composition is run on the average. The reported `pred_woba` is that single number.
+- **Alternatives:** Running five compositions and averaging the resulting wOBA (rejected for the headline: it averages a nonlinear functional rather than the predictive distribution, the same Jensen objection §1.3 raises one level down; retained as the source of the between-seed spread §5.3's calibration check needs).
+- **Rationale:** A deep ensemble's prediction is the uniformly-weighted mixture of its members' predictive distributions, which for classification is exactly averaging the predicted probabilities. Averaging first is also one composition rather than five.
+- **Reference:** Lakshminarayanan, Pritzel & Blundell (2017), NeurIPS 30:6402-6413, for the mixture form and the classification case. The paper never composes its mixture through a downstream nonlinearity, so it prescribes the combination order without validating it in this setting, and the Jensen argument is this project's.
+- **Revisit if:** §5.3 needs the functional's dispersion as the headline uncertainty rather than as a companion, which would make the five separate compositions the primary object.
+
+---
+
+## 2026-08-08 — The called-strike model uses raw plate coordinates, without batter-height normalization
+- **Decision:** `p(ball, called strike, hit by pitch | take)` is fit on `plate_x` and `plate_z` with no rescaling to a per-batter zone. `sz_top` and `sz_bot` stay out of `clean.RETAIN_COLUMNS`.
+- **Alternatives:** Re-pulling `sz_top`/`sz_bot` and normalizing the vertical axis (rejected on the grounds below, and it would modify the frozen data pipeline, which trips the CLAUDE.md verification gate). Keying on Statcast `zone` (rejected: it is a coarse deterministic function of the same two retained columns and discards resolution).
+- **Rationale:** Statcast derives each hitter's zone top and bottom from previous major-league umpire calls, so a called-strike model normalized by those fields would regress umpire behavior on a rescaling of umpire behavior. The fields are also a human annotation set per plate appearance rather than a measurement.
+- **Reference:** Deshpande & Wyner (2017), JQAS 13(3):95-112 — had the PITCHf/x zone boundaries available and deliberately collapsed them to a league average used only for filtering and figures, fitting the surface itself in raw coordinates. Baseball Prospectus #37347 (2018-01-29) for the annotation provenance and the circularity. Freiman (2018), FanGraphs, prices what is given up: batter height explains R² = 0.23 of the low called strike, computed after dropping three outliers, against 0.05 of the high one.
+- **Revisit if:** batter height from roster data becomes available, which would recover the low-zone effect without inheriting the umpire-call circularity.
+
+---
+
+## 2026-08-08 — C.2 discharges frozen rule #1's empirical-Bayes baseline
+- **Decision:** C.2's bivariate empirical Bayes is the estimator satisfying frozen rule #1's "empirical-Bayes platoon regression (The Book)" requirement, and the C.2 rung fitted at The Book's published constants is the literal incumbent scored beside it.
+- **Alternatives:** Building the split-level Book estimator as the primary (rejected 2026-07-27: its variance requires subtracting an unstable noise term far larger than the quantity sought). Treating frozen rule #1 as undischarged until a split-level estimator exists (rejected: the two parameterizations are the same model in rotated coordinates, so the requirement is about the estimand, not the algebra).
+- **Rationale:** Frozen rule #1 names three role-matched incumbents and C.2 is the third; without this entry its discharge is implied by the ladder rather than recorded. The Book-rho rung exists precisely so the published constants are scored, not only this project's refit of them.
+- **Reference:** manifest frozen rule #1; decision log 2026-07-27 (C.2 estimand) and 2026-07-29 (the ladder as a decomposition).
+- **Revisit if:** the rho interval tightens enough to separate this estimate from The Book's implied value, which the 2026-07-27 entry already names.
+
+---
+
+## 2026-08-08 — D.5's own knobs are validated on composition fidelity, never on claim-1
+- **Decision:** The pitcher-pool size, pitches per `(pitcher, stand, count)` cell, and repertoire smoothing strength are pre-registered before any claim-1 number exists and validated only against §5.4's composition check. No D.5 knob is ever set by its effect on the claim-1 metric.
+- **Alternatives:** Treating D.5's knobs as ordinary §4 feature decisions settled by ablation on claim-1 (rejected: the claim-1 metric is produced by D.5, so tuning D.5 on it selects the measuring instrument to flatter the measurement).
+- **Rationale:** Frozen rule #2 sends unclear choices to a claim-1 ablation, but it presumes the choice sits upstream of the metric, and D.5 sits inside it. Composition fidelity is an independent criterion because it scores the simulator against observed league run scoring rather than against the model's own margin over Phase C.
+- **Reference:** manifest frozen rule #2; architecture plan §4 (feature-decision rule) and §5.4 (composition validation).
+- **Revisit if:** a D.5 knob changes the Phase D versus Phase C ranking without changing composition fidelity, which would mean the two criteria have come apart and the knob needs its own pre-registered treatment.
