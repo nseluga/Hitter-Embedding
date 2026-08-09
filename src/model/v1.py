@@ -59,7 +59,15 @@ BILINEAR_RANK = 32
 EMBEDDING_INIT_STD = 0.01
 BINARY_FACTORS = ("swing", "contact")
 QUALITY_FACTORS = ("ev", "la", "spray")
-FACTORS = BINARY_FACTORS + QUALITY_FACTORS
+# the fourth factor (2026-08-08). Three classes, not two: below two strikes a foul and a
+# foul tip both add a strike, but at two strikes a caught tip is a strikeout and a foul is
+# not, so the third class is exactly the distinction the D.5 count chain needs.
+SPLIT_FACTOR = "split"
+SPLIT_CLASSES = ("foul", "foul_tip", "in_play")
+FACTORS = BINARY_FACTORS + (SPLIT_FACTOR,) + QUALITY_FACTORS
+# what v1 carried before the fourth factor existed; the pre-2026-08-08 checkpoints and the
+# dataset built for them have exactly these, and D.5's baseline path still reads them
+LEGACY_FACTORS = BINARY_FACTORS + QUALITY_FACTORS
 LOSS_RULES = ("log", "rps")
 WEIGHTINGS = ("sum", "mean")
 
@@ -75,9 +83,10 @@ class HitterEmbeddingV1(nn.Module):
     def __init__(self, n_hitters, n_context, embedding_dim=DEFAULT_EMBEDDING_DIM,
                  n_bins=DEFAULT_N_BINS, context_hidden=CONTEXT_HIDDEN,
                  trunk_hidden=TRUNK_HIDDEN, dropout=TRUNK_DROPOUT, bilinear=False,
-                 rank=BILINEAR_RANK):
+                 rank=BILINEAR_RANK, split=False, spray=True):
         super().__init__()
         self.n_bins = n_bins
+        self.use_split, self.use_spray = split, spray
 
         self.embedding = nn.Embedding(n_hitters + 1, embedding_dim,
                                       padding_idx=RESERVED_HITTER_INDEX)
@@ -111,7 +120,9 @@ class HitterEmbeddingV1(nn.Module):
         self.head_contact = nn.Linear(trunk_hidden, 1)
         self.head_ev = nn.Linear(trunk_hidden, n_bins)
         self.head_la = nn.Linear(trunk_hidden + n_bins, n_bins)
-        self.head_spray = nn.Linear(trunk_hidden + 2 * n_bins, n_bins)
+        self.head_spray = (nn.Linear(trunk_hidden + 2 * n_bins, n_bins) if spray else None)
+        # three classes over {foul, foul_tip, in_play}, conditioned on contact
+        self.head_split = nn.Linear(trunk_hidden, len(SPLIT_CLASSES)) if split else None
 
     def conditioning(self, bins):
         """One-hot of an observed bin, all zeros where the bin is MASKED."""
@@ -138,16 +149,24 @@ class HitterEmbeddingV1(nn.Module):
             "contact": self.head_contact(trunk).squeeze(-1),
             "ev": self.head_ev(trunk),
             "la": self.head_la(torch.cat([trunk, ev_onehot], dim=1)),
-            "spray": self.head_spray(torch.cat([trunk, ev_onehot, la_onehot], dim=1)),
         }
+        if self.head_spray is not None:
+            outputs["spray"] = self.head_spray(
+                torch.cat([trunk, ev_onehot, la_onehot], dim=1))
+        if self.head_split is not None:
+            outputs["split"] = self.head_split(trunk)
 
         # a binary head returning (B, 1) would broadcast against a (B,) target and turn
         # the loss into an all-pairs average without failing
         for name in BINARY_FACTORS:
             assert outputs[name].shape == (batch,), f"{name} head must be (B,)"
         for name in QUALITY_FACTORS:
-            assert outputs[name].shape == (batch, self.n_bins), \
-                f"{name} head must be (B, n_bins)"
+            if name in outputs:
+                assert outputs[name].shape == (batch, self.n_bins), \
+                    f"{name} head must be (B, n_bins)"
+        if "split" in outputs:
+            assert outputs["split"].shape == (batch, len(SPLIT_CLASSES)), \
+                "split head must be (B, 3)"
         return outputs
 
 
@@ -161,8 +180,14 @@ def factor_masks(labels):
     contact = labels["contact"] != MASKED
     ev = labels["ev"] != MASKED
     la = ev & (labels["la"] != MASKED)
-    spray = la & (labels["spray"] != MASKED)
-    return {"swing": swing, "contact": contact, "ev": ev, "la": la, "spray": spray}
+    masks = {"swing": swing, "contact": contact, "ev": ev, "la": la}
+    if "spray" in labels:
+        masks["spray"] = la & (labels["spray"] != MASKED)
+    # the split is defined wherever the bat touched the ball, which is strictly more rows
+    # than `ev`: fouls and foul tips are contact and carry no batted-ball measurement
+    if "split" in labels:
+        masks["split"] = labels["split"] != MASKED
+    return masks
 
 
 def _binary_loss(logit, target, mask, rule, pos_weight=None):
@@ -212,8 +237,9 @@ def factorized_loss(outputs, labels, rule="log", weighting="sum", contact_pos_we
     for name in BINARY_FACTORS:
         weight = contact_pos_weight if name == "contact" else None
         parts[name] = _binary_loss(outputs[name], labels[name], masks[name], rule, weight)
-    for name in QUALITY_FACTORS:
-        parts[name] = _quality_loss(outputs[name], labels[name], masks[name], rule)
+    for name in QUALITY_FACTORS + (SPLIT_FACTOR,):
+        if name in outputs:
+            parts[name] = _quality_loss(outputs[name], labels[name], masks[name], rule)
     if weighting == "mean":
         total = sum(part / max(int(masks[name].sum()), 1) for name, part in parts.items())
         return total, parts

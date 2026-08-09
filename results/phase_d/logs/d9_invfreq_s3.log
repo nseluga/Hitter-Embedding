@@ -1,0 +1,17 @@
+epoch   0  train 1.03463  val 1.01332  ref 1.08060  lr 1.00e-03  31s (719 steps)
+epoch   1  train 0.99502  val 1.00274  ref 1.06522  lr 1.00e-03  30s (719 steps)
+epoch   2  train 0.98702  val 0.99855  ref 1.06597  lr 1.00e-03  32s (719 steps)
+epoch   3  train 0.98299  val 0.99625  ref 1.05390  lr 1.00e-03  30s (719 steps)
+epoch   4  train 0.98081  val 0.99689  ref 1.05568  lr 1.00e-03  31s (719 steps)
+epoch   5  train 0.97941  val 0.99604  ref 1.05537  lr 1.00e-03  30s (719 steps)
+epoch   6  train 0.97820  val 0.99496  ref 1.05333  lr 1.00e-03  34s (719 steps)
+epoch   7  train 0.97717  val 0.99417  ref 1.05745  lr 1.00e-03  38s (719 steps)
+epoch   8  train 0.97638  val 0.99313  ref 1.05589  lr 1.00e-03  35s (719 steps)
+epoch   9  train 0.97570  val 0.99307  ref 1.05381  lr 1.00e-03  33s (719 steps)
+epoch  10  train 0.97502  val 0.99475  ref 1.06081  lr 3.00e-04  35s (719 steps)
+epoch  11  train 0.97248  val 0.99176  ref 1.05083  lr 3.00e-04  34s (719 steps)
+epoch  12  train 0.97210  val 0.99206  ref 1.05208  lr 3.00e-04  35s (719 steps)
+epoch  13  train 0.97189  val 0.99230  ref 1.05401  lr 9.00e-05  38s (719 steps)
+epoch  14  train 0.97091  val 0.99176  ref 1.05314  lr 9.00e-05  39s (719 steps)
+early stop: 3 epochs without improvement
+best val loss 0.99176 at epoch 11; reference 1.05083; checkpoint results/checkpoints/d9_invfreq_s3.pt

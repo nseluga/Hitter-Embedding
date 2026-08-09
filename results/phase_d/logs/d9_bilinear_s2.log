@@ -1,0 +1,18 @@
+epoch   0  train 1.06872  val 1.04562  ref 1.04562  lr 1.00e-03  41s (719 steps)
+epoch   1  train 1.02758  val 1.03583  ref 1.03583  lr 1.00e-03  72s (719 steps)
+epoch   2  train 1.01938  val 1.03307  ref 1.03307  lr 1.00e-03  48s (719 steps)
+epoch   3  train 1.01558  val 1.03223  ref 1.03223  lr 1.00e-03  44s (719 steps)
+epoch   4  train 1.01319  val 1.03287  ref 1.03287  lr 1.00e-03  47s (719 steps)
+epoch   5  train 1.01168  val 1.02838  ref 1.02838  lr 1.00e-03  46s (719 steps)
+epoch   6  train 1.01053  val 1.02841  ref 1.02841  lr 1.00e-03  48s (719 steps)
+epoch   7  train 1.00959  val 1.02879  ref 1.02879  lr 3.00e-04  51s (719 steps)
+epoch   8  train 1.00669  val 1.02743  ref 1.02743  lr 3.00e-04  96s (719 steps)
+epoch   9  train 1.00625  val 1.02718  ref 1.02718  lr 3.00e-04  51s (719 steps)
+epoch  10  train 1.00593  val 1.02731  ref 1.02731  lr 3.00e-04  47s (719 steps)
+epoch  11  train 1.00573  val 1.02765  ref 1.02765  lr 9.00e-05  53s (719 steps)
+epoch  12  train 1.00464  val 1.02691  ref 1.02691  lr 9.00e-05  54s (719 steps)
+epoch  13  train 1.00450  val 1.02706  ref 1.02706  lr 9.00e-05  57s (719 steps)
+epoch  14  train 1.00441  val 1.02744  ref 1.02744  lr 2.70e-05  50s (719 steps)
+epoch  15  train 1.00405  val 1.02701  ref 1.02701  lr 2.70e-05  51s (719 steps)
+early stop: 3 epochs without improvement
+best val loss 1.02691 at epoch 12; reference 1.02691; checkpoint results/checkpoints/d9_bilinear_s2.pt

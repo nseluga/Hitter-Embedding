@@ -431,7 +431,7 @@ def test_the_default_loss_is_unweighted_and_the_arms_change_it():
     assert weighted.item() != base.item()
     # the per-factor parts stay raw so a weighted run and an unweighted one remain
     # comparable head by head; only the total carries the weighting
-    for name in FACTORS:
+    for name in base_parts:
         assert mean_parts[name].item() == pytest.approx(base_parts[name].item())
     for name in ("swing", "ev", "la", "spray"):
         assert weighted_parts[name].item() == pytest.approx(base_parts[name].item()), \
@@ -446,7 +446,7 @@ def test_mean_weighting_is_each_factor_over_its_own_valid_rows():
         outputs = forward(model, hitter, context, labels)
         averaged, parts = factorized_loss(outputs, labels, weighting="mean")
     masks = factor_masks(labels)
-    expected = sum(parts[name].item() / int(masks[name].sum()) for name in FACTORS)
+    expected = sum(parts[name].item() / int(masks[name].sum()) for name in parts)
     assert averaged.item() == pytest.approx(expected, rel=1e-6)
 
 
@@ -475,3 +475,95 @@ def test_the_contact_class_weight_is_counted_on_the_train_split_only(built_dir):
     assert train_only == pytest.approx((len(observed) - positive) / positive, rel=1e-6)
     assert train_only != everything, \
         "train-only and whole-table weights coincide, so this proves nothing"
+
+
+# --- the fourth factor (2026-08-08): gates on the three-class contact split ----------
+
+def split_batch(rows=768, seed=5):
+    """A batch carrying the split label, nested on contact exactly as the data is."""
+    hitter, context, labels = make_batch(rows, seed=seed)
+    generator = torch.Generator().manual_seed(seed + 100)
+    split = torch.randint(0, 3, (rows,), generator=generator)
+    labels["split"] = torch.where(labels["contact"] == 1, split, torch.tensor(MASKED))
+    return hitter, context, labels
+
+
+def test_the_split_head_is_off_by_default_and_three_classes_when_on():
+    """
+    Three classes, not two. A foul and a foul tip transition identically below two
+    strikes and differ completely at two, so collapsing them would inflate two-strike
+    plate-appearance survival by the foul-tip share.
+    """
+    assert build_model().head_split is None, "the split head must not be on by default"
+    model = build_model(split=True)
+    assert model.head_split.out_features == 3
+    hitter, context, labels = split_batch(8)
+    outputs = model.eval()(hitter, context, labels["ev"], labels["la"])
+    assert outputs["split"].shape == (8, 3)
+
+
+def test_split_is_scored_only_on_contact_events():
+    """
+    The split conditions on contact, so it must be scored on every contact event and
+    nowhere else -- strictly more rows than the quality heads, which need a batted ball.
+    """
+    _, _, labels = split_batch()
+    masks = factor_masks(labels)
+    assert bool((masks["split"] == (labels["contact"] == 1)).all()), \
+        "the split mask does not match the contact events"
+    assert int(masks["split"].sum()) > int(masks["ev"].sum()), \
+        "fouls and foul tips are contact and must be scored where ev is not"
+
+
+def test_split_loss_at_init_is_the_uniform_prediction():
+    """
+    An untrained three-class head must cost ln(3) per scored row. A mismatch here means a
+    reduction, masking, or label-range bug, and every one of those trains happily.
+    """
+    torch.manual_seed(0)
+    model = build_model(split=True).eval()
+    hitter, context, labels = split_batch()
+    with torch.no_grad():
+        outputs = model(hitter, context, labels["ev"], labels["la"])
+        _, parts = factorized_loss(outputs, labels)
+    scored = int(factor_masks(labels)["split"].sum())
+    assert parts["split"].item() / scored == pytest.approx(math.log(3), abs=0.05)
+
+
+def test_the_model_with_a_split_head_can_overfit_a_single_batch():
+    """Broken wiring on a new head shows up here and essentially nowhere else."""
+    torch.manual_seed(0)
+    model = build_model(split=True)
+    hitter, context, labels = split_batch(96, seed=11)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-3)
+    first = None
+    for _ in range(400):
+        optimizer.zero_grad()
+        total, _ = factorized_loss(model(hitter, context, labels["ev"], labels["la"]),
+                                   labels)
+        total.backward()
+        optimizer.step()
+        first = total.item() if first is None else first
+    assert total.item() < first * 0.25, \
+        f"loss only fell from {first:.1f} to {total.item():.1f}; the split head is not wired"
+
+
+def test_dropping_spray_removes_it_from_the_heads_and_the_loss():
+    """The §7 spray arm removes the dimension outright, not merely its gradient."""
+    model = build_model(split=True, spray=False).eval()
+    hitter, context, labels = split_batch(32)
+    outputs = model(hitter, context, labels["ev"], labels["la"])
+    assert "spray" not in outputs
+    _, parts = factorized_loss(outputs, labels)
+    assert "spray" not in parts and "split" in parts
+
+
+def test_a_legacy_checkpoint_still_loads_without_the_split_head():
+    """
+    The 39 completed runs predate this head. Their checkpoints must keep loading, or the
+    D.5 baseline number they produce cannot be compared against the retrained one.
+    """
+    legacy = build_model()
+    reloaded = build_model()
+    reloaded.load_state_dict(legacy.state_dict())
+    assert reloaded.head_split is None

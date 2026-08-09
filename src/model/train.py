@@ -237,7 +237,9 @@ def run(args):
     model = HitterEmbeddingV1(manifest["n_hitters"], tensors["context"].shape[1],
                               embedding_dim=args.embedding_dim,
                               n_bins=manifest["n_quality_bins"],
-                              bilinear=args.bilinear).to(args.device)
+                              bilinear=args.bilinear,
+                              split=getattr(args, "split", False),
+                              spray=not getattr(args, "no_spray", False)).to(args.device)
     optimizer = torch.optim.AdamW(weight_decay_groups(model, WEIGHT_DECAY), lr=LEARNING_RATE)
 
     mlflow.set_tracking_uri(TRACKING_URI)
@@ -291,6 +293,10 @@ def main():
                         help="'mean' averages each factor over its own rows; a D.8 arm")
     parser.add_argument("--contact-inverse-frequency", action="store_true",
                         help="inverse class frequency inside the contact head; a D.8 arm")
+    parser.add_argument("--split", action="store_true",
+                        help="train the three-class contact split head (2026-08-08)")
+    parser.add_argument("--no-spray", action="store_true",
+                        help="drop spray as a quality dimension — the §7 D.8 arm")
     parser.add_argument("--bilinear", action="store_true",
                         help="low-rank interaction term; a D.8 arm, off by default")
     parser.add_argument("--run-name", default=None,

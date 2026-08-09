@@ -25,9 +25,13 @@ import torch
 
 from src.config.splits import load_splits, season_split_map
 from src.data.model_dataset import load as load_arrays
-from src.model.v1 import FACTORS
+from src.model.v1 import FACTORS, LEGACY_FACTORS
 
-TENSOR_NAMES = ("context", "hitter", "season") + FACTORS
+REQUIRED_NAMES = ("context", "hitter", "season") + LEGACY_FACTORS
+# `split` postdates the datasets the first 39 runs were trained on, so it is loaded when
+# present and absent otherwise rather than making every old artifact unreadable
+OPTIONAL_NAMES = tuple(name for name in FACTORS if name not in LEGACY_FACTORS)
+TENSOR_NAMES = REQUIRED_NAMES + OPTIONAL_NAMES
 
 
 def load_tensors(data_dir):
@@ -37,11 +41,11 @@ def load_tensors(data_dir):
     fix belongs in `model_dataset.save`, which the 2015-2024 refit also runs.
     """
     arrays, manifest = load_arrays(data_dir, mmap_mode=None)
-    missing = sorted(set(TENSOR_NAMES) - set(arrays))
+    missing = sorted(set(REQUIRED_NAMES) - set(arrays))
     assert not missing, f"built dataset is missing {missing}"
 
     tensors = {}
-    for name in TENSOR_NAMES:
+    for name in (n for n in TENSOR_NAMES if n in arrays):
         array = arrays[name]
         assert array.flags["C_CONTIGUOUS"], \
             f"{name}.npy is not row-major; rebuild through model_dataset.save"
@@ -96,7 +100,7 @@ def gather(tensors, index, device=None):
     """
     hitter = tensors["hitter"][index]
     context = tensors["context"][index]
-    labels = {name: tensors[name][index] for name in FACTORS}
+    labels = {name: tensors[name][index] for name in FACTORS if name in tensors}
     if device is not None:
         hitter, context = hitter.to(device), context.to(device)
         labels = {name: value.to(device) for name, value in labels.items()}

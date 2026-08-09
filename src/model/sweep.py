@@ -43,9 +43,14 @@ STOP_FLAG = OUT_DIR / "STOP"
 LEDGER_FIELDS = ("stage", "config", "seed", "status", "seconds", "best_val_loss",
                  "reference", "best_epoch", "finished_at")
 
-# Arms that exist in code today. The two remaining §7 items -- B.2's flagged five and
-# spray as a quality dimension -- need a dataset rebuild and a head change that are not
-# written yet, so they are absent here rather than silently skipped.
+# `d9` is the retrain carrying the three-class contact split (2026-08-08). Every arm moves
+# to it together, on purpose: the split head changes the loss, so a d8 `reference` and a d9
+# `reference` are in different units and must never be read down the same column. It is
+# also the first stage where §7's last two items exist in code -- B.2's flagged five (a
+# dataset rebuilt without the block) and spray as a quality dimension (a head removed) --
+# which is why running them before this retrain would have produced an ablation table for
+# an architecture that is not the one shipping.
+NOBLOCK_DATA_DIR = "data/processed/phase_d_split_noblock"
 STAGES = {
     "screen": [("log", []), ("rps", ["--loss-rule", "rps"])],
     "d6": [("baseline", [])],
@@ -55,8 +60,16 @@ STAGES = {
            ("bilinear", ["--bilinear"]),
            ("meanweight", ["--loss-weighting", "mean"]),
            ("invfreq", ["--contact-inverse-frequency"])],
+    "d9": [("baseline", ["--split"]),
+           ("dim16", ["--split", "--embedding-dim", "16"]),
+           ("dim64", ["--split", "--embedding-dim", "64"]),
+           ("bilinear", ["--split", "--bilinear"]),
+           ("meanweight", ["--split", "--loss-weighting", "mean"]),
+           ("invfreq", ["--split", "--contact-inverse-frequency"]),
+           ("nospray", ["--split", "--no-spray"]),
+           ("block", ["--split", "--data-dir", NOBLOCK_DATA_DIR])],
 }
-DEFAULT_SEEDS = {"screen": 2, "d6": 5, "d8": 5}
+DEFAULT_SEEDS = {"screen": 2, "d6": 5, "d8": 5, "d9": 5}
 FIRST_RUN_ESTIMATE_SECONDS = 45 * 60  # only used before any run has been timed
 
 

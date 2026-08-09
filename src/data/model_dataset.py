@@ -80,7 +80,11 @@ DROPPED_FEATURES = ("effective_speed",)
 ABLATION_BLOCK = ("release_extension", "release_pos_y", "release_pos_z",
                   "release_spin_rate", "spin_axis")
 
-SOURCE_COLUMNS = (["batter", "season", "swing", "contact"]
+# the three-class contact split (2026-08-08) is read off `description`, which the
+# context deliberately excludes but the label needs
+SPLIT_DESCRIPTION_TO_CLASS = {"foul": 0, "foul_tip": 1, "hit_into_play": 2}
+
+SOURCE_COLUMNS = (["batter", "season", "swing", "contact", "description"]
                   + list(QUALITY_DIMENSIONS)
                   + context_features.STANDARDIZED
                   + context_features.CIRCULAR
@@ -191,6 +195,18 @@ def encode_labels(pitch_df, edges):
     }
     for dimension in QUALITY_DIMENSIONS:
         labels[dimension] = assign_bins(pitch_df[dimension], edges[dimension])
+
+    # the fourth factor: which of the three things a bat-on-ball event actually was.
+    # Defined on every contact event, which is strictly more rows than the quality heads
+    # get -- fouls and foul tips are contact and carry no batted-ball measurement.
+    if "description" in pitch_df:
+        mapped = pitch_df["description"].map(SPLIT_DESCRIPTION_TO_CLASS)
+        labels["split"] = np.where(mapped.isna(), MASKED,
+                                   mapped.fillna(0).to_numpy()).astype("int64")
+        assert not (labels["split"][labels["contact"] != 1] != MASKED).any(), \
+            "the contact split is defined off a contact event"
+        assert not (labels["split"][labels["contact"] == 1] == MASKED).any(), \
+            "a contact event carries no split label"
 
     assert set(np.unique(swing)) <= {0, 1}, "swing is not binary"
     assert not (labels["contact"][swing == 0] != MASKED).any(), \

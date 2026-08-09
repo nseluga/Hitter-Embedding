@@ -453,3 +453,21 @@ Append-only. Format fixed by `~/os/knowledge/frameworks/research-standards.md`
 - **Rationale:** Frozen rule #2 sends unclear choices to a claim-1 ablation, but it presumes the choice sits upstream of the metric, and D.5 sits inside it. Composition fidelity is an independent criterion because it scores the simulator against observed league run scoring rather than against the model's own margin over Phase C.
 - **Reference:** manifest frozen rule #2; architecture plan §4 (feature-decision rule) and §5.4 (composition validation).
 - **Revisit if:** a D.5 knob changes the Phase D versus Phase C ranking without changing composition fidelity, which would mean the two criteria have come apart and the knob needs its own pre-registered treatment.
+
+---
+
+## 2026-08-08 — The fourth factor retrains every arm together, as ledger stage d9
+- **Decision:** All eight D.8 arms are re-run carrying the three-class split head, as a new ledger stage `d9` on a dataset rebuilt to carry the split label. The 30 completed `d8` runs stand as the record of the pre-split architecture and are neither deleted nor extended.
+- **Alternatives:** Running the two never-run arms (`block`, `nospray`) on the pre-split architecture first (rejected: the split head changes the loss and the shipped model, so an ablation measured without it answers a question about a model that does not ship). Carrying the six existing arms forward and running only the two new ones (rejected: every arm gains a loss term, so one `reference` column would mix two units).
+- **Rationale:** Frozen rule #2 settles architecture choices by ablation on the claim-1 metric, and claim-1 now flows through a model carrying the fourth factor, so the whole table has to sit on one architecture. Re-running all eight costs one overnight session rather than two, because the retrain rebuilds every arm regardless.
+- **Reference:** `docs/phase-d-spec.md:253-254` registers the two arms that had never run; `results/phase_d/sweep_log.csv` holds the six that had. A `d8` reference and a `d9` reference are in different units and must never be read down the same column.
+- **Revisit if:** never for comparability — a further factor would require the same treatment and its own entry naming this one.
+
+---
+
+## 2026-08-08 — D.5 scores against the whole pitcher population, not a sampled panel
+- **Decision:** The simulator queries every pitcher in the 2015-2023 pool, weighted by batters faced, with 6 pitch rows per `(pitcher, stand, balls, strikes)` cell. Taking the full population is the default rather than an option.
+- **Alternatives:** A sampled panel of 60 pitchers at 12 rows per cell (rejected on the measurement below). Fewer pitchers with more rows each (rejected: within-cell noise averages away across 12 counts and 2,027 pitchers, while panel noise does not).
+- **Rationale:** A sampled panel leaves a common level shift across every hitter at once — 0.0048 wOBA between two draws at 60 pitchers, against a 0.033 between-hitter spread — and PA-weighted RMSE charges for exactly that level. Taking the whole population removes the source instead of shrinking it, and makes the number independent of the draw.
+- **Reference:** measured across two panel draws at 60 pitchers — per-hitter correlation 0.988, mean level shift 0.0048, residual per-hitter noise 0.0020 once that shift is removed. Settled on estimator stability, never on claim-1, per the 2026-08-08 knob entry.
+- **Revisit if:** the pool grows enough that a full pass stops fitting a session, at which point a panel returns and its level noise is reported beside every number built on it.

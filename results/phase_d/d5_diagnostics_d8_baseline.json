@@ -1,0 +1,36 @@
+{
+  "backoff_levels": [
+    40384,
+    6252,
+    1844,
+    14
+  ],
+  "pitcher_cells_dropped": 14,
+  "n_pitchers": 0,
+  "n_pitches": 6,
+  "rows": 1279,
+  "coverage": {
+    "take_alpha": 0.36429667605179034,
+    "bip_joined": 989910,
+    "bip_available": 989910,
+    "pitchers": 2026
+  },
+  "composition": {
+    "league_pred_woba": 0.31066571888040906,
+    "rate_ball_00": 0.4026730956083926,
+    "rate_strike_00": 0.38386626297466686,
+    "rate_hbp_00": 0.0031704542508990377,
+    "rate_foul_00": 0.10675743529466934,
+    "rate_bip_00": 0.10353275187137224,
+    "rate_bip_points_00": 0.03975277100307476
+  },
+  "arm": "d8_baseline",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "eval_season": 2024
+}

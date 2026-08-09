@@ -1,0 +1,17 @@
+epoch   0  train 0.85386  val 0.83175  ref 0.83175  lr 1.00e-03  38s (719 steps)
+epoch   1  train 0.81738  val 0.82467  ref 0.82467  lr 1.00e-03  41s (719 steps)
+epoch   2  train 0.81072  val 0.81996  ref 0.81996  lr 1.00e-03  40s (719 steps)
+epoch   3  train 0.80747  val 0.81850  ref 0.81850  lr 1.00e-03  51s (719 steps)
+epoch   4  train 0.80550  val 0.82004  ref 0.82004  lr 1.00e-03  40s (719 steps)
+epoch   5  train 0.80427  val 0.81963  ref 0.81963  lr 3.00e-04  38s (719 steps)
+epoch   6  train 0.80152  val 0.81625  ref 0.81625  lr 3.00e-04  39s (719 steps)
+epoch   7  train 0.80099  val 0.81601  ref 0.81601  lr 3.00e-04  39s (719 steps)
+epoch   8  train 0.80064  val 0.81608  ref 0.81608  lr 3.00e-04  39s (719 steps)
+epoch   9  train 0.80033  val 0.81608  ref 0.81608  lr 9.00e-05  42s (719 steps)
+epoch  10  train 0.79931  val 0.81548  ref 0.81548  lr 9.00e-05  41s (719 steps)
+epoch  11  train 0.79916  val 0.81532  ref 0.81532  lr 9.00e-05  42s (719 steps)
+epoch  12  train 0.79905  val 0.81556  ref 0.81556  lr 9.00e-05  40s (719 steps)
+epoch  13  train 0.79896  val 0.81564  ref 0.81564  lr 2.70e-05  39s (719 steps)
+epoch  14  train 0.79863  val 0.81542  ref 0.81542  lr 2.70e-05  39s (719 steps)
+early stop: 3 epochs without improvement
+best val loss 0.81532 at epoch 11; reference 0.81532; checkpoint results/checkpoints/d9_nospray_s3.pt
