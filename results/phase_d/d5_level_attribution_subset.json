@@ -1,0 +1,85 @@
+{
+  "eval_season": 2024,
+  "coverage": {
+    "eval_season": 2024,
+    "actual_groups": 1279,
+    "dropped_below_min_eval_pa": 130,
+    "min_eval_pa": 10,
+    "dropped_no_prediction": 1057,
+    "scored_groups": 92,
+    "by_stratum": {
+      "low": {
+        "scored": 380,
+        "dropped": 85,
+        "share_dropped": 0.1827956989247312,
+        "mean_woba_scored": 0.2715274403871476,
+        "mean_woba_dropped": 0.1978559710550887
+      },
+      "medium": {
+        "scored": 280,
+        "dropped": 33,
+        "share_dropped": 0.10543130990415335,
+        "mean_woba_scored": 0.2861702757268614,
+        "mean_woba_dropped": 0.22453930976430975
+      },
+      "high": {
+        "scored": 489,
+        "dropped": 12,
+        "share_dropped": 0.023952095808383235,
+        "mean_woba_scored": 0.3042298857630782,
+        "mean_woba_dropped": 0.17301157407407408
+      }
+    }
+  },
+  "gradient_a": {
+    "n_rows": 92,
+    "n_batters": 49,
+    "coefficients": {
+      "intercept": {
+        "estimate": 0.20751649524827462,
+        "ci_low": 0.021644178793044113,
+        "ci_high": 0.32385640847853814,
+        "excludes_zero": true
+      },
+      "prior_pa_per_100": {
+        "estimate": 0.0009286738276332914,
+        "ci_low": -0.00010087467497245833,
+        "ci_high": 0.0017599583979416968,
+        "excludes_zero": false
+      },
+      "c2_prior": {
+        "estimate": -0.6376311581058285,
+        "ci_low": -1.011703652954718,
+        "ci_high": -0.03528429768720647,
+        "excludes_zero": true
+      }
+    },
+    "univariate_prior_pa_per_100": 0.00033863722262359976,
+    "survives_talent_control": false
+  },
+  "gradient_c": {
+    "n_rows": 92,
+    "mean_delta": 0.0021122855465684786,
+    "slope_per_100_pa": {
+      "estimate": 3.979462152338978e-05,
+      "ci_low": 1.1135552950252222e-05,
+      "ci_high": 7.594956290869149e-05,
+      "excludes_zero": true
+    },
+    "by_stratum": {
+      "low": {
+        "n": 24,
+        "mean_delta": 0.000941148310923509
+      },
+      "medium": {
+        "n": 23,
+        "mean_delta": 0.0018098457566001842
+      },
+      "high": {
+        "n": 45,
+        "mean_delta": 0.0020944988363938185
+      }
+    },
+    "interacts_multiplicatively": true
+  }
+}

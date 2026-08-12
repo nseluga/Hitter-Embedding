@@ -1,0 +1,17 @@
+-- HBP: clipping or shrinkage? --
+  edge     0-0 cells  n=   131141  clipped 78.18%  observed 0.02866  shrunk 0.02843  inflation -0.00024
+  edge     1-2 cells  n=    79937  clipped  0.00%  observed 0.02456  shrunk 0.02409  inflation -0.00046
+  edge     3-5 cells  n=   207943  clipped  0.00%  observed 0.01837  shrunk 0.01815  inflation -0.00022
+  edge    6-11 cells  n=   907648  clipped  0.00%  observed 0.00621  shrunk 0.00619  inflation -0.00002
+  edge   12-49 cells  n=  1790907  clipped  0.00%  observed 0.00039  shrunk 0.00039  inflation +0.00000
+  population: observed 0.00509  shrunk 0.00505  inflation -0.00004  alpha 0.3643
+  clipped takes 102526 at HBP 0.02843 against 0.00430 unclipped
+
+-- gradient test (a): excess ~ prior PA + C.2 posterior --
+           intercept: +0.053148 [+0.003919, +0.102588] EXCLUDES ZERO
+    prior_pa_per_100: +0.000285 [-0.000012, +0.000585] contains zero
+            c2_prior: -0.119419 [-0.278702, +0.036192] contains zero
+  univariate exposure coefficient: +0.000181
+  exposure survives the talent control: False
+
+wrote results/phase_d/d5_level_attribution.json

@@ -1,0 +1,94 @@
+{
+  "shrink_alpha": 0.36429667605179034,
+  "classes": [
+    "ball",
+    "called_strike",
+    "hit_by_pitch"
+  ],
+  "offsets": [
+    {
+      "balls": 0,
+      "strikes": 0,
+      "ball": 0.9317108561273589,
+      "called_strike": 1.0966359099631922,
+      "hit_by_pitch": 0.6995669868022185
+    },
+    {
+      "balls": 0,
+      "strikes": 1,
+      "ball": 1.1199973322442056,
+      "called_strike": 0.6632384173295665,
+      "hit_by_pitch": 1.0086115629423538
+    },
+    {
+      "balls": 0,
+      "strikes": 2,
+      "ball": 1.0720714465174408,
+      "called_strike": 0.433818199976115,
+      "hit_by_pitch": 1.5652609074753074
+    },
+    {
+      "balls": 1,
+      "strikes": 0,
+      "ball": 0.8888706725551143,
+      "called_strike": 1.1989075870285582,
+      "hit_by_pitch": 0.6687591792550652
+    },
+    {
+      "balls": 1,
+      "strikes": 1,
+      "ball": 1.0512528843266535,
+      "called_strike": 0.8577417912950315,
+      "hit_by_pitch": 0.9429284376498781
+    },
+    {
+      "balls": 1,
+      "strikes": 2,
+      "ball": 1.0589426307723295,
+      "called_strike": 0.5759669372641127,
+      "hit_by_pitch": 1.5114594147971965
+    },
+    {
+      "balls": 2,
+      "strikes": 0,
+      "ball": 0.8066282173582039,
+      "called_strike": 1.3175049260078706,
+      "hit_by_pitch": 0.6115759877491745
+    },
+    {
+      "balls": 2,
+      "strikes": 1,
+      "ball": 0.9961653813719379,
+      "called_strike": 1.012041206324411,
+      "hit_by_pitch": 0.842975106276916
+    },
+    {
+      "balls": 2,
+      "strikes": 2,
+      "ball": 1.0440808915459916,
+      "called_strike": 0.7398240118193229,
+      "hit_by_pitch": 1.7138059469288194
+    },
+    {
+      "balls": 3,
+      "strikes": 0,
+      "ball": 0.674462593797362,
+      "called_strike": 1.274471051123252,
+      "hit_by_pitch": 0.33042694178549703
+    },
+    {
+      "balls": 3,
+      "strikes": 1,
+      "ball": 0.9461194798353888,
+      "called_strike": 1.09906568042213,
+      "hit_by_pitch": 0.7651093536779705
+    },
+    {
+      "balls": 3,
+      "strikes": 2,
+      "ball": 1.0216673591880048,
+      "called_strike": 0.9029878078795921,
+      "hit_by_pitch": 1.533164360949833
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "eval_season": 2024,
+  "coverage": {
+    "eval_season": 2024,
+    "actual_groups": 1279,
+    "dropped_below_min_eval_pa": 130,
+    "min_eval_pa": 10,
+    "dropped_no_prediction": 0,
+    "scored_groups": 1149,
+    "by_stratum": {
+      "low": {
+        "scored": 380,
+        "dropped": 85,
+        "share_dropped": 0.1827956989247312,
+        "mean_woba_scored": 0.2715274403871476,
+        "mean_woba_dropped": 0.1978559710550887
+      },
+      "medium": {
+        "scored": 280,
+        "dropped": 33,
+        "share_dropped": 0.10543130990415335,
+        "mean_woba_scored": 0.2861702757268614,
+        "mean_woba_dropped": 0.22453930976430975
+      },
+      "high": {
+        "scored": 489,
+        "dropped": 12,
+        "share_dropped": 0.023952095808383235,
+        "mean_woba_scored": 0.3042298857630782,
+        "mean_woba_dropped": 0.17301157407407408
+      }
+    }
+  },
+  "gradient_a": {
+    "n_rows": 1149,
+    "n_batters": 604,
+    "coefficients": {
+      "intercept": {
+        "estimate": 0.05907644133696837,
+        "ci_low": 0.010015458379746621,
+        "ci_high": 0.1086052598264668,
+        "excludes_zero": true
+      },
+      "prior_pa_per_100": {
+        "estimate": 0.0002796816890760899,
+        "ci_low": -1.696737310652817e-05,
+        "ci_high": 0.000575706799978508,
+        "excludes_zero": false
+      },
+      "c2_prior": {
+        "estimate": -0.14436874301871827,
+        "ci_low": -0.30453431827347527,
+        "ci_high": 0.012262167899402713,
+        "excludes_zero": false
+      }
+    },
+    "univariate_prior_pa_per_100": 0.00015402571397621213,
+    "survives_talent_control": false
+  }
+}
