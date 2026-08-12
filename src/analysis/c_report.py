@@ -104,6 +104,12 @@ def build_predictions(pa_df, eval_season, params, process_seasons, seed=0):
                                             rho_override=BOOK_IMPLIED_RHO),
         "c1_raw": c1.predict(pa_df, eval_season, variant="raw"),
         "c1_bucketed": c1.predict(pa_df, eval_season, variant="bucketed"),
+        # C.1-xwOBA (D5-R8): the same projection machinery reading Statcast's OWN xwOBA field
+        # rather than `V` marginalised over spray. A rung built from `V` would inherit `V`'s
+        # defects and stop being an external incumbent, which is the only thing a baseline is
+        # for. Scored against realized wOBA like every other rung -- only the trailing record
+        # it projects from differs.
+        "c1_xwoba": c1.predict(pa_df, eval_season, variant="bucketed", measure="xwoba"),
         "no_info_league_average": c1.predict(pa_df, eval_season, variant="bucketed",
                                              buckets=NO_INFO_BUCKETS),
     }

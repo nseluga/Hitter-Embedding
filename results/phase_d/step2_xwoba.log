@@ -1,0 +1,148 @@
+claim-1 scores (all models, one eval frame)
+                 model stratum target  n_hitters          pa  scoring_pa  pa_weighted_rmse  noise_floor  model_rmse  rank_corr  rank_corr_weighted  skill_vs_no_info
+          c2_bivariate     low   woba        380  33003.0000  32781.0000            0.0618       0.0510      0.0348     0.1140              0.1389            0.1216
+          c2_bivariate  medium   woba        280  37072.0000  36877.0000            0.0506       0.0427      0.0272     0.2509              0.1926            0.0993
+          c2_bivariate    high   woba        489 111752.0000 111114.0000            0.0410       0.0334      0.0239     0.4850              0.5089            0.5182
+          c2_bivariate     all   woba       1149 181827.0000 180772.0000            0.0474       0.0391      0.0268     0.3283              0.4103            0.3706
+ c2_book_rho_reference     low   woba        380  33003.0000  32781.0000            0.0620       0.0510      0.0352     0.1029              0.1260            0.1016
+ c2_book_rho_reference  medium   woba        280  37072.0000  36877.0000            0.0502       0.0427      0.0263     0.2683              0.2016            0.1544
+ c2_book_rho_reference    high   woba        489 111752.0000 111114.0000            0.0410       0.0334      0.0238     0.4919              0.5066            0.5216
+ c2_book_rho_reference     all   woba       1149 181827.0000 180772.0000            0.0474       0.0391      0.0267     0.3319              0.4096            0.3764
+                c1_raw     low   woba        380  33003.0000  32781.0000            0.1054       0.0510      0.0922     0.1138              0.0416           -5.1833
+                c1_raw  medium   woba        280  37072.0000  36877.0000            0.0638       0.0427      0.0474     0.1544              0.1223           -1.7432
+                c1_raw    high   woba        489 111752.0000 111114.0000            0.0431       0.0334      0.0273     0.4446              0.4899            0.3709
+                c1_raw     all   woba       1149 181827.0000 180772.0000            0.0632       0.0391      0.0496     0.2762              0.3493           -1.1485
+           c1_bucketed     low   woba        380  33003.0000  32781.0000            0.0660       0.0510      0.0418     0.0157             -0.0594           -0.2706
+           c1_bucketed  medium   woba        280  37072.0000  36877.0000            0.0585       0.0427      0.0400     0.1521              0.1431           -0.9539
+           c1_bucketed    high   woba        489 111752.0000 111114.0000            0.0431       0.0334      0.0273     0.4424              0.4896            0.3689
+           c1_bucketed     all   woba       1149 181827.0000 180772.0000            0.0513       0.0391      0.0332     0.2581              0.3604            0.0365
+              c1_xwoba     low   woba        380  33003.0000  32781.0000            0.0634       0.0510      0.0377    -0.0102              0.0199           -0.0320
+              c1_xwoba  medium   woba        280  37072.0000  36877.0000            0.0513       0.0427      0.0284     0.2178              0.2538            0.0171
+              c1_xwoba    high   woba        489 111752.0000 111114.0000            0.0419       0.0334      0.0253     0.4808              0.5181            0.4595
+              c1_xwoba     all   woba       1149 181827.0000 180772.0000            0.0484       0.0391      0.0286     0.2978              0.4248            0.2878
+no_info_league_average     low   woba        380  33003.0000  32781.0000            0.0631       0.0510      0.0371     0.0024             -0.0730            0.0000
+no_info_league_average  medium   woba        280  37072.0000  36877.0000            0.0514       0.0427      0.0286     0.0466              0.0508            0.0000
+no_info_league_average    high   woba        489 111752.0000 111114.0000            0.0479       0.0334      0.0344     0.1149              0.1071            0.0000
+no_info_league_average     all   woba       1149 181827.0000 180772.0000            0.0517       0.0391      0.0338     0.0129              0.0151            0.0000
+        c3_gbm_outcome     low   woba        380  33003.0000  32781.0000            0.0594       0.0510      0.0304     0.1107              0.0846            0.3268
+        c3_gbm_outcome  medium   woba        280  37072.0000  36877.0000            0.0502       0.0427      0.0264     0.2113              0.1811            0.1497
+        c3_gbm_outcome    high   woba        489 111752.0000 111114.0000            0.0410       0.0334      0.0237     0.4811              0.4955            0.5241
+        c3_gbm_outcome     all   woba       1149 181827.0000 180772.0000            0.0468       0.0391      0.0256     0.3445              0.4041            0.4265
+           c3_gbm_full     low   woba        380  33003.0000  32781.0000            0.0587       0.0510      0.0289     0.1288              0.1665            0.3911
+           c3_gbm_full  medium   woba        280  37072.0000  36877.0000            0.0495       0.0427      0.0250     0.2574              0.2615            0.2375
+           c3_gbm_full    high   woba        489 111752.0000 111114.0000            0.0408       0.0334      0.0235     0.4979              0.5238            0.5349
+           c3_gbm_full     all   woba       1149 181827.0000 180772.0000            0.0463       0.0391      0.0249     0.3704              0.4417            0.4602
+         phase_d_xwoba     low   woba        380  33003.0000  32781.0000            0.0598       0.0510      0.0312     0.1552              0.2573            0.2914
+         phase_d_xwoba  medium   woba        280  37072.0000  36877.0000            0.0511       0.0427      0.0280     0.3229              0.3373            0.0400
+         phase_d_xwoba    high   woba        489 111752.0000 111114.0000            0.0449       0.0334      0.0300     0.4873              0.4874            0.2396
+         phase_d_xwoba     all   woba       1149 181827.0000 180772.0000            0.0492       0.0391      0.0298     0.3952              0.4608            0.2218
+
+scored against both answer keys (realized wOBA is primary; no gate reads xwoba)
+                 model stratum target  n_hitters          pa  scoring_pa  pa_weighted_rmse  noise_floor  model_rmse  rank_corr  rank_corr_weighted
+          c2_bivariate     low   woba        380  33003.0000  32781.0000            0.0618       0.0510      0.0348     0.1140              0.1389
+          c2_bivariate  medium   woba        280  37072.0000  36877.0000            0.0506       0.0427      0.0272     0.2509              0.1926
+          c2_bivariate    high   woba        489 111752.0000 111114.0000            0.0410       0.0334      0.0239     0.4850              0.5089
+          c2_bivariate     all   woba       1149 181827.0000 180772.0000            0.0474       0.0391      0.0268     0.3283              0.4103
+          c2_bivariate     low  xwoba        380  33003.0000  32701.0000            0.0483          NaN         NaN     0.1646              0.2237
+          c2_bivariate  medium  xwoba        280  37072.0000  36817.0000            0.0391          NaN         NaN     0.3253              0.2380
+          c2_bivariate    high  xwoba        489 111752.0000 110883.0000            0.0342          NaN         NaN     0.5770              0.5708
+          c2_bivariate     all  xwoba       1149 181827.0000 180401.0000            0.0381          NaN         NaN     0.4195              0.4864
+ c2_book_rho_reference     low   woba        380  33003.0000  32781.0000            0.0620       0.0510      0.0352     0.1029              0.1260
+ c2_book_rho_reference  medium   woba        280  37072.0000  36877.0000            0.0502       0.0427      0.0263     0.2683              0.2016
+ c2_book_rho_reference    high   woba        489 111752.0000 111114.0000            0.0410       0.0334      0.0238     0.4919              0.5066
+ c2_book_rho_reference     all   woba       1149 181827.0000 180772.0000            0.0474       0.0391      0.0267     0.3319              0.4096
+ c2_book_rho_reference     low  xwoba        380  33003.0000  32701.0000            0.0485          NaN         NaN     0.1522              0.2146
+ c2_book_rho_reference  medium  xwoba        280  37072.0000  36817.0000            0.0385          NaN         NaN     0.3467              0.2530
+ c2_book_rho_reference    high  xwoba        489 111752.0000 110883.0000            0.0342          NaN         NaN     0.5801              0.5647
+ c2_book_rho_reference     all  xwoba       1149 181827.0000 180401.0000            0.0381          NaN         NaN     0.4222              0.4856
+                c1_raw     low   woba        380  33003.0000  32781.0000            0.1054       0.0510      0.0922     0.1138              0.0416
+                c1_raw  medium   woba        280  37072.0000  36877.0000            0.0638       0.0427      0.0474     0.1544              0.1223
+                c1_raw    high   woba        489 111752.0000 111114.0000            0.0431       0.0334      0.0273     0.4446              0.4899
+                c1_raw     all   woba       1149 181827.0000 180772.0000            0.0632       0.0391      0.0496     0.2762              0.3493
+                c1_raw     low  xwoba        380  33003.0000  32701.0000            0.0985          NaN         NaN     0.0841              0.1181
+                c1_raw  medium  xwoba        280  37072.0000  36817.0000            0.0564          NaN         NaN     0.2137              0.1387
+                c1_raw    high  xwoba        489 111752.0000 110883.0000            0.0360          NaN         NaN     0.5343              0.5568
+                c1_raw     all  xwoba       1149 181827.0000 180401.0000            0.0566          NaN         NaN     0.3390              0.4206
+           c1_bucketed     low   woba        380  33003.0000  32781.0000            0.0660       0.0510      0.0418     0.0157             -0.0594
+           c1_bucketed  medium   woba        280  37072.0000  36877.0000            0.0585       0.0427      0.0400     0.1521              0.1431
+           c1_bucketed    high   woba        489 111752.0000 111114.0000            0.0431       0.0334      0.0273     0.4424              0.4896
+           c1_bucketed     all   woba       1149 181827.0000 180772.0000            0.0513       0.0391      0.0332     0.2581              0.3604
+           c1_bucketed     low  xwoba        380  33003.0000  32701.0000            0.0537          NaN         NaN     0.0251             -0.0195
+           c1_bucketed  medium  xwoba        280  37072.0000  36817.0000            0.0492          NaN         NaN     0.2223              0.1659
+           c1_bucketed    high  xwoba        489 111752.0000 110883.0000            0.0360          NaN         NaN     0.5334              0.5566
+           c1_bucketed     all  xwoba       1149 181827.0000 180401.0000            0.0426          NaN         NaN     0.3368              0.4277
+              c1_xwoba     low   woba        380  33003.0000  32781.0000            0.0634       0.0510      0.0377    -0.0102              0.0199
+              c1_xwoba  medium   woba        280  37072.0000  36877.0000            0.0513       0.0427      0.0284     0.2178              0.2538
+              c1_xwoba    high   woba        489 111752.0000 111114.0000            0.0419       0.0334      0.0253     0.4808              0.5181
+              c1_xwoba     all   woba       1149 181827.0000 180772.0000            0.0484       0.0391      0.0286     0.2978              0.4248
+              c1_xwoba     low  xwoba        380  33003.0000  32701.0000            0.0505          NaN         NaN     0.0121              0.0679
+              c1_xwoba  medium  xwoba        280  37072.0000  36817.0000            0.0396          NaN         NaN     0.3256              0.3380
+              c1_xwoba    high  xwoba        489 111752.0000 110883.0000            0.0327          NaN         NaN     0.6015              0.6398
+              c1_xwoba     all  xwoba       1149 181827.0000 180401.0000            0.0379          NaN         NaN     0.3939              0.5360
+no_info_league_average     low   woba        380  33003.0000  32781.0000            0.0631       0.0510      0.0371     0.0024             -0.0730
+no_info_league_average  medium   woba        280  37072.0000  36877.0000            0.0514       0.0427      0.0286     0.0466              0.0508
+no_info_league_average    high   woba        489 111752.0000 111114.0000            0.0479       0.0334      0.0344     0.1149              0.1071
+no_info_league_average     all   woba       1149 181827.0000 180772.0000            0.0517       0.0391      0.0338     0.0129              0.0151
+no_info_league_average     low  xwoba        380  33003.0000  32701.0000            0.0504          NaN         NaN    -0.0109             -0.0886
+no_info_league_average  medium  xwoba        280  37072.0000  36817.0000            0.0394          NaN         NaN    -0.0245             -0.0173
+no_info_league_average    high  xwoba        489 111752.0000 110883.0000            0.0448          NaN         NaN     0.1489              0.1138
+no_info_league_average     all  xwoba       1149 181827.0000 180401.0000            0.0448          NaN         NaN    -0.0162             -0.0153
+        c3_gbm_outcome     low   woba        380  33003.0000  32781.0000            0.0594       0.0510      0.0304     0.1107              0.0846
+        c3_gbm_outcome  medium   woba        280  37072.0000  36877.0000            0.0502       0.0427      0.0264     0.2113              0.1811
+        c3_gbm_outcome    high   woba        489 111752.0000 111114.0000            0.0410       0.0334      0.0237     0.4811              0.4955
+        c3_gbm_outcome     all   woba       1149 181827.0000 180772.0000            0.0468       0.0391      0.0256     0.3445              0.4041
+        c3_gbm_outcome     low  xwoba        380  33003.0000  32701.0000            0.0473          NaN         NaN     0.0628              0.1037
+        c3_gbm_outcome  medium  xwoba        280  37072.0000  36817.0000            0.0385          NaN         NaN     0.2990              0.2183
+        c3_gbm_outcome    high  xwoba        489 111752.0000 110883.0000            0.0350          NaN         NaN     0.5672              0.5577
+        c3_gbm_outcome     all  xwoba       1149 181827.0000 180401.0000            0.0382          NaN         NaN     0.4329              0.4793
+           c3_gbm_full     low   woba        380  33003.0000  32781.0000            0.0587       0.0510      0.0289     0.1288              0.1665
+           c3_gbm_full  medium   woba        280  37072.0000  36877.0000            0.0495       0.0427      0.0250     0.2574              0.2615
+           c3_gbm_full    high   woba        489 111752.0000 111114.0000            0.0408       0.0334      0.0235     0.4979              0.5238
+           c3_gbm_full     all   woba       1149 181827.0000 180772.0000            0.0463       0.0391      0.0249     0.3704              0.4417
+           c3_gbm_full     low  xwoba        380  33003.0000  32701.0000            0.0457          NaN         NaN     0.1063              0.2247
+           c3_gbm_full  medium  xwoba        280  37072.0000  36817.0000            0.0373          NaN         NaN     0.3519              0.3335
+           c3_gbm_full    high  xwoba        489 111752.0000 110883.0000            0.0337          NaN         NaN     0.6002              0.6106
+           c3_gbm_full     all  xwoba       1149 181827.0000 180401.0000            0.0369          NaN         NaN     0.4638              0.5389
+         phase_d_xwoba     low   woba        380  33003.0000  32781.0000            0.0598       0.0510      0.0312     0.1552              0.2573
+         phase_d_xwoba  medium   woba        280  37072.0000  36877.0000            0.0511       0.0427      0.0280     0.3229              0.3373
+         phase_d_xwoba    high   woba        489 111752.0000 111114.0000            0.0449       0.0334      0.0300     0.4873              0.4874
+         phase_d_xwoba     all   woba       1149 181827.0000 180772.0000            0.0492       0.0391      0.0298     0.3952              0.4608
+         phase_d_xwoba     low  xwoba        380  33003.0000  32701.0000            0.0460          NaN         NaN     0.1946              0.3457
+         phase_d_xwoba  medium  xwoba        280  37072.0000  36817.0000            0.0382          NaN         NaN     0.4433              0.4541
+         phase_d_xwoba    high  xwoba        489 111752.0000 110883.0000            0.0358          NaN         NaN     0.6036              0.6064
+         phase_d_xwoba     all  xwoba       1149 181827.0000 180401.0000            0.0383          NaN         NaN     0.4990              0.5763
+
+achievable floor -- RMSE between the two answer keys, a reference line, never subtracted
+stratum  n_hitters  achievable_floor  xwoba_bias
+    low        380           0.03640     0.00351
+ medium        280           0.03309     0.00407
+   high        489           0.02521     0.00634
+    all       1149           0.02923     0.00536
+
+paired comparisons for phase_d_xwoba
+  rmse_difference NEGATIVE favours Phase D; rank_difference POSITIVE favours it
+    opponent stratum  n_hitters  n_batters  rmse_a  rmse_b  rmse_difference  ci_low_rmse  ci_high_rmse  favours_a_share_rmse  n_draws  weighted  rank_a  rank_b  rank_difference  ci_low_rank  ci_high_rank  favours_a_share_rank  rmse_favours_phase_d  rank_favours_phase_d
+ c3_gbm_full     low        380        239  0.0598  0.0587           0.0012      -0.0010        0.0032                0.1295     2000      True  0.2573  0.1665           0.0908      -0.0456        0.2237                0.9070                 False                 False
+ c3_gbm_full  medium        280        238  0.0511  0.0495           0.0016      -0.0008        0.0043                0.1085     2000      True  0.3373  0.2615           0.0758      -0.0271        0.1766                0.9305                 False                 False
+ c3_gbm_full    high        489        318  0.0449  0.0408           0.0041       0.0023        0.0059                0.0000     2000      True  0.4874  0.5238          -0.0364      -0.0957        0.0207                0.1085                 False                 False
+ c3_gbm_full     all       1149        604  0.0492  0.0463           0.0029       0.0016        0.0042                0.0000     2000      True  0.4608  0.4417           0.0190      -0.0224        0.0618                0.8050                 False                 False
+c2_bivariate     low        380        239  0.0598  0.0618          -0.0019      -0.0043        0.0004                0.9465     2000      True  0.2573  0.1389           0.1184      -0.0375        0.2716                0.9320                 False                 False
+c2_bivariate  medium        280        238  0.0511  0.0506           0.0005      -0.0027        0.0042                0.4205     2000      True  0.3373  0.1926           0.1447      -0.0079        0.2863                0.9675                 False                 False
+c2_bivariate    high        489        318  0.0449  0.0410           0.0038       0.0018        0.0059                0.0000     2000      True  0.4874  0.5089          -0.0215      -0.0918        0.0461                0.2750                 False                 False
+c2_bivariate     all       1149        604  0.0492  0.0474           0.0018       0.0002        0.0033                0.0115     2000      True  0.4608  0.4103           0.0505      -0.0082        0.1082                0.9550                 False                 False
+
+per-stratum gate verdicts (decisive stratum: low)
+     all  RMSE vs C.3-full: not met   ordering vs BOTH: not met
+    high  RMSE vs C.3-full: not met   ordering vs BOTH: not met
+     low  RMSE vs C.3-full: not met   ordering vs BOTH: not met  <- decisive
+  medium  RMSE vs C.3-full: not met   ordering vs BOTH: not met
+
+debiased diagnostic (mean excess +0.01771 removed) -- NOT a fix, see the 2026-08-08 knob entry
+   opponent stratum  n_hitters  n_batters  rmse_a  rmse_b  rmse_difference   ci_low  ci_high  favours_a_share
+c3_gbm_full     low        380        239 0.05896 0.05868          0.00028 -0.00240  0.00289          0.42150
+c3_gbm_full  medium        280        238 0.04788 0.04949         -0.00161 -0.00432  0.00105          0.88600
+c3_gbm_full    high        489        318 0.04051 0.04081         -0.00030 -0.00194  0.00130          0.63650
+c3_gbm_full     all       1149        604 0.04590 0.04634         -0.00044 -0.00166  0.00082          0.75900
+
+RMSE gate vs C.3-full (low): not met
+ordering gate vs BOTH C.2 and C.3-full (low): not met

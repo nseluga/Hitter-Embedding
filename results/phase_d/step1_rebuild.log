@@ -1,0 +1,69 @@
+loaded                       7799380
+regular_season               7434200
+drop_deprecated              7434200
+deduplicate                  7434200
+position_player_pitchers     7422416
+noncompetitive               7362737
+invalid_pitch_type           7362692
+core_context                 7347953
+final                        7347953
+wrote 7347953 rows to data/processed/pitch_events.parquet
+n_pitches                  7347953
+n_swing                    3456198
+n_take                     3891755
+n_whiff                    802549
+n_contact                  2653649
+contact_breakdown          {'foul': 1305415, 'foul_tip': 68244, 'hit_into_play': 1279990}
+n_in_play                  1279990
+n_ev                       1272901
+n_la                       1273175
+n_spray                    1245884
+n_in_play_without_coords   22086
+n_spray_clipped            12020
+n_extreme_spray_gt90       0
+spray_field_side_mean      1.24
+spray_pull_mean            4.898
+
+decode sample (eyeball gate):
+    description  swing  contact    ev   la      spray
+  hit_into_play      1        1  91.2  -13   28.35627
+  called_strike      0     <NA>  <NA> <NA>       <NA>
+  hit_into_play      1        1  80.9   18  27.981629
+           foul      1        1  <NA> <NA>       <NA>
+   blocked_ball      0     <NA>  <NA> <NA>       <NA>
+  hit_into_play      1        1  76.6   25 -10.573161
+swinging_strike      1        0  <NA> <NA>       <NA>
+  called_strike      0     <NA>  <NA> <NA>       <NA>
+  hit_into_play      1        1  83.3  -25   9.759564
+  called_strike      0     <NA>  <NA> <NA>       <NA>
+  hit_into_play      1        1  72.4   42 -35.172636
+   blocked_ball      0     <NA>  <NA> <NA>       <NA>
+
+wrote 7347953 labeled rows to data/processed/pitch_events_labeled.parquet
+season      n_pa    denom   IBB  computed  published    diff
+2015      183602   181445   951    0.3132      0.313 +0.0002
+2016      184548   182585   932    0.3181      0.318 +0.0001
+2017      185259   183355   970    0.3209      0.321 -0.0001
+2018      185111   183347   929    0.3148      0.315 -0.0002
+2019      186517   184928   753    0.3200      0.320 -0.0000
+2020       66506    66143   202    0.3198      0.320 -0.0002
+2021      181818   180288   703    0.3145      0.314 +0.0005
+2022      182051   181112   475    0.3098      0.310 -0.0002
+2023      184104   183105   474    0.3185      0.318 +0.0005
+2024      182449   181388   509    0.3102      0.310 +0.0002
+2025      182926   181724   556    0.3129      0.313 -0.0001
+
+season     denom  xwoba denom  dropped  coverage
+2015      181445       177973     3472   0.98086
+2016      182585       179847     2738   0.98500
+2017      183355       182056     1299   0.99292
+2018      183347       182138     1209   0.99341
+2019      184928       183630     1298   0.99298
+2020       66143        65838      305   0.99539
+2021      180288       179911      377   0.99791
+2022      181112       180573      539   0.99702
+2023      183105       182749      356   0.99806
+2024      181388       181016      372   0.99795
+2025      181724       181286      438   0.99759
+
+wrote 1904891 PA rows to data/processed/eval_targets_pa.parquet

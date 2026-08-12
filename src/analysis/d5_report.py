@@ -74,6 +74,28 @@ def compare(frames, name=MODEL_NAME, seed=0):
     return pd.concat(tables, ignore_index=True)
 
 
+def second_target_table(frames):
+    """
+    Every rung and arm scored against BOTH answer keys on one eval frame (D5-R8).
+
+    The point is the GAP between the two columns, not either alone. Error visible against xwOBA
+    too is "wrong about batted-ball quality"; error that appears only against realized wOBA is
+    "could not have known" -- fielder placement and sequencing, which the composition has no
+    channel to express. A model can lose on the primary target and be fine on the second, and
+    that is a different diagnosis from losing on both.
+
+    Realized wOBA stays PRIMARY: `TARGETS` is ordered so the primary is scored first, and no
+    verdict anywhere in this module reads the xwOBA rows.
+    """
+    tables = []
+    for name, frame in frames.items():
+        for target in evaluation.TARGETS:
+            table = evaluation.score(frame, target=target)
+            table.insert(0, "model", name)
+            tables.append(table)
+    return pd.concat(tables, ignore_index=True)
+
+
 def debiased_diagnostic(frames, name, seed=0):
     """
     Re-run the paired RMSE comparison with the PA-weighted mean excess removed from `name`.
@@ -132,6 +154,19 @@ def main():
 
     print("claim-1 scores (all models, one eval frame)")
     print(scored.to_string(index=False, float_format="%.4f"))
+
+    # D5-R8: the second target and the achievable floor. The floor compares the two ANSWER KEYS
+    # to each other, so it is a property of the eval frame and not of any model -- read off one
+    # frame, and identical on every other by construction.
+    both = second_target_table(frames)
+    floor = evaluation.achievable_floor(frames[args.label])
+    both.to_csv(out_dir / f"d5_both_targets_{args.label}.csv", index=False)
+    floor.to_csv(out_dir / f"d5_achievable_floor_{args.label}.csv", index=False)
+    print("\nscored against both answer keys (realized wOBA is primary; no gate reads xwoba)")
+    print(both.to_string(index=False, float_format="%.4f"))
+    print("\nachievable floor -- RMSE between the two answer keys, a reference line, "
+          "never subtracted")
+    print(floor.to_string(index=False, float_format="%.5f"))
     print(f"\npaired comparisons for {args.label}")
     print("  rmse_difference NEGATIVE favours Phase D; rank_difference POSITIVE favours it")
     print(comparisons.to_string(index=False, float_format="%.4f"))

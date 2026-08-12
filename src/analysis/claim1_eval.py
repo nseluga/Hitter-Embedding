@@ -400,7 +400,10 @@ def score(eval_frame, target="woba"):
         # set rather than being imputed into it
         part = part[part[actual_column].notna() & (part[weight_column] > 0)]
         if len(part) == 0:
-            rows.append({"stratum": name, "n_hitters": 0, "pa": 0.0,
+            # `target` must be carried even on an empty row: without it a caller filtering the
+            # table by target silently drops the empty strata, and "this stratum had nobody with
+            # a second target" is exactly the finding worth keeping
+            rows.append({"stratum": name, "target": target, "n_hitters": 0, "pa": 0.0,
                          "pa_weighted_rmse": float("nan"), "rank_corr": float("nan"),
                          "rank_corr_weighted": float("nan")})
             continue
