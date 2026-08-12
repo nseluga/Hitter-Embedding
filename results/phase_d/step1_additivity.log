@@ -1,0 +1,16 @@
+baseline: 7347953 rows, 47 columns from data/processed/pitch_events.parquet
+rebuilt:  7347953 rows, 48 columns
+round-tripped through /var/folders/pf/jgfmjd9j39z8dmn0hk1cgswh0000gn/T/tmp9ms_l8sg/pitch_events.parquet (321.5 MB)
+
+columns added by the widening: ['bb_type']
+  loaded                       7799380
+  regular_season               7434200
+  drop_deprecated              7434200
+  deduplicate                  7434200
+  position_player_pitchers     7422416
+  noncompetitive               7362737
+  invalid_pitch_type           7362692
+  core_context                 7347953
+  final                        7347953
+
+ADDITIVE: every pre-existing column is bit-identical and row order is unchanged
