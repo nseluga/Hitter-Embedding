@@ -55,6 +55,9 @@ EXCLUDED = {
     "attack_angle": "bat-tracking, excluded from v1 (2026-07-20 decision)",
     "attack_direction": "bat-tracking, excluded from v1 (2026-07-20 decision)",
     "swing_path_tilt": "bat-tracking, excluded from v1 (2026-07-20 decision)",
+    "bb_type": "LEAKAGE -- batted-ball class is a function of the pitch's own outcome. "
+               "Retained by clean.DIAGNOSTIC_ONLY_COLUMNS for D5-R17's placeholder evidence, "
+               "never as context",
 }
 
 # a standard deviation at or below this is treated as a constant feature; using 1.0

@@ -288,3 +288,128 @@ def test_the_manifest_carries_the_vocabulary_that_built_the_hitter_column():
     # the map must reproduce the hitter column it was built from, not merely be well formed
     rebuilt = md.hitter_indices(md.drop_pitcher_at_bats(frame, set()), vocabulary)
     assert np.array_equal(rebuilt, arrays["hitter"])
+
+
+# --- D5-R7 / D5-R17: placeholder drop and the three candidate binnings ----------------
+
+def placeholder_frame():
+    """Balls in play plus both Statcast placeholder pairs, on train seasons."""
+    rng = np.random.default_rng(11)
+    real_ev = [95.0, 100.0, 102.0, 104.0, 88.0, 91.0, 99.0, 106.0]
+    rows = [{"season": 2016, "ev": ev, "la": 10.0 + i * 3.0,
+             "spray": float(rng.uniform(-40, 40))} for i, ev in enumerate(real_ev)]
+    for angle, speed in md.PLACEHOLDER_PAIRS:
+        rows += [{"season": 2016, "ev": speed, "la": angle,
+                  "spray": float(rng.uniform(-40, 40))} for _ in range(6)]
+    # a GENUINE -21 degree ball: same angle, a real exit velocity. Must survive.
+    rows.append({"season": 2016, "ev": 71.4, "la": -21.0, "spray": -3.0})
+    return pd.DataFrame(rows)
+
+
+def test_placeholder_mask_matches_the_pair_not_the_angle_alone():
+    df = placeholder_frame()
+    mask = md.placeholder_mask(df)
+    assert mask.sum() == 12, "both placeholder pairs should match six rows each"
+    genuine = (df["la"] == -21.0) & (df["ev"] == 71.4)
+    assert not mask[genuine.to_numpy()].any(), \
+        "a real batted ball at -21 degrees was dropped as a placeholder"
+
+
+def test_placeholder_share_guard_fails_when_the_pairs_go_stale():
+    """A re-pull that changes Statcast's placeholder values must fail loud, not drop nothing."""
+    clean_df = pd.DataFrame([{"season": 2016, "ev": 90.0 + i, "la": 10.0 + i, "spray": 0.0}
+                             for i in range(40)])
+    with pytest.raises(AssertionError, match="PLACEHOLDER_PAIRS is stale"):
+        md.assert_placeholders_present(clean_df)
+    # and it passes on a frame that does carry them
+    assert md.assert_placeholders_present(placeholder_frame()) > md.PLACEHOLDER_MIN_SHARE
+
+
+def test_placeholders_are_excluded_from_the_edge_computation():
+    """
+    The placeholders' damage was to the EDGES, not only to the labels: the -21 spike was 59.9%
+    of one launch-angle bin. Dropping them must move the edges.
+    """
+    df = placeholder_frame()
+    with_them = md.fit_bin_edges(df, [2016], n_bins=4, drop_placeholders=False)
+    without = md.fit_bin_edges(df, [2016], n_bins=4, drop_placeholders=True)
+    assert with_them["la"] != without["la"], "dropping the placeholders left the edges unchanged"
+
+
+def test_variance_min_recovers_a_clean_step_target_exactly():
+    """
+    The exact 1-D dynamic program must find the true cut points, not merely good ones. A greedy
+    or quantile rule cannot pass this: equal mass would cut at the mass tertiles instead.
+    """
+    values = np.repeat(np.arange(300.0), 20)
+    rng = np.random.default_rng(0)
+    target = np.where(values < 100, 0.0,
+                      np.where(values < 200, 1.0, 2.0)) + rng.normal(0, 0.01, len(values))
+    assert list(md._variance_min_edges(values, target, 3)) == [100.0, 200.0]
+
+
+def test_variance_min_beats_equal_mass_on_its_own_objective():
+    """Sanity on the criterion itself: the DP minimizes it, so it cannot lose to a quantile rule."""
+    rng = np.random.default_rng(3)
+    values = np.round(rng.normal(88, 14, 20_000), 1)
+    target = np.clip((values - 70) / 30, 0, None) + rng.normal(0, 0.3, len(values))
+
+    def within(edges):
+        assigned = md.assign_bins(values, edges)
+        return sum(float(((target[assigned == b] - target[assigned == b].mean()) ** 2).sum())
+                   for b in np.unique(assigned))
+
+    assert within(md._variance_min_edges(values, target, 8)) <= within(
+        md._equal_mass_edges(values, 8))
+
+
+def test_top_decile_split_narrows_the_tail_and_equal_mass_cannot():
+    """
+    D5-R7's finding, as a test: only unequal mass narrows the top bin. 24 equal-mass bins give a
+    15.1 mph top EV bin and 32 still give 14.3, at 2.4x the chain enumeration.
+    """
+    values = np.concatenate([np.linspace(40, 105, 9_000), np.linspace(105, 122, 1_000)])
+    equal_top = values.max() - md._equal_mass_edges(values, 24)[-1]
+    split_top = values.max() - md._top_decile_edges(values, 24)[-1]
+    assert split_top < equal_top, "the tail split did not narrow the top bin"
+
+
+def test_all_three_schemes_produce_strictly_increasing_edges():
+    rng = np.random.default_rng(5)
+    n = 5_000
+    df = pd.DataFrame({"season": 2016,
+                       "ev": np.round(rng.normal(88, 14, n), 1),
+                       "la": np.round(rng.normal(12, 25, n), 0),
+                       "spray": np.round(rng.normal(0, 20, n), 1)})
+    target = rng.normal(0.35, 0.5, n)
+    for scheme in md.BIN_SCHEMES:
+        edges = md.fit_bin_edges(df, [2016], n_bins=8, scheme=scheme, target=target,
+                                 drop_placeholders=False)
+        for dimension, cut in edges.items():
+            assert len(cut) == 7, f"{scheme}/{dimension} produced {len(cut)} edges"
+            assert all(b > a for a, b in zip(cut, cut[1:])), f"{scheme}/{dimension} not increasing"
+
+
+def test_joint_cell_variance_prefers_the_binning_that_separates_the_target():
+    """
+    The comparison objective must be able to tell a good grid from a bad one, and it must be
+    computed JOINTLY -- a scheme can win a marginal and lose the 24^3 grid.
+    """
+    rng = np.random.default_rng(7)
+    n = 20_000
+    ev = np.round(rng.uniform(60, 115, n), 1)
+    la = np.round(rng.uniform(-30, 50, n), 0)
+    df = pd.DataFrame({"season": 2016, "ev": ev, "la": la,
+                       "spray": np.round(rng.uniform(-40, 40, n), 1)})
+    # wOBA depends on ev and la JOINTLY: only hard-hit balls at sweet-spot angles are worth much
+    target = ((ev > 100) & (la > 10) & (la < 35)).astype(float) * 1.5 + rng.normal(0, 0.05, n)
+
+    informative = md.fit_bin_edges(df, [2016], n_bins=8, scheme="variance_min",
+                                   target=target, drop_placeholders=False)
+    coarse = {d: list(np.linspace(df[d].min() + 1, df[d].max() - 1, 7))
+              for d in md.QUALITY_DIMENSIONS}
+    good = md.joint_cell_variance(df, [2016], informative, target, n_bins=8)
+    bad = md.joint_cell_variance(df, [2016], coarse, target, n_bins=8)
+    assert good["within_cell_variance"] < bad["within_cell_variance"]
+    assert good["variance_explained"] > bad["variance_explained"]
+    assert good["min_cell_count"] >= 1

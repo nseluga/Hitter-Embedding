@@ -153,24 +153,223 @@ def hitter_indices(pitch_df, vocabulary):
             .fillna(RESERVED_HITTER_INDEX).to_numpy(dtype="int64"))
 
 
-def fit_bin_edges(pitch_df, train_seasons, n_bins=DEFAULT_QUALITY_BINS):
+# --- D5-R17: Statcast launch-angle placeholders ---------------------------------------
+#
+# Two (launch_angle, launch_speed) pairs are Statcast PLACEHOLDERS rather than measurements,
+# verified 2026-08-11: at launch_angle -21.0 the paired launch_speed is exactly 82.9,
+# hit_distance_sc is null for 77.5% of those rows against a <=5.5% baseline, and 33,993 of
+# 34,001 are `ground_ball`; at 69.0 the speed is exactly 80.0, distance is null for 90.7%, and
+# 22,354 of 22,372 are `popup`.
+#
+# They are a different measurement PROCESS, not missing data, so the Phase B imputation rule
+# does not apply and they are DROPPED (settled Q2=C) -- from the bin-edge computation and from
+# head_la's targets both. Masking alone would leave them in the edge computation, which is
+# where they did the damage: the -21 spike is 59.9% of LA bin 2 and the 69 spike 44.0% of LA
+# bin 23, producing a 3-degree-wide bin against 5-11 degree neighbours.
+#
+# Matched on the PAIR, not on launch_angle alone: about a fifth of rows at -21 degrees carry a
+# real exit velocity and are genuine batted balls.
+PLACEHOLDER_PAIRS = ((-21.0, 82.9), (69.0, 80.0))
+# A re-pull that changes Statcast's placeholder values must fail loud rather than silently
+# dropping nothing. Verified share on snapshot_2026-07-14 is ~5.5% of balls in play.
+PLACEHOLDER_MIN_SHARE = 0.02
+
+# How a dimension's interior edges are chosen. Compared on the JOINT within-cell wOBA variance
+# by `joint_cell_variance`, never on the marginal: a 100 mph ball at 5 degrees and at 25 degrees
+# are different outcomes, so choosing EV edges against wOBA averaged over launch angle optimizes
+# the wrong quantity. The 1-D criterion below is only how a CANDIDATE is generated.
+BIN_SCHEMES = ("equal_mass", "top_decile_split", "variance_min")
+# `top_decile_split` puts this share of the mass in the tail and this many bins inside it
+TAIL_SHARE = 0.10
+TAIL_BINS = 6
+
+
+def placeholder_mask(pitch_df):
+    """Rows carrying a Statcast (launch_angle, launch_speed) placeholder pair (D5-R17)."""
+    la = pitch_df["la"].to_numpy(dtype="float64")
+    ev = pitch_df["ev"].to_numpy(dtype="float64")
+    mask = np.zeros(len(pitch_df), dtype=bool)
+    for angle, speed in PLACEHOLDER_PAIRS:
+        mask |= (la == angle) & (ev == speed)
+    return mask
+
+
+def assert_placeholders_present(pitch_df):
     """
-    Interior quantile edges per contact-quality dimension, from train seasons only.
-    Returns {dimension: list of n_bins-1 edges}. Null labels are excluded, so the
-    edges describe balls in play rather than the mostly-null pitch population.
+    Fail loud if PLACEHOLDER_PAIRS no longer matches the snapshot (D5-R17).
+
+    Called from `build` rather than from `fit_bin_edges`, because it is a statement about the
+    REAL table: a hand-built frame legitimately contains no placeholders, while a real snapshot
+    whose placeholder values Statcast has changed would silently drop nothing and quietly
+    restore the defect. Returns the matched share.
     """
-    train = pitch_df[pitch_df["season"].isin(train_seasons)]
-    quantiles = np.linspace(0.0, 1.0, n_bins + 1)[1:-1]
+    placeholders = placeholder_mask(pitch_df)
+    in_play = int(pitch_df["ev"].notna().sum())
+    assert in_play > 0, "no balls in play, so the placeholder guard cannot be evaluated"
+    share = float(placeholders.sum()) / in_play
+    assert share >= PLACEHOLDER_MIN_SHARE, (
+        f"placeholder pairs matched only {share:.4%} of balls in play, below the verified "
+        f"~5.5% -- Statcast's placeholder values have changed and PLACEHOLDER_PAIRS is stale")
+    return share
+
+
+def _equal_mass_edges(values, n_bins):
+    """Interior quantile edges: every bin carries the same share of the mass."""
+    return np.quantile(values, np.linspace(0.0, 1.0, n_bins + 1)[1:-1])
+
+
+def _top_decile_edges(values, n_bins, tail_share=TAIL_SHARE, tail_bins=TAIL_BINS):
+    """
+    Equal mass over the body, then `tail_bins` equal-mass bins inside the top `tail_share`.
+    Equal mass alone cannot narrow the tail -- 24 equal-mass bins give a 15.1 mph top EV bin
+    and 32 still give 14.3 at 2.4x the chain enumeration -- so only unequal mass can.
+    """
+    body_bins = n_bins - tail_bins
+    assert body_bins >= 2, f"{n_bins} bins with {tail_bins} in the tail leaves too few"
+    body = np.linspace(0.0, 1.0 - tail_share, body_bins + 1)[1:]
+    tail = np.linspace(1.0 - tail_share, 1.0, tail_bins + 1)[1:-1]
+    return np.quantile(values, np.concatenate([body, tail]))
+
+
+def _variance_min_edges(values, target, n_bins):
+    """
+    Edges minimizing within-bin variance of `target`, by exact 1-D dynamic program.
+
+    This is the Fisher-Jenks / `Ckmeans.1d.dp` recurrence (Wang & Song 2011, R Journal 3(2)
+    29-33; Fisher 1958, JASA 53(284) 789-798) with one substitution: the cost of an interval is
+    the sum of squared deviations of the TARGET inside it, not of the binned variable. That makes
+    it a supervised partition -- it separates wOBA outcomes -- rather than a description of the
+    feature's own shape.
+
+    Exact, not greedy: the DP runs over DISTINCT feature values with the target's count, sum and
+    sum-of-squares accumulated per value, which is what keeps an O(K * m^2) recurrence affordable
+    on a million rows. Statcast reports exit velocity to 0.1 mph, so m is in the low thousands.
+    """
+    order = np.argsort(values, kind="stable")
+    unique, start = np.unique(values[order], return_index=True)
+    m = len(unique)
+    assert m > n_bins, f"only {m} distinct values for {n_bins} bins"
+
+    sorted_target = target[order]
+    # prefix sums over distinct-value groups: [0, g1, g1+g2, ...]
+    bounds = np.append(start, len(order))
+    count = np.diff(bounds).astype("float64")
+    total = np.add.reduceat(sorted_target, start)
+    total_sq = np.add.reduceat(sorted_target ** 2, start)
+    c = np.concatenate([[0.0], np.cumsum(count)])
+    s = np.concatenate([[0.0], np.cumsum(total)])
+    q = np.concatenate([[0.0], np.cumsum(total_sq)])
+
+    def cost(i, j):
+        """Sum of squared deviations of the target over distinct-value groups [i, j)."""
+        n = c[j] - c[i]
+        run = s[j] - s[i]
+        with np.errstate(invalid="ignore", divide="ignore"):
+            out = (q[j] - q[i]) - np.where(n > 0, run ** 2 / np.where(n > 0, n, 1.0), 0.0)
+        return np.where(n > 0, out, np.inf)
+
+    # dp[j] = best cost partitioning the first j groups into the bins placed so far
+    dp = cost(0, np.arange(m + 1))
+    dp[0] = 0.0
+    back = np.zeros((n_bins, m + 1), dtype="int64")
+    for k in range(1, n_bins):
+        previous, dp = dp, np.full(m + 1, np.inf)
+        for j in range(k + 1, m + 1):
+            candidate = previous[k:j] + cost(np.arange(k, j), j)
+            best = int(np.argmin(candidate))
+            dp[j] = candidate[best]
+            back[k, j] = k + best
+
+    # walk the cut points back out; an interior edge sits at the first value of each bin
+    cuts, j = [], m
+    for k in range(n_bins - 1, 0, -1):
+        j = int(back[k, j])
+        cuts.append(j)
+    return unique[sorted(cuts)]
+
+
+def fit_bin_edges(pitch_df, train_seasons, n_bins=DEFAULT_QUALITY_BINS,
+                  scheme="equal_mass", target=None, drop_placeholders=True):
+    """
+    Interior edges per contact-quality dimension, from train seasons only.
+    Returns {dimension: list of n_bins-1 edges}. Null labels are excluded, so the edges
+    describe balls in play rather than the mostly-null pitch population.
+
+    scheme: one of BIN_SCHEMES. "variance_min" requires `target` -- a per-row realized wOBA
+    array aligned to pitch_df, on TRAIN seasons only. Statcast's xwOBA would be circular here,
+    since `V` is what estimates it.
+    drop_placeholders: excludes D5-R17's Statcast placeholder pairs from the edge computation.
+    """
+    assert scheme in BIN_SCHEMES, f"unknown bin scheme {scheme!r}"
+    # .to_numpy() can hand back a read-only view, and this mask is narrowed in place below
+    keep = np.array(pitch_df["season"].isin(train_seasons).to_numpy(), dtype=bool)
+    if drop_placeholders:
+        keep &= ~placeholder_mask(pitch_df)
+
     edges = {}
     for dimension in QUALITY_DIMENSIONS:
-        values = train[dimension].to_numpy(dtype="float64")
-        values = values[np.isfinite(values)]
-        assert len(values) > n_bins, f"too few train values to bin {dimension}"
-        cut = np.quantile(values, quantiles)
+        values = pitch_df[dimension].to_numpy(dtype="float64")
+        usable = keep & np.isfinite(values)
+        assert usable.sum() > n_bins, f"too few train values to bin {dimension}"
+        if scheme == "equal_mass":
+            cut = _equal_mass_edges(values[usable], n_bins)
+        elif scheme == "top_decile_split":
+            cut = _top_decile_edges(values[usable], n_bins)
+        else:
+            assert target is not None, "the variance_min scheme needs a realized-wOBA target"
+            scored = usable & np.isfinite(np.asarray(target, dtype="float64"))
+            cut = _variance_min_edges(values[scored],
+                                      np.asarray(target, dtype="float64")[scored], n_bins)
         assert np.all(np.diff(cut) > 0), \
-            f"{dimension} quantile edges are not strictly increasing at {n_bins} bins"
-        edges[dimension] = cut.tolist()
+            f"{dimension} edges are not strictly increasing at {n_bins} bins ({scheme})"
+        edges[dimension] = np.asarray(cut, dtype="float64").tolist()
     return edges
+
+
+def joint_cell_variance(pitch_df, train_seasons, edges, target, n_bins=DEFAULT_QUALITY_BINS):
+    """
+    Within-cell wOBA variance over the joint (ev, la, spray) grid, plus the diagnostics that
+    decide whether a candidate binning is affordable and safe.
+
+    This is the objective the three candidate schemes are COMPARED on (D5-R7 + D5-R17). The
+    joint grid is the right unit because the model predicts into a cell of it, not into three
+    marginals: a 100 mph ball at 5 degrees and at 25 degrees are different outcomes.
+
+    `min_cell_count` is the pre-launch blocker -- `query_tables.fit_outcome_table` backs a joint
+    cell off to its (ev, la) marginal, and the backoff has to be re-fit if the new edges push
+    top cells below the regime it was fitted in.
+    """
+    values = {d: pitch_df[d].to_numpy(dtype="float64") for d in QUALITY_DIMENSIONS}
+    target = np.asarray(target, dtype="float64")
+    usable = np.array(pitch_df["season"].isin(train_seasons).to_numpy(), dtype=bool)
+    usable &= ~placeholder_mask(pitch_df) & np.isfinite(target)
+    for value in values.values():
+        usable &= np.isfinite(value)
+
+    bins = {d: assign_bins(values[d][usable], edges[d]) for d in QUALITY_DIMENSIONS}
+    flat = np.ravel_multi_index((bins["ev"], bins["la"], bins["spray"]),
+                                (n_bins, n_bins, n_bins))
+    scored = target[usable]
+    size = n_bins ** 3
+    count = np.bincount(flat, minlength=size).astype("float64")
+    total = np.bincount(flat, weights=scored, minlength=size)
+    total_sq = np.bincount(flat, weights=scored ** 2, minlength=size)
+
+    occupied = count > 0
+    within = (total_sq[occupied] - total[occupied] ** 2 / count[occupied]).sum()
+    grand = total_sq.sum() - total.sum() ** 2 / count.sum()
+    return {
+        "scheme_rows": int(usable.sum()),
+        # the headline: mean squared deviation of realized wOBA from its own cell's mean
+        "within_cell_variance": float(within / count.sum()),
+        # share of total wOBA variance the grid explains, so schemes are comparable on one scale
+        "variance_explained": float(1.0 - within / grand),
+        "occupied_cells": int(occupied.sum()),
+        "min_cell_count": int(count[occupied].min()),
+        "median_cell_count": float(np.median(count[occupied])),
+        "top_ev_bin_span": float(values["ev"][usable].max() - edges["ev"][-1]),
+        "ev_bin_spans": [round(b - a, 3) for a, b in zip(edges["ev"][:-1], edges["ev"][1:])],
+    }
 
 
 def assign_bins(values, edges):

@@ -62,18 +62,35 @@ def trailing_window(pa_df, eval_season, n_seasons=TRAILING_SEASONS):
     return window
 
 
-def league_average(window):
-    """Side-specific league wOBA over the window; the value predictions shrink toward."""
+# The C.1-xwOBA rung (D5-R8, settled Q13). Same machinery, one substitution: the hitter's
+# trailing record is his xwOBA rather than his wOBA. Statcast's own field is used, NOT this
+# project's `V` table marginalised over spray -- a rung built from `V` inherits `V`'s defects
+# and stops being an external incumbent, which is the entire point of a baseline.
+#
+# What it changes and what it does not: the PREDICTOR becomes xwOBA, the TARGET stays realized
+# wOBA. So this rung answers "does trailing batted-ball quality project next-season runs better
+# than trailing runs do?" -- which is the question that decides whether the ladder currently
+# understates what Phase D has to clear.
+MEASURES = {"woba": ("woba_points", "in_denominator"),
+            "xwoba": ("xwoba_points", "in_xwoba_denominator")}
+
+
+def league_average(window, measure="woba"):
+    """Side-specific league average of `measure` over the window; predictions shrink toward it."""
+    points, denominator = MEASURES[measure]
     grouped = window.groupby("p_throws")
-    league = grouped["woba_points"].sum() / grouped["in_denominator"].sum()
+    league = grouped[points].sum() / grouped[denominator].sum()
     return league.to_dict()
 
 
-def trailing_woba(window):
-    """Each hitter's observed wOBA and PA against each pitcher hand over the window."""
+def trailing_woba(window, measure="woba"):
+    """Each hitter's observed `measure` and its PA count against each pitcher hand."""
     out = aggregate(window, by=("batter", "p_throws"))
-    return out[["batter", "p_throws", "woba", "denominator"]].rename(
-        columns={"woba": "trailing_woba", "denominator": "trailing_pa"}
+    denominator = "denominator" if measure == "woba" else "xwoba_denominator"
+    assert measure in out.columns, (
+        f"the PA table carries no {measure!r} column -- rebuild it with eval_targets.py")
+    return out[["batter", "p_throws", measure, denominator]].rename(
+        columns={measure: "trailing_woba", denominator: "trailing_pa"}
     )
 
 
@@ -89,21 +106,24 @@ def bucket_weight(trailing_pa, buckets=PA_BUCKETS):
 
 
 def predict(pa_df, eval_season, variant="bucketed", n_seasons=TRAILING_SEASONS,
-            buckets=PA_BUCKETS):
+            buckets=PA_BUCKETS, measure="woba"):
     """
     Project side-specific wOBA for every hitter-hand active in eval_season.
     variant: "raw" (unshrunk, league fallback only at zero PA) or "bucketed"
     (blend toward the side-specific league average by PA bucket).
+    measure: "woba" for C.1, "xwoba" for the C.1-xwOBA rung -- which trailing record the
+    projection is built from. The target it is scored against is realized wOBA either way.
     Returns a frame with batter/season/p_throws/pred_woba, ready for claim1_eval.
     """
     assert variant in {"raw", "bucketed"}, f"unknown variant {variant!r}"
+    assert measure in MEASURES, f"unknown measure {measure!r}"
     # pitchers batting (pre-2022 NL) would drag the league average a projection
     # shrinks toward well below any real hitter's level
     pa_df = drop_pitcher_batters(pa_df)
 
     window = trailing_window(pa_df, eval_season, n_seasons)
-    league = league_average(window)
-    trailing = trailing_woba(window)
+    league = league_average(window, measure)
+    trailing = trailing_woba(window, measure)
 
     # the groups needing a projection are those active in the evaluated season
     targets = (

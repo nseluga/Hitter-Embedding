@@ -131,3 +131,65 @@ def test_exclusion_is_per_season_not_career():
                    (500, 998, 2021, 400)])
     excluded = et.primarily_pitchers(df)
     assert (2019, 500) in excluded and (2021, 500) not in excluded
+
+
+# --- the second target: xwOBA (D5-R8) ------------------------------------------------
+
+def with_xwoba(events_list, xwoba_values, **kw):
+    """A prepared frame carrying Statcast's xwOBA field, one value per event."""
+    df = frame(events_list, **kw)
+    df[et.XWOBA_FIELD] = xwoba_values
+    return et.add_woba_points(et.categorize(df), WEIGHTS)
+
+
+def test_xwoba_field_is_dropped_and_replaced_by_its_two_columns():
+    df = with_xwoba(["single", "strikeout"], [0.55, 0.0])
+    assert et.XWOBA_FIELD not in df.columns, "the raw field must not survive into the table"
+    assert list(df["xwoba_points"]) == [0.55, 0.0]
+    assert list(df["in_xwoba_denominator"]) == [True, True]
+
+
+def test_an_unestimated_batted_ball_leaves_only_the_xwoba_denominator():
+    """
+    Statcast fails to estimate a small share of batted balls. Those plate appearances stay in
+    the wOBA denominator -- they really happened -- and leave the xwOBA one. Imputing them
+    would violate the Phase B missingness rule.
+    """
+    df = with_xwoba(["single", "double"], [0.55, None])
+    assert list(df["in_denominator"]) == [True, True]
+    assert list(df["in_xwoba_denominator"]) == [True, False]
+
+    agg = et.aggregate(df)
+    assert agg.loc[0, "denominator"] == 2
+    assert agg.loc[0, "xwoba_denominator"] == 1
+    assert agg.loc[0, "xwoba"] == pytest.approx(0.55)
+
+
+def test_a_group_with_nothing_estimated_gets_a_null_xwoba_not_a_zero():
+    """A zero would read as a hitter who produced nothing, which is a different claim."""
+    df = with_xwoba(["double"], [None])
+    agg = et.aggregate(df)
+    assert agg.loc[0, "xwoba_denominator"] == 0
+    assert pd.isna(agg.loc[0, "xwoba"])
+
+
+def test_non_denominator_categories_are_out_of_both_denominators():
+    df = with_xwoba(["intent_walk", "sac_bunt", "catcher_interf"], [None, None, None])
+    assert not df["in_denominator"].any()
+    assert not df["in_xwoba_denominator"].any()
+
+
+def test_xwoba_coverage_counts_what_the_second_target_gives_up():
+    df = with_xwoba(["single", "double", "triple", "intent_walk"], [0.5, None, 0.9, None])
+    report = et.xwoba_coverage(df)["2020"]
+    assert report["denominator"] == 3          # intent_walk is outside both
+    assert report["xwoba_denominator"] == 2
+    assert report["dropped"] == 1
+    assert report["coverage"] == pytest.approx(2 / 3, abs=1e-5)
+
+
+def test_aggregate_still_works_without_the_second_target():
+    """Frames built before D5-R8, and every hand-built test frame, must keep scoring."""
+    agg = et.aggregate(prepared(["single", "strikeout"]))
+    assert "xwoba" not in agg.columns
+    assert agg.loc[0, "denominator"] == 2

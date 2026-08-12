@@ -59,9 +59,23 @@ RELEASE_SPEED_BOUNDS = (30.0, 110.0)
 PLATE_X_ABS_MAX = 6.0
 PLATE_Z_BOUNDS = (-4.0, 10.0)
 
+# Retained for DIAGNOSTICS only, never as a model feature (D5-R17). `bb_type` is Statcast's
+# batted-ball class; it is a function of the pitch's own OUTCOME, so as a context feature it
+# would be leakage. It is here so D5-R17's launch-angle placeholder evidence is reproducible
+# from the processed table rather than only from the raw snapshot, and it is listed in
+# `context_features.EXCLUDED`, which is the auditable record that it stays out of the context
+# vector.
+#
+# `estimated_woba_using_speedangle` (Statcast xwOBA) is deliberately NOT here. It reaches the
+# project through `eval_targets.PA_COLUMNS` instead, because the two-table principle
+# (decision log 2026-07-15) builds every evaluation quantity from the COMPLETE outcome record
+# rather than from this deliberately filtered table. Putting it here would leave a column that
+# a later rung could be built from by mistake, biased by the modeling filters.
+DIAGNOSTIC_ONLY_COLUMNS = ["bb_type"]
+
 # columns retained in the processed modeling table
 RETAIN_COLUMNS = sorted(set(
-    KEY_FIELDS + CORE_CONTEXT_FIELDS + OPTIONAL_CONTEXT_FIELDS + [
+    KEY_FIELDS + CORE_CONTEXT_FIELDS + OPTIONAL_CONTEXT_FIELDS + DIAGNOSTIC_ONLY_COLUMNS + [
         "game_type", "game_date", "game_year", "season", "batter", "pitcher",
         "description", "des", "events", "balls", "strikes", "p_throws", "stand", "zone",
         "launch_speed", "launch_angle", "hc_x", "hc_y", "hit_distance_sc",

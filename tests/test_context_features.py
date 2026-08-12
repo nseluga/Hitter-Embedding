@@ -180,3 +180,41 @@ def test_categorical_vocab_is_train_only(rng):
     params = cf.fit_on_train(df)
     assert "KN" not in params.categories["pitch_type"]
     assert set(params.categories["pitch_type"]) == {"FF", "SL"}
+
+
+# --- leakage gate: outcome-derived columns must never reach the context vector -------
+
+def test_outcome_derived_columns_are_registered_as_excluded():
+    """
+    `bb_type` is a function of the pitch's OWN outcome, so as a context feature it is leakage.
+    It is retained in the modeling table for D5-R17's placeholder evidence, which is exactly the
+    situation the EXCLUDED registry exists to make auditable.
+    """
+    from src.data import clean
+
+    for column in clean.DIAGNOSTIC_ONLY_COLUMNS:
+        assert column in cf.EXCLUDED, f"{column} is retained but not registered as excluded"
+        assert "LEAKAGE" in cf.EXCLUDED[column], \
+            f"{column}'s exclusion reason must name it as leakage, not taste"
+
+
+def test_statcast_xwoba_never_enters_the_modeling_table():
+    """
+    The two-table principle builds every evaluation quantity from the COMPLETE outcome record.
+    xwOBA reaches the project through eval_targets.PA_COLUMNS; a copy in the modeling table
+    would be a column a later rung could be built from by mistake, biased by the model filters.
+    """
+    from src.data import clean
+    from src.data import eval_targets
+
+    assert eval_targets.XWOBA_FIELD not in clean.RETAIN_COLUMNS
+    assert eval_targets.XWOBA_FIELD in eval_targets.PA_COLUMNS
+
+
+def test_no_feature_name_is_built_from_an_excluded_column(train_df):
+    """The registry is only a comment unless nothing in it reaches a feature name."""
+    params = cf.fit(train_df)
+    names = cf.feature_names(params)
+    for column in cf.EXCLUDED:
+        assert not any(name == column or name.startswith(f"{column}_") for name in names), \
+            f"excluded column {column} produced a feature"

@@ -369,33 +369,96 @@ def weighted_rank_correlation(actual, predicted, weights):
                             weighted_ranks(predicted, weights), weights)
 
 
-def score(eval_frame):
+# Which answer key a score is measured against (D5-R8, settled Q13). Realized wOBA stays
+# PRIMARY and is the default: xwOBA as the primary target would change the claim from runs to a
+# latent quality measure, re-score every frozen Phase C number, and -- decisively -- make the
+# answer key another model's output rather than ground truth, reducing the task to predicting
+# next-season batted-ball quality. xwOBA is a SECOND target, scored beside the first, because
+# the gap between the two decomposes error into "wrong about batted-ball quality" versus
+# "could not have known".
+TARGETS = {"woba": ("woba", "denominator"),
+           "xwoba": ("xwoba", "xwoba_denominator")}
+
+
+def score(eval_frame, target="woba"):
     """
     Compute the claim-1 metrics overall and within each exposure stratum.
     eval_frame: output of build_eval_frame. Returns one row per stratum plus "all",
     with the low-exposure row being the headline the thesis is judged on.
+    target: "woba" (primary) or "xwoba" (the second target, D5-R8).
     """
+    assert target in TARGETS, f"unknown target {target!r}"
+    actual_column, weight_column = TARGETS[target]
+    assert actual_column in eval_frame.columns, (
+        f"the eval frame carries no {actual_column!r} column -- rebuild the PA table with "
+        f"eval_targets.py")
+
     rows = []
     for name in list(STRATUM_NAMES) + ["all"]:
         part = eval_frame if name == "all" else eval_frame[eval_frame["stratum"] == name]
+        # a group Statcast never estimated has no second target; it leaves the xwOBA scoring
+        # set rather than being imputed into it
+        part = part[part[actual_column].notna() & (part[weight_column] > 0)]
         if len(part) == 0:
             rows.append({"stratum": name, "n_hitters": 0, "pa": 0.0,
                          "pa_weighted_rmse": float("nan"), "rank_corr": float("nan"),
                          "rank_corr_weighted": float("nan")})
             continue
-        rmse = pa_weighted_rmse(part["woba"], part["pred_woba"], part["denominator"])
-        floor = noise_floor(part)
+        actual, weight = part[actual_column], part[weight_column]
+        rmse = pa_weighted_rmse(actual, part["pred_woba"], weight)
+        # the noise floor is the sampling variance of REALIZED wOBA; it does not describe
+        # xwOBA's own error, so it is not reported against the second target
+        floor = noise_floor(part) if target == "woba" else float("nan")
+        rows.append({
+            "stratum": name,
+            "target": target,
+            "n_hitters": len(part),
+            "pa": float(part["pa"].sum()),
+            "scoring_pa": float(weight.sum()),
+            "pa_weighted_rmse": rmse,
+            "noise_floor": floor,
+            "model_rmse": deconvolve(rmse, floor) if target == "woba" else float("nan"),
+            "rank_corr": rank_correlation(actual, part["pred_woba"]),
+            "rank_corr_weighted": weighted_rank_correlation(actual, part["pred_woba"], weight),
+        })
+    return pd.DataFrame(rows)
+
+
+def achievable_floor(eval_frame):
+    """
+    PA-weighted RMSE between realized wOBA and xwOBA, per stratum (D5-R8, settled Q13).
+
+    An approximate FLOOR on what any expected-value model can score against a luck-contaminated
+    target. The composition's prediction is already an expected value: `V` is a league-average
+    outcome table with no channel for "this one found a hole", so the model structurally cannot
+    represent the part of realized wOBA that is fielder placement and sequencing. Grading it
+    against realized wOBA charges it for variance it cannot express, and this is the size of
+    that charge. If the floor sits close to the model's RMSE, the D.5 null is largely answer-key
+    noise rather than a modeling failure.
+
+    Approximate in BOTH directions, so it is a reference line and is never subtracted from a
+    score: xwOBA uses ACTUAL strikeouts and walks where the model predicts them, which makes
+    this too low, and xwOBA's own (exit velocity, launch angle) map is imperfect, which makes it
+    too high.
+    """
+    assert "xwoba" in eval_frame.columns, (
+        "the eval frame carries no 'xwoba' column -- rebuild the PA table with eval_targets.py")
+    rows = []
+    for name in list(STRATUM_NAMES) + ["all"]:
+        part = eval_frame if name == "all" else eval_frame[eval_frame["stratum"] == name]
+        part = part[part["xwoba"].notna() & (part["xwoba_denominator"] > 0)]
+        if len(part) == 0:
+            rows.append({"stratum": name, "n_hitters": 0,
+                         "achievable_floor": float("nan"), "xwoba_bias": float("nan")})
+            continue
+        weight = part["denominator"].astype(float)
         rows.append({
             "stratum": name,
             "n_hitters": len(part),
-            "pa": float(part["pa"].sum()),
-            "scoring_pa": float(part["denominator"].sum()),
-            "pa_weighted_rmse": rmse,
-            "noise_floor": floor,
-            "model_rmse": deconvolve(rmse, floor),
-            "rank_corr": rank_correlation(part["woba"], part["pred_woba"]),
-            "rank_corr_weighted": weighted_rank_correlation(
-                part["woba"], part["pred_woba"], part["denominator"]),
+            "achievable_floor": pa_weighted_rmse(part["woba"], part["xwoba"], weight),
+            # a nonzero mean gap is the denominator difference plus xwOBA's own calibration,
+            # reported so the floor is not read as a pure noise term
+            "xwoba_bias": float(np.average(part["xwoba"] - part["woba"], weights=weight)),
         })
     return pd.DataFrame(rows)
 

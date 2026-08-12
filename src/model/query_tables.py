@@ -59,6 +59,9 @@ BIP_CLASSES = ("OUT", "1B", "2B", "3B", "HR")
 EXCLUDED_DESCRIPTIONS = ("intent_ball",)
 BALL_DESCRIPTIONS = ("ball", "blocked_ball")
 CONTACT_DESCRIPTION_TO_CLASS = {"foul": 0, "foul_tip": 1, "hit_into_play": 2}
+# the one description that is a ball in play, named so the D5-R15 unmeasured-share branch and
+# the contact split cannot disagree about what "in play" means
+IN_PLAY_DESCRIPTION = "hit_into_play"
 TAKE_DESCRIPTION_TO_CLASS = {"ball": 0, "blocked_ball": 0, "called_strike": 1,
                              "hit_by_pitch": 2}
 
@@ -171,8 +174,59 @@ def fit_take_surfaces(frame, train_mask):
     return surfaces, float(np.median(alphas))
 
 
-def take_probabilities(surfaces, frame, rows):
-    """Look up (n, 3) take-class probabilities for the given row positions."""
+def fit_take_count_offsets(surfaces, frame, train_mask, n_iterations=32):
+    """
+    Per-count multiplicative adjustments to the take surfaces (D5-R1). Returns (4, 3, 3).
+
+    The location surfaces are count-BLIND. They are right on average -- the marginal error is
+    +0.00019 -- and wrong in every count, because umpires call the same location differently at
+    3-0 than at 0-2, and the count chain visits all twelve counts. This is the LIGHT fix: twelve
+    per-count factors on top of the four existing surfaces, rather than 48 separate surfaces.
+
+    Fitted by raking (iterative proportional fitting) against the observed per-count class
+    marginals, with the LOCATION shape held fixed. Nothing about where pitches are taken is
+    re-estimated and the 2,500 spatial cell counts are untouched, so D5-R14's shrink-toward-the-
+    global-marginal anti-prior stays latent rather than being made to bind by thin cells.
+
+    Escalation path, if this fails to close the walk/strikeout gap: 48 separate surfaces, one per
+    (stand, p_throws, balls, strikes). That drops average cell counts to ~32, at which point
+    shrinking toward a global ~32% called-strike marginal actively hurts and the neighbour-
+    smoothing fix becomes mandatory rather than optional.
+    """
+    klass = frame["description"].map(TAKE_DESCRIPTION_TO_CLASS)
+    usable = train_mask & klass.notna().to_numpy()
+    rows = np.flatnonzero(usable)
+    base = take_probabilities(surfaces, frame, rows)              # (n, 3), count-blind
+    observed_class = klass.to_numpy()[rows].astype("int64")
+    balls = frame["balls"].to_numpy()[rows]
+    strikes = frame["strikes"].to_numpy()[rows]
+
+    offsets = np.ones((N_BALLS, N_STRIKES, len(TAKE_CLASSES)), dtype="float64")
+    for b in range(N_BALLS):
+        for s in range(N_STRIKES):
+            cell = (balls == b) & (strikes == s)
+            if not cell.any():
+                continue
+            predicted = base[cell]
+            target = np.bincount(observed_class[cell], minlength=len(TAKE_CLASSES)) / cell.sum()
+            factor = np.ones(len(TAKE_CLASSES))
+            for _ in range(n_iterations):
+                adjusted = predicted * factor
+                adjusted /= adjusted.sum(axis=1, keepdims=True)
+                current = adjusted.mean(axis=0)
+                # a class with no observations in this count stays where the surface put it
+                step = np.where((current > 0) & (target > 0), target / np.maximum(current, 1e-12), 1.0)
+                factor = factor * step
+            offsets[b, s] = factor
+    return offsets
+
+
+def take_probabilities(surfaces, frame, rows, count_offsets=None):
+    """
+    Look up (n, 3) take-class probabilities for the given row positions.
+    count_offsets: optional (4, 3, 3) multiplicative adjustment from
+    `fit_take_count_offsets`; applied then renormalised, so the result is still a distribution.
+    """
     subset = frame.iloc[rows]
     x_index, _ = _grid_index(subset["plate_x"], TAKE_GRID_X)
     z_index, _ = _grid_index(subset["plate_z"], TAKE_GRID_Z)
@@ -183,6 +237,10 @@ def take_probabilities(surfaces, frame, rows):
         cell = (stands == key[0]) & (throws == key[1])
         if cell.any():
             out[cell] = surface[x_index[cell], z_index[cell]]
+    if count_offsets is not None:
+        out = out * np.asarray(count_offsets)[subset["balls"].to_numpy(),
+                                              subset["strikes"].to_numpy()]
+        out /= out.sum(axis=1, keepdims=True)
     return out
 
 
@@ -237,7 +295,51 @@ def fit_outcome_table(frame, bins, train_mask, pa_df, n_bins):
     alpha = fit_alpha(counts)
     totals = counts.sum(axis=1, keepdims=True)
     table = (counts + alpha * marginal) / (totals + alpha)
-    return table.reshape(n_bins, n_bins, n_bins, len(BIP_CLASSES)), int(len(rows))
+
+    unmeasured = _unmeasured_outcomes(frame, train_mask, scored, outcome, len(rows))
+    return (table.reshape(n_bins, n_bins, n_bins, len(BIP_CLASSES)), int(len(rows)),
+            unmeasured)
+
+
+def _unmeasured_outcomes(frame, train_mask, scored, outcome, n_measured):
+    """
+    The in-play share `V` is NOT fit on, and how that share actually hit (D5-R15).
+
+    `V` is fit on balls in play carrying all three quality bins. The excluded share is not
+    missing at random -- it hit materially worse than the retained share -- so a composition that
+    values EVERY ball in play through `V` values the whole population at the retained subset's
+    rate and runs high by that difference at every plate appearance.
+
+    Returned as a CATEGORY distribution rather than a wOBA number so the unmeasured share is
+    converted by the same season weights as `V` (see `woba_points_table`). A wOBA constant here
+    would silently mix train-season weights into an eval-season number.
+
+    Treated as a fixed LEAGUE rate, not a hitter effect: whether Statcast tracked your ball is
+    not a skill worth 1,763 parameters. The caveat, stated rather than solved: weak contact is a
+    skill and weak contact is likelier to go untracked, so a league constant slightly
+    under-penalizes weak-contact hitters.
+
+    Rejected alternative: reweighting the retained sample to match the full population. That
+    distorts every cell's conditional in order to fix an aggregate level -- imputation by another
+    name, which the Phase B missingness rule forbids.
+    """
+    in_play = frame["description"].to_numpy() == IN_PLAY_DESCRIPTION
+    candidates = np.flatnonzero(train_mask & in_play & ~scored)
+    keys = pd.MultiIndex.from_frame(frame.iloc[candidates][JOIN_KEYS])
+    klass = outcome.reindex(keys).map(BIP_CATEGORY_TO_CLASS)
+    klass = klass.to_numpy()[klass.notna().to_numpy()].astype("int64")
+
+    total = n_measured + len(klass)
+    assert total > 0, "no train balls in play joined to a plate-appearance outcome"
+    categories = np.bincount(klass, minlength=len(BIP_CLASSES)).astype("float64")
+    return {
+        "measured_share": n_measured / total,
+        "n_measured": int(n_measured),
+        "n_unmeasured": int(len(klass)),
+        # a degenerate empty group would divide by zero; a share of 0 makes the branch inert
+        "categories": (categories / len(klass)).tolist() if len(klass) else
+                      [0.0] * len(BIP_CLASSES),
+    }
 
 
 def woba_points_table(table, weights):

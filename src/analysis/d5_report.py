@@ -110,13 +110,41 @@ def main():
     print("  rmse_difference NEGATIVE favours Phase D; rank_difference POSITIVE favours it")
     print(comparisons.to_string(index=False, float_format="%.4f"))
 
-    gate = comparisons[comparisons["stratum"] == "all"]
-    rmse_pass = bool(gate[gate["opponent"] == "c3_gbm_full"]["rmse_favours_phase_d"].all())
-    rank_pass = bool(gate["rank_favours_phase_d"].all())
-    print(f"\nRMSE gate vs C.3-full: {'PASS' if rmse_pass else 'not met'}")
-    print(f"ordering gate vs BOTH C.2 and C.3-full: {'PASS' if rank_pass else 'not met'}")
+    # D5-R18(3): both gates read exactly one hard-coded stratum row, and reading exactly one is
+    # the defect -- the ordering claim is specifically about the low-exposure stratum, which the
+    # 2026-07-30 entry states as "in the stratum claimed". Every stratum now gets a verdict, and
+    # the DECISIVE one is pre-registered as `low`. Swapping which single stratum is hard-coded
+    # would have left a report that still cannot say where a claim holds and where it fails.
+    DECISIVE_STRATUM = "low"
+    verdicts = {}
+    for stratum in sorted(comparisons["stratum"].unique()):
+        gate = comparisons[comparisons["stratum"] == stratum]
+        against_c3 = gate[gate["opponent"] == "c3_gbm_full"]["rmse_favours_phase_d"]
+        verdicts[stratum] = {
+            "rmse_gate_vs_c3_full": bool(against_c3.all()) if len(against_c3) else None,
+            "ordering_gate_vs_both": bool(gate["rank_favours_phase_d"].all()),
+            "n_comparisons": int(len(gate)),
+        }
+    assert DECISIVE_STRATUM in verdicts, \
+        f"the decisive stratum {DECISIVE_STRATUM!r} produced no comparison rows"
+
+    print(f"\nper-stratum gate verdicts (decisive stratum: {DECISIVE_STRATUM})")
+    for stratum, verdict in verdicts.items():
+        mark = "  <- decisive" if stratum == DECISIVE_STRATUM else ""
+        print(f"  {stratum:>6s}  RMSE vs C.3-full: "
+              f"{'PASS' if verdict['rmse_gate_vs_c3_full'] else 'not met':>7s}   "
+              f"ordering vs BOTH: "
+              f"{'PASS' if verdict['ordering_gate_vs_both'] else 'not met':>7s}{mark}")
+
+    decisive = verdicts[DECISIVE_STRATUM]
+    rmse_pass, rank_pass = decisive["rmse_gate_vs_c3_full"], decisive["ordering_gate_vs_both"]
+    print(f"\nRMSE gate vs C.3-full ({DECISIVE_STRATUM}): {'PASS' if rmse_pass else 'not met'}")
+    print(f"ordering gate vs BOTH C.2 and C.3-full ({DECISIVE_STRATUM}): "
+          f"{'PASS' if rank_pass else 'not met'}")
     (out_dir / f"d5_claim1_verdict_{args.label}.json").write_text(json.dumps(
-        {"rmse_gate_vs_c3_full": rmse_pass, "ordering_gate_vs_both": rank_pass,
+        {"decisive_stratum": DECISIVE_STRATUM,
+         "rmse_gate_vs_c3_full": rmse_pass, "ordering_gate_vs_both": rank_pass,
+         "by_stratum": verdicts,
          "eval_season": args.eval_season, "label": args.label}, indent=2))
 
 

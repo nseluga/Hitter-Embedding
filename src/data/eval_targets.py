@@ -28,12 +28,21 @@ wrong, the identity fails loud rather than biasing every target silently.
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 DEFAULT_WEIGHTS_PATH = Path(__file__).parents[1] / "config" / "woba_weights.json"
 
 # raw columns needed to identify a PA and its outcome/handedness
-PA_COLUMNS = ["game_pk", "at_bat_number", "batter", "pitcher", "p_throws", "stand", "events", "game_type"]
+PA_COLUMNS = ["game_pk", "at_bat_number", "batter", "pitcher", "p_throws", "stand", "events",
+              "game_type", "estimated_woba_using_speedangle"]
+
+# Statcast's xwOBA contribution for this plate appearance, already on the wOBA scale (D5-R8).
+# Verified on 2023: the field is populated for every category IN the wOBA denominator -- 0.0
+# for strikeouts, ~wBB for walks, ~wHBP for hit-by-pitch, the batted-ball estimate otherwise --
+# and null for exactly the categories outside it (IBB, SH, INT). So xwOBA needs no
+# reconstruction from parts; it is this column summed over the same denominator as wOBA.
+XWOBA_FIELD = "estimated_woba_using_speedangle"
 
 # non-batting terminal rows dropped before mapping: truncated_pa is a PA ended by a
 # baserunning event (e.g. caught stealing to end the inning), game_advisory is an
@@ -116,15 +125,50 @@ def add_woba_points(df, weights):
         points[mask] = season_str[mask].map(lambda s: weights[s][weight_key])
     df["woba_points"] = points
     df["in_denominator"] = ~df["woba_category"].isin(NON_DENOMINATOR_CATEGORIES)
+
+    # xwOBA rides alongside as a SECOND target, never replacing wOBA (D5-R8, Q13). Its own
+    # denominator flag exists because Statcast fails to estimate a small share of batted balls;
+    # those plate appearances leave the xwOBA denominator rather than being imputed, which the
+    # Phase B missingness rule forbids. `xwoba_coverage` reports the cost.
+    #
+    # Absent on hand-built frames, which is why this is conditional rather than required. The
+    # real pipeline cannot skip it silently: `build` asserts the column arrived from the snapshot.
+    if XWOBA_FIELD in df.columns:
+        df["xwoba_points"] = df[XWOBA_FIELD].astype("float64")
+        df["in_xwoba_denominator"] = df["in_denominator"] & df[XWOBA_FIELD].notna()
+        df = df.drop(columns=[XWOBA_FIELD])
     return df
+
+
+def xwoba_coverage(pa_df):
+    """
+    What the xwOBA denominator gives up against the wOBA denominator, per season.
+    Reported wherever an xwOBA-based number is reported (standards §6): a rung scored on a
+    different denominator than its comparators is not comparable to them unless the gap is
+    known to be small.
+    """
+    out = {}
+    for season, sub in pa_df.groupby("season"):
+        denominator = int(sub["in_denominator"].sum())
+        estimated = int(sub["in_xwoba_denominator"].sum())
+        out[str(int(season))] = {
+            "denominator": denominator, "xwoba_denominator": estimated,
+            "dropped": denominator - estimated,
+            "coverage": round(estimated / denominator, 5),
+        }
+    return out
 
 
 def build(snapshot_dir, seasons=None, weights=None):
     """Run the full PA-level pipeline and return the eval-target primitive table."""
     weights = weights or load_weights()
     df = load_pa_terminals(snapshot_dir, seasons)
+    assert XWOBA_FIELD in df.columns, (
+        f"{XWOBA_FIELD} is missing from the snapshot -- the second target and the achievable "
+        f"floor (D5-R8) cannot be built, and a silent skip would leave every xwOBA number null")
     df = categorize(df)
     df = add_woba_points(df, weights)
+    assert "xwoba_points" in df.columns, "the second target did not survive add_woba_points"
     return df
 
 
@@ -188,6 +232,17 @@ def aggregate(pa_df, by=("batter", "season", "p_throws")):
                       denominator=("in_denominator", "sum"),
                       woba_points=("woba_points", "sum")).reset_index()
     out["woba"] = out["woba_points"] / out["denominator"]
+
+    # the second target rides along when the table carries it; tables built before D5-R8 and
+    # synthetic frames in tests do not, and must keep working
+    if "xwoba_points" in pa_df.columns:
+        extra = grouped.agg(xwoba_denominator=("in_xwoba_denominator", "sum"),
+                            xwoba_points=("xwoba_points", "sum")).reset_index()
+        out = out.merge(extra, on=by, how="left")
+        # a group with no estimated batted ball has no xwOBA; left null rather than 0, which
+        # would read as a hitter who produced nothing
+        out["xwoba"] = np.where(out["xwoba_denominator"] > 0,
+                                out["xwoba_points"] / out["xwoba_denominator"], np.nan)
     return out
 
 
@@ -238,9 +293,16 @@ def main():
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    coverage = xwoba_coverage(pa_df)
+    print(f"\n{'season':7s} {'denom':>8s} {'xwoba denom':>12s} {'dropped':>8s} {'coverage':>9s}")
+    for season, row in coverage.items():
+        print(f"{season:7s} {row['denominator']:>8d} {row['xwoba_denominator']:>12d} "
+              f"{row['dropped']:>8d} {row['coverage']:>9.5f}")
+
     out_path = out_dir / "eval_targets_pa.parquet"
     pa_df.to_parquet(out_path, index=False)
-    (out_dir / "eval_targets_report.json").write_text(json.dumps(report, indent=2))
+    (out_dir / "eval_targets_report.json").write_text(
+        json.dumps({"woba": report, "xwoba_coverage": coverage}, indent=2))
     print(f"\nwrote {len(pa_df)} PA rows to {out_path}")
 
 

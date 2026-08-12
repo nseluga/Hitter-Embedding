@@ -211,13 +211,24 @@ session. Rebuilding tensors forces a retrain; rebuilding D.5 tables does not.
   model. **Nate's call** — he flags 107–122 as likely too wide.
 - **Cost to fix:** changing bin count or edges rebuilds the tensors and forces a **full `d9`
   retrain** — one overnight session plus ~3 h re-scoring.
+- **Reframed 2026-08-12 — this is a discrimination defect biasing *down*, not a level
+  contributor.** Every ball in bin 23 is valued at the bin's mass-weighted mean, and that mean
+  is dominated by the 29,331 balls at 107–110 (unconditional wOBA 0.9551, against 1.0313 /
+  1.0763 / 1.1084 in the three slices above it). So a 118 mph ball is *undervalued* and elite
+  power compresses toward the pack. Recomputed on the full bin rather than sweet-spot angles
+  only, the bin is **4.79%** of balls in play and **11.64%** of in-play wOBA points, spanning
+  **15.2 mph** against neighbours at 1.80 and 2.30. That degrades the high stratum, which is
+  where the only statistically significant RMSE loss lives (+0.0041 [0.0023, 0.0059]).
+- **Nate's call, recorded (Q11):** measure three candidate binnings against within-cell wOBA
+  variance and pick on the measurement, rather than choosing a bin scheme by argument. Equal
+  mass cannot narrow the tail — 24 equal-mass gives 15.1 mph and 32 equal-mass still gives 14.3
+  at 2.4× the chain enumeration — so only unequal mass can. Handled with D5-R17 in one rebuild.
 
 ---
 
 ## D5-R8 — the Phase C ladder has no trailing-xwOBA rung
 
-**Status:** open · **Exposed by:** design audit · **Fixable now:** yes
-**Needs Nate's read — this is a baseball judgement, not a code one.**
+**Status:** settled 2026-08-12 (Q13) · **Exposed by:** design audit · **Fixable now:** yes
 
 - **Finding:** C.1 is trailing wOBA. xwOBA stabilises faster and is arguably the strongest
   cheap projection baseline in the sport. It is absent from the ladder.
@@ -234,6 +245,18 @@ session. Rebuilding tensors forces a retrain; rebuilding D.5 tables does not.
   over spray.
 - **Cost to fix:** no Phase D retrain. Add one column to `RETAIN_COLUMNS`, re-run `clean.py`
   and `eval_targets.py`, build the rung, re-score the ladder — **~2 h** plus the cleaning pass.
+- **Nate's call, recorded (Q13) — xwOBA gets three roles, and primary is not one of them.**
+  (i) A **C.1-xwOBA rung** built from Statcast's own field, not from `V` marginalised over
+  spray — a rung built from `V` inherits `V`'s defects and stops being an external incumbent.
+  (ii) A **second scoring target** for every rung and arm, so the error decomposes into "wrong
+  about batted-ball quality" versus "could not have known." (iii) **RMSE(realized wOBA, xwOBA)
+  as an approximate floor** on what any expected-value model can achieve against a
+  luck-contaminated target — the model's prediction is already an expected value, since `V` is a
+  league-average table with no channel for "this one found a hole," so if the floor sits close
+  to the model's RMSE the null is largely answer-key noise. Approximate, because xwOBA uses
+  actual K and BB and its own (EV, LA) map is imperfect. **Realized wOBA stays primary:** xwOBA
+  as primary would change the claim from runs to a latent quality measure, re-score every frozen
+  Phase C number, and make the answer key another model's output rather than ground truth.
 
 ---
 
@@ -299,3 +322,177 @@ These change a conclusion but need no fix. Each is owed a decision-log entry.
   exact factorisations, and they are not equally learnable under finite capacity and teacher
   forcing. Not currently scheduled.
 - **Cost to fix:** none for the finding. Testing an alternative order is a full `d9` retrain.
+
+---
+
+# Review-pass findings — 2026-08-11
+
+A skeptical re-read of the items above against the repository rather than against the prose.
+Every figure in D5-R1 through D5-R13 that could be recomputed was recomputed; all of them
+reproduce, most to five decimals. What follows is what survived a hostile read and what did
+not, plus what the items above do not cover.
+
+The same gate applies: each item records the channel that exposed it, because that decides
+whether it may be acted on now. Items whose only exposure is claim-1 remain cause-only.
+
+## Condensed findings (R14–R30 → 5 items)
+
+R14–R30 were 17 replies to the same first pass, not 17 distinct problems. Condensed here to
+one entry per cluster; the absorbed item numbers are retired.
+
+### D5-R14 — the composition check can't detect what it was built to detect
+
+**Status:** settled (Q1=C) · **Exposed by:** unit error, spec-versus-code drift, design audit · **Fixable now:** yes
+
+- **Finding:** the sole realism check scores the reserved zero row (which is not a hitter and
+  0.0233 away from the trained-hitter mean, a gap large enough that its sign carries no
+  information about a trained row's bias); weights the four (stand, p_throws) cells at a flat
+  25% against true shares 7.6/33.4/19.6/39.3%, a −0.00271 error before the model contributes
+  anything; reports per-pitch outcome masses at the 0-0 count instead of the §8-specified
+  simulated per-PA BB/K/HBP/BIP rates, so the check that would localize a walk/strikeout
+  distortion doesn't exist; has no committed pass condition; and shrinks its 2,500 spatial
+  cells toward the global marginal rather than neighbours, an anti-prior that's latent today
+  but binds if cell counts ever thin (the 48-surface escalation under D5-R1). Separately,
+  spec §6's five per-seed compositions are computed and then discarded, so there is no
+  between-seed spread on record to judge any fix against.
+- **Possible impact:** no D.5 knob has ever been validated by the channel the 2026-08-08 entry
+  says validates it. Resolved as Q1=C, and the resolution is **two** checks, not a rebuild of
+  the one: keep the existing row-0 probe **unscored**, so the five arms already diagnosed
+  against it stay comparable, and add a new **scored** league-fidelity check that runs a
+  PA-weighted population of trained hitters with true per-cell handedness shares and reports
+  spec §8's per-PA absorbing rates (BB/K/HBP/BIP) rather than per-pitch masses at 0-0.
+- **Pass condition, pre-registered before the observed reference rates are computed:** each
+  absorbing rate within 2% relative of observed and HBP within 20% relative (HBP is tiny and
+  already 43% high, so a tight absolute band is meaningless). A fix is *credited* only if it
+  moves a rate by more than the between-seed spread — which is why persisting spec §6's five
+  per-seed compositions is a prerequisite of the check rather than a later measurement.
+- **Cost to fix:** no retrain, ~4 h combined (weights, absorbing-probability check, pass
+  condition, per-seed persistence). Spatial smoothing fix rides with whichever D5-R15 option
+  needs it.
+
+### D5-R15 — the level bias, properly characterized
+
+**Status:** open · **Exposed by:** claim-1, composition fidelity, code audit · **Fixable now:** **no** — cause only
+
+- **Finding:** Phase D runs +0.01771 hot overall, but the excess is not flat — PA-weighted bias
+  by exposure stratum is +0.01179 / +0.01785 / +0.01941 against the Phase C comparator's flat
+  +0.00818 / +0.01158 / +0.00890, a 61–65% monotone rise with no aging/recency correlate
+  (ruled out: weighted corr with mean prior-record season +0.015, with 2015–19 share −0.029).
+  Debiased at the mean, Phase D and C.3-full are statistically tied, not first-and-second —
+  paired bootstrap interval [−0.00067, +0.00156] contains zero in every stratum. Three
+  same-sign contributors were never in the cause list: the outcome table `V` is fit on the
+  96.35% of batted balls with all three quality bins present, which hit 0.00278 better than
+  the excluded 3.65% (+0.0015 at the PA); the simulator's HBP mass runs 43% high (0.00317 vs
+  0.00221 at 0-0); and the six-pitch foul-multiplier cell size carries a known +0.0098 upward
+  bias (already logged 2026-08-09, order 0.001–0.002 wOBA).
+- **Possible impact:** there is no single level to subtract — a gradient, not an offset — so
+  any correction is Phase C prior work (exposure-conditional), not a Phase D patch. The tied
+  debiased result also means the significant RMSE loss lives entirely in the high stratum
+  (+0.0041 [0.0023, 0.0059]); everywhere else Phase D loses nothing at 95%.
+- **Causes to explore:** D5-R1's take-surface count-conditioning remains the leading candidate
+  for the level-independent part. The exposure gradient itself is *not yet* attributed: an
+  exposure-conditional C.2 prior is the candidate the 2026-07-28/07-29 revisit clauses call
+  for, but it is **conditional**, not the answer. It gets built only if the exposure
+  coefficient survives gradient test (a) with a prior-seasons talent proxy included **and**
+  neither test (b) (embedding norm and its projection onto a wOBA-raising direction, trained
+  rows only) nor test (c) (perturb-and-re-solve across ~50 hitters spanning the exposure range)
+  accounts for the gradient. Otherwise the gradient is reported as whatever it turned out to be
+  and the declination is recorded with its reason — both revisit clauses have fired, so silence
+  is not available.
+- **Cost to fix:** diagnosis and reporting above are done, no retrain. The two table fixes are
+  the unmeasured-in-play-category branch and the HBP mapping, plus the foul-multiplier `M`
+  sweep (~2 h, no retrain); an exposure-conditional prior is Phase C work. Never subtract the
+  bias directly — that's the circularity the 2026-08-08 knob entry forbids.
+
+### D5-R16 — the ablation verdicts used the wrong ruler, and two were tested wrong
+
+**Status:** settled (Q3, Q12) · **Exposed by:** frozen-rule violation, statistical error, unit error · **Fixable now:** yes
+
+- **Finding:** every `d9` architecture arm (block, bilinear, dim sweep, nospray, …) was decided
+  on held-out per-pitch log loss, and only `baseline` has ever been carried to a claim-1
+  number — frozen rule #2 requires the claim-1 metric for unclear architectural choices, so
+  none of these verdicts are properly discharged. Two are also mis-tested: the 0.00091 "noise
+  floor" they're read against is `max − min` over five seeds, not a standard error, and
+  redone as SE it flips one verdict stronger (block: t≈9.2) and one fragile (bilinear: t≈1.6,
+  turns on a single seed) and surfaces an unreported dim-sweep null (d=16 vs d=32 vs d=64:
+  +0.00065 / — / +0.00009). The `reference` column is the one place `nospray` is genuinely
+  incomparable: its 0.814994 is a five-factor held-out objective with no six-factor counterpart,
+  so that column carries a note rather than a verdict.
+- **Possible impact:** the B.2 deferral, the bilinear arm, and the embedding-dimension choice
+  (d=32 stands by pre-registration, not measurement) are all unresolved by rule #2's own
+  standard. Blocks the claim as a whole, not just D.5.
+- **Causes to explore:** none — the statistics and the protocol are both settled. `nospray`
+  needs no new protocol: claim-1 is PA-weighted RMSE on wOBA, not a likelihood, so it is
+  unit-comparable across factorizations and `nospray`'s claim-1 number is directly comparable
+  to baseline's. The verdict is a paired bootstrap clustered on batter, 2,000 draws, interval
+  excluding zero; the seed spread is reported as context and is never the test. The
+  **aggregate** stratum is pre-registered as decisive for arm selection, with an arm that wins
+  the low stratum while losing aggregate recorded as an explicit finding rather than discarded.
+- **Cost to fix:** no retrain, **~8–10 h** to score **eight ensembles plus five per-seed
+  baseline runs** — the per-seed runs establish the claim-1 noise floor, and per-seed for all
+  eight arms would be ~40 extra composition runs and does not fit, so the resulting assumption
+  that other arms' seed noise resembles baseline's is stated rather than hidden. Must happen
+  after any tensor rebuild or the runs are discarded by it.
+
+### D5-R17 — output space contaminated by Statcast fill values
+
+**Status:** settled (Q2=C) · **Exposed by:** data audit, verified · **Fixable now:** yes, expensively
+
+- **Finding:** launch angle −21° (34,001 rows) and 69° (22,372 rows) are Statcast placeholders,
+  confirmed: 77.5% and 90.7% respectively have null `hit_distance_sc` and a pinned exit
+  velocity (82.9 / 80.0) against a ≤5.5% baseline null rate, and 99%+ are `ground_ball` /
+  `popup`. These aren't just contaminated labels — they carved the bin edges: the (−21°,
+  82.9) spike is 59.9% of LA bin 2, and (69°, 80.0) is 44.0% of LA bin 23, producing a 3°-wide
+  bin against 5–11° neighbours and a 0.9 mph EV bin against 1.5–3 mph neighbours. `head_la` is
+  teacher-forced onto them.
+- **Possible impact:** two of 24 output bins the model predicts into are majority fake numbers.
+  Resolved as Q2=C: **drop** these rows — both from quantile-edge computation and from
+  `head_la`'s targets. They are a different measurement process, not missing data, so the
+  Phase B imputation rule does not apply and masking would keep them in the edge computation.
+  Decided jointly with D5-R7's EV tail-bin edges, since both move the same edges.
+- **Cost to fix:** changes tensors, forces a full `d9` retrain — one overnight session plus
+  ~3 h re-scoring.
+
+### D5-R18 — reporting and bookkeeping
+
+**Status:** (3) settled (fix specified, not yet applied in code); rest open · **Exposed by:** unit error, spec-versus-code drift, design audit, citation fidelity · **Fixable now:** yes
+
+- **Finding:** five bookkeeping defects. (1) The predicted-spread diagnostic (D5-R6/R9)
+  conflates cold-start hitters (58.1% of the 0–50 PA bin, sd 0.0128 by construction) with
+  trained rows; restricted to trained rows the result reverses — low-exposure trained hitters
+  spread 33% *wider* than regulars (0.0374 vs 0.0281), the opposite of the pooled read.
+  (2) The ordering claim cites low-stratum figures from `phase_d_baseline` while its aggregate
+  figures are from `phase_d_retrained_head` — the shipped arm's actual low-stratum weighted
+  rank is 0.2573, not 0.2643, and the "leads the whole ladder" claim is false in the high
+  stratum (−0.0364 [−0.0957, +0.0207]). (3) `d5_report.main` gates both pass/fail conditions
+  on the `all` stratum row (`d5_report.py:113`) though the ordering claim is specifically about
+  the low stratum — `git grep stratum == "all"` confirms the code is still unfixed. The fix is
+  to report a verdict for **all four strata** and gate on the low one, not to swap which single
+  stratum is hard-coded: reading exactly one stratum is the defect. (4) The
+  low-stratum "null" verdict is better stated as underpowered: noise floor 0.05104 vs talent
+  spread 0.0371, SE on the rank gap ≈0.0687 against an observed 0.0908 (z≈1.3); 80% power
+  needs ≈4.5× the batters (~1,080 low-stratum batters, 4–5 eval seasons). (5) The 2026-08-08
+  fourth-factor entry that triggered a 40-run retrain cites three unreviewed blog posts and no
+  peer-reviewed source, but the decisive argument — a caught foul tip at two strikes is a
+  strikeout — is a rule of baseball and needs no citation; the posts only speak to whether the
+  hitter-specific split is learnable.
+- **Possible impact:** each is a reporting fix, not a modeling one; none changes a shipped
+  number, but (1)–(3) currently misstate what the model does and (4)–(5) misstate how well
+  supported the verdicts are.
+- **Cost to fix:** no retrain for any of the five. (3) is a one-line stratum-filter fix, still
+  unapplied. (1), (2), (4) are restated from existing files. (5) is a new decision-log entry
+  naming the 2026-08-08 one, per the append-only rule.
+
+## Raised and withdrawn — 2026-08-12
+
+Recorded so it is not re-raised as new.
+
+**The take surface grids on absolute `plate_z` and pools batters of different heights.** Not a
+finding: [decision-log.md:432](decision-log.md:432) already decided this on 2026-08-08 on
+stronger grounds. Statcast derives `sz_top` / `sz_bot` from previous major-league umpire calls,
+so normalizing a called-strike model by them regresses umpire behaviour on a rescaling of
+umpire behaviour, and the fields are a per-PA human annotation rather than a measurement.
+Deshpande & Wyner (2017) had the boundaries available and deliberately fit in raw coordinates;
+Freiman (2018) prices what is given up at R² = 0.23 on the low called strike, 0.05 on the high.
+The recorded revisit clause names **batter height from roster data** as the sanctioned path — a
+new data source, and Phase E work, not a D.5 fix.
