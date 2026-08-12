@@ -17,7 +17,11 @@ with a flag flipped, so they need no code here:
 What needs code is the HBP diagnosis, which has to DISCRIMINATE between two candidate causes,
 and the two gradient tests.
 
-Test (b) is not here. It needs the retrained embedding weights, so it belongs to step 6.
+Test (b) IS here now, as `gradient_b`, but it reads the post-rebuild checkpoints -- the D5-R17
+retrain replaces every embedding row, so a pre-rebuild reading would describe weights that no
+longer exist. It runs per seed and never averages embeddings across seeds: two seeds' embedding
+spaces are related by an arbitrary rotation, so a coordinate-wise average of them is not an
+embedding of anything. Only the scalar summaries are pooled.
 """
 
 import argparse
@@ -234,6 +238,147 @@ def gradient_c(baseline, perturbed, eval_frame, n_boot=2000, seed=0):
             "interacts_multiplicatively": bool(low > 0 or high < 0)}
 
 
+def hitter_exposure(data_dir, manifest):
+    """
+    Train pitches per embedding row -- the `n_h` test (b) regresses against.
+
+    Prior PLATE APPEARANCES is the exposure variable everywhere else in this module, because
+    that is what the evaluation frame strata are cut on. Here it has to be train pitches: the
+    §5 decay-ratio argument is about how many batches carry a gradient for a row against how
+    many steps decay it, and that ratio is set by pitches in the train seasons, not by PA in
+    any season.
+
+    Read memmapped straight off the two columns it needs rather than through `load_tensors`,
+    which would pull the 1.08 GB context block into RAM beside a training run.
+    """
+    directory = Path(data_dir)
+    seasons = np.load(directory / "season.npy", mmap_mode="r")
+    hitters = np.load(directory / "hitter.npy", mmap_mode="r")
+    train = np.isin(seasons, manifest["train_seasons"])
+    counts = np.bincount(np.asarray(hitters)[train], minlength=manifest["n_hitters"] + 1)
+    return counts.astype("float64")
+
+
+def woba_direction(embedding, pred_woba, weights):
+    """
+    The direction in embedding space along which the model's own wOBA prediction rises.
+
+    Estimated numerically from the model rather than assumed: a PA-weighted least-squares fit of
+    per-hitter predicted wOBA on the 32 embedding coordinates, whose coefficient vector points
+    the way predicted wOBA increases. Returned as a unit vector plus the fit's R^2, because the
+    map from embedding to wOBA is a trunk and five heads and a Markov solve, none of which is
+    linear -- a low R^2 means the projection below is measuring a weak shadow of the real
+    direction and should be read as such.
+
+    The alternative was a finite difference through the chain at one hitter. Rejected: it is a
+    LOCAL gradient at whichever hitter is chosen, and the question is about a population.
+    """
+    design = np.column_stack([np.ones(len(embedding)), embedding])
+    solution = _ols(design, pred_woba, weights)
+    direction = solution[1:]
+    fitted = design @ solution
+    mean = np.average(pred_woba, weights=weights)
+    residual = np.average((pred_woba - fitted) ** 2, weights=weights)
+    total = np.average((pred_woba - mean) ** 2, weights=weights)
+    return direction / np.linalg.norm(direction), float(1 - residual / total)
+
+
+def gradient_b(embedding, exposure, pred_by_row, pa_by_row, n_boot=2000, seed=0,
+               reserved=0, quantiles=5):
+    """
+    Is the embedding shrunk toward zero for low-exposure hitters, and shrunk where it counts?
+
+    This is the D.7 diagnostic, run early because `phase-d-spec.md` §5 argues the AdamW
+    decay-to-gradient ratio reaches 24:1 at the 10th percentile of exposure, which predicts
+    that low-`n_h` rows should sit closer to the origin. Two readings, because they can
+    disagree: the NORM says how far from the origin a row sits, and the PROJECTION onto the
+    wOBA-raising direction says how much of that distance is in the subspace that moves the
+    prediction. A row can be large and orthogonal, which is capacity spent on nothing.
+
+    ROW 0 IS EXCLUDED, per D5-R18(1). Every hitter outside the training vocabulary routes to
+    it, so it is not a hitter's embedding and its exposure is not a hitter's exposure; leaving
+    it in adds one zero-norm point at zero exposure, which is a free confirming observation for
+    a shrinkage story it cannot speak to.
+
+    Bootstrap resamples HITTERS, not (hitter, hand) rows: there is one embedding row per
+    hitter, so the clustering the rest of this module needs does not apply here.
+    """
+    rows = np.arange(len(embedding))
+    trained = (rows != reserved) & (exposure > 0)
+    embedding, exposure = embedding[trained], exposure[trained]
+    norm = np.linalg.norm(embedding, axis=1)
+
+    # scored rows are a SUBSET of trained rows -- a hitter needs eval-season PA to have a
+    # predicted wOBA at all -- so the direction is fitted on the smaller set and then applied
+    # to every trained row
+    scored = np.isfinite(pred_by_row[trained]) & (pa_by_row[trained] > 0)
+    direction, r_squared = woba_direction(embedding[scored], pred_by_row[trained][scored],
+                                          pa_by_row[trained][scored])
+    projection = embedding @ direction
+
+    # per 1000 train pitches, so the coefficient is readable rather than four leading zeros
+    design = np.column_stack([np.ones(len(exposure)), exposure / 1000.0])
+    ones = np.ones(len(exposure))
+    rng = np.random.default_rng(seed)
+    # the one confound a norm reading has: a row that never moved keeps its initialization norm,
+    # which would look like a large embedding without any training behind it. Reported beside the
+    # means so "these rows are just at init" can be ruled out by the reader rather than asserted
+    # by the caller
+    from src.model.v1 import EMBEDDING_INIT_STD
+    out = {"n_trained_rows": int(trained.sum()), "n_scored_rows": int(scored.sum()),
+           "direction_r_squared": r_squared,
+           "median_train_pitches": float(np.median(exposure)),
+           "init_norm_reference": float(EMBEDDING_INIT_STD * np.sqrt(embedding.shape[1]))}
+    for name, y in (("norm", norm), ("projection", projection)):
+        point = _ols(design, y, ones)
+        draws = np.array([_ols(design[pick], y[pick], ones)[1] for pick in
+                          (rng.integers(0, len(y), len(y)) for _ in range(n_boot))])
+        low, high = np.percentile(draws, (2.5, 97.5))
+        out[name] = {"mean": float(y.mean()),
+                     "slope_per_1000_pitches": float(point[1]),
+                     "ci_low": float(low), "ci_high": float(high),
+                     "excludes_zero": bool(low > 0 or high < 0),
+                     "spearman": float(pd.Series(y).corr(pd.Series(exposure), method="spearman"))}
+    edges = np.quantile(exposure, np.linspace(0, 1, quantiles + 1))
+    bucket = np.clip(np.digitize(exposure, edges[1:-1]), 0, quantiles - 1)
+    out["by_exposure_quintile"] = [
+        {"quintile": int(index + 1), "n": int((bucket == index).sum()),
+         "median_train_pitches": float(np.median(exposure[bucket == index])),
+         "mean_norm": float(norm[bucket == index].mean()),
+         "mean_projection": float(projection[bucket == index].mean())}
+        for index in range(quantiles)]
+    # the sign convention worth stating once: POSITIVE means low-exposure rows sit closer to the
+    # origin, which is the shrinkage §5 predicts. Negative is anti-shrinkage.
+    out["shrinkage_in_norm"] = bool(out["norm"]["excludes_zero"]
+                                    and out["norm"]["slope_per_1000_pitches"] > 0)
+    out["shrinkage_in_woba_direction"] = bool(out["projection"]["excludes_zero"]
+                                              and out["projection"]["slope_per_1000_pitches"] > 0)
+    return out
+
+
+def per_hitter_predictions(predictions, vocabulary, n_rows):
+    """
+    Collapse a predictions CSV to one PA-weighted wOBA per embedding row.
+
+    A hitter appears once per opposing hand, and the two rows are the same embedding seen
+    through different contexts, so they average rather than count twice. Rows with no
+    prediction stay NaN and are dropped downstream rather than filled.
+    """
+    frame = predictions.copy()
+    frame["row"] = frame["batter"].astype(str).map(
+        {key: int(value) for key, value in vocabulary.items()})
+    frame = frame[frame["row"].notna()]
+    weight = frame["pa"] if "pa" in frame else pd.Series(1.0, index=frame.index)
+    frame = frame.assign(weight=weight, weighted=frame["pred_woba"] * weight)
+    grouped = frame.groupby(frame["row"].astype(int))[["weight", "weighted"]].sum()
+
+    pred = np.full(n_rows, np.nan)
+    pa = np.zeros(n_rows)
+    pred[grouped.index] = grouped["weighted"] / grouped["weight"]
+    pa[grouped.index] = grouped["weight"]
+    return pred, pa
+
+
 def _self_check():
     """Smallest checks that fail if the two regressions stop measuring what they claim to."""
     rng = np.random.default_rng(0)
@@ -253,6 +398,32 @@ def _self_check():
     corner = _edge_distance(np.array([0]), np.array([0]), n_x, n_z)
     middle = _edge_distance(np.array([25]), np.array([25]), n_x, n_z)
     assert corner[0] == 0 and middle[0] == 24, (corner, middle)
+
+    # test (b) on a planted shrinkage: rows are scaled by their own exposure, so the norm slope
+    # must be positive, and the direction must come back as the one wOBA was built along
+    n_rows, dim = 300, 8
+    exposure = np.concatenate([[0.0], rng.uniform(200, 20000, n_rows - 1)])
+    truth = np.zeros(dim)
+    truth[2] = 1.0
+    raw = rng.normal(0, 1, (n_rows, dim))
+    embedding = raw * (exposure / exposure.max())[:, None]
+    embedding[0] = 0.0
+    pred = 0.30 + 0.05 * (embedding @ truth)
+    pred[0] = np.nan  # row 0 has no hitter, so it has no prediction
+    result = gradient_b(embedding, exposure, pred, np.where(np.isfinite(pred), 400.0, 0.0),
+                        n_boot=200)
+    assert result["n_trained_rows"] == n_rows - 1, "row 0 or a zero-exposure row got through"
+    assert result["shrinkage_in_norm"], result["norm"]
+    assert result["direction_r_squared"] > 0.99, result["direction_r_squared"]
+    recovered, _ = woba_direction(embedding[1:], pred[1:], np.full(n_rows - 1, 400.0))
+    assert abs(recovered @ truth) > 0.99, recovered
+
+    # anti-shrinkage must read as anti-shrinkage: invert the scaling and the flag has to clear
+    flipped = raw * (exposure.max() / np.maximum(exposure, 1.0))[:, None]
+    flipped[0] = 0.0
+    anti = gradient_b(flipped, exposure, pred, np.where(np.isfinite(pred), 400.0, 0.0),
+                      n_boot=200)
+    assert not anti["shrinkage_in_norm"], anti["norm"]
     print("self-check passed")
 
 
@@ -268,10 +439,17 @@ def main():
     parser.add_argument("--data-dir", default="data/processed/phase_d")
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
+    parser.add_argument("--gradient-b-arm", default=None,
+                        help="checkpoint stem for test (b), e.g. d10_baseline. Reads "
+                             "<arm>_s<seed>.pt beside <out-dir>/d5_predictions_<arm>_s<seed>.csv, "
+                             "which is what the step 5 driver writes")
+    parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
+    parser.add_argument("--checkpoint-dir", default="results/checkpoints")
     parser.add_argument("--skip-hbp", action="store_true",
                         help="the HBP diagnosis reads the aligned pitch frame, which is the "
                              "expensive part of this module")
     parser.add_argument("--out-dir", default="results/phase_d")
+    parser.add_argument("--out-name", default="d5_level_attribution.json")
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args()
 
@@ -334,7 +512,43 @@ def main():
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "d5_level_attribution.json"
+
+    if args.gradient_b_arm:
+        import torch
+
+        manifest = json.loads((Path(args.data_dir) / "manifest.json").read_text())
+        exposure = hitter_exposure(args.data_dir, manifest)
+        report["gradient_b"] = {}
+        print("\n-- gradient test (b): embedding norm and wOBA-projection against train "
+              "exposure, row 0 excluded --")
+        for seed in args.seeds:
+            checkpoint = Path(args.checkpoint_dir) / f"{args.gradient_b_arm}_s{seed}.pt"
+            csv = out_dir / f"d5_predictions_{args.gradient_b_arm}_s{seed}.csv"
+            if not (checkpoint.exists() and csv.exists()):
+                print(f"  seed {seed}: skipped (missing "
+                      f"{checkpoint if not checkpoint.exists() else csv})")
+                continue
+            weight = torch.load(checkpoint, map_location="cpu",
+                                weights_only=False)["model"]["embedding.weight"].numpy()
+            assert not weight[manifest["reserved_hitter_index"]].any(), \
+                "the reserved row is not zero, so it was trained and the exclusion is not enough"
+            pred, pa = per_hitter_predictions(pd.read_csv(csv), manifest["vocabulary"],
+                                             len(weight))
+            result = gradient_b(weight.astype("float64"), exposure, pred, pa,
+                                reserved=manifest["reserved_hitter_index"])
+            report["gradient_b"][f"seed_{seed}"] = result
+            for name in ("norm", "projection"):
+                part = result[name]
+                print(f"  seed {seed} {name:>10}: mean {part['mean']:.4f}  slope "
+                      f"{part['slope_per_1000_pitches']:+.6f} per 1000 pitches "
+                      f"[{part['ci_low']:+.6f}, {part['ci_high']:+.6f}] "
+                      f"rho {part['spearman']:+.3f} "
+                      f"{'EXCLUDES ZERO' if part['excludes_zero'] else 'contains zero'}")
+            print(f"  seed {seed} direction R^2 {result['direction_r_squared']:.4f}  "
+                  f"shrinkage in norm {result['shrinkage_in_norm']}  "
+                  f"in wOBA direction {result['shrinkage_in_woba_direction']}")
+    # named rather than fixed, so a test-(b) run cannot land on top of step 3's attribution file
+    out_path = out_dir / args.out_name
     out_path.write_text(json.dumps(report, indent=2))
     print(f"\nwrote {out_path}")
     return 0
