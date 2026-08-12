@@ -593,13 +593,19 @@ def unmeasured_points(tables, weights):
 def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
             n_pitchers=DEFAULT_N_PITCHERS, n_pitches=DEFAULT_N_PITCHES, seed=0,
             split_head=None, chunk=DEFAULT_CHUNK_PITCHERS, use_league_split=False,
-            unmeasured_split=True):
+            unmeasured_split=True, batters=None):
     """
     One pred_woba per (batter, p_throws) active in eval_season (spec §7), plus the four §8
     per-PA absorbing rates the league-fidelity check aggregates.
     tables: the dict returned by `build_tables`. split_head: an optional callable giving
     the three-class contact split per pitch, replacing the league table once the head is
     trained. Returns (predictions DataFrame, diagnostics dict).
+
+    `batters`: restrict to these batter ids. For the perturb-and-re-solve diagnostics
+    (D5-R15 gradient test (c), and pricing D5-R1's light fix), where the quantity wanted is a
+    DELTA at a handful of hitters and a full pass costs hours. The pitcher pool is untouched,
+    so both sides of a delta are drawn against the same panel -- restricting pitchers instead
+    would leave panel noise inside the difference.
     """
     weights = eval_targets.load_weights()[str(eval_season)]
     points = torch.from_numpy(qt.woba_points_table(tables["outcome"], weights)).float()
@@ -610,6 +616,13 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
 
     rows = (eval_targets.drop_pitcher_batters(pa_df)
             .query("season == @eval_season")[["batter", "p_throws"]].drop_duplicates())
+    if batters is not None:
+        wanted = {int(batter) for batter in batters}
+        rows = rows[rows["batter"].isin(wanted)]
+        # a silently dropped id would shrink a paired delta's population without saying so,
+        # and the pairing is the whole point of the diagnostic
+        assert set(rows["batter"].astype(int)) == wanted, \
+            f"requested batters absent from {eval_season}: {sorted(wanted - set(rows['batter']))}"
     stand_of = _stand_lookup(pa_df, eval_season)
     generator = np.random.default_rng(seed)
     repertoire, pool = tables["repertoire"], tables["pitcher_weights"]
@@ -669,6 +682,7 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
                    "n_pitchers": int(n_pitchers), "n_pitches": int(n_pitches),
                    "rows": int(len(out)), "coverage": tables["coverage"],
                    "unmeasured_split": bool(unmeasured_split),
+                   "batter_subset": None if batters is None else sorted(int(b) for b in batters),
                    "measured_share": share, "unmeasured_points": unmeasured,
                    "contact_split_source": "league_table" if (
                        use_league_split or models[0].head_split is None) else "trained_head"}
@@ -785,6 +799,11 @@ def main():
     parser.add_argument("--league-split", action="store_true",
                         help="force the league contact-split table even when the model "
                              "carries the trained head — the both-ways comparison")
+    parser.add_argument("--batters", type=int, nargs="+", default=None,
+                        help="restrict the composition to these batter ids -- the "
+                             "perturb-and-re-solve diagnostics, where a full pass costs hours "
+                             "for a delta at ~50 hitters. Suppresses the league fidelity check "
+                             "and both probes, which are not defined on a subset")
     parser.add_argument("--label", default=None,
                         help="output stem; defaults to the arm name")
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
@@ -830,10 +849,25 @@ def main():
                                        args.eval_season, n_pitchers=args.n_pitchers,
                                        n_pitches=args.n_pitches, seed=args.seed,
                                        use_league_split=args.league_split,
-                                       unmeasured_split=not args.no_unmeasured_split)
+                                       unmeasured_split=not args.no_unmeasured_split,
+                                       batters=args.batters)
     # the CSV lands before the probe runs, for the same reason
     predictions.to_csv(out_dir / f"d5_predictions_{label}.csv", index=False)
     _progress(f"wrote {out_dir / f'd5_predictions_{label}.csv'}")
+
+    if args.batters is not None:
+        # a fidelity number computed over 50 hitters is not the league's, and a diagnostics file
+        # that carries one under the same key as a full run's is how a subset number gets quoted
+        # as a league number six weeks later
+        (out_dir / f"d5_diagnostics_{label}.json").write_text(
+            json.dumps({**diagnostics, "reference": reference, "arm": args.arm,
+                        "seeds": args.seeds, "eval_season": args.eval_season}, indent=2))
+        _progress(f"batter subset ({len(args.batters)} ids): fidelity and both probes skipped, "
+                  f"they are not defined on a subset")
+        print(f"arm: {args.arm} seeds: {args.seeds}")
+        print(f"rows: {diagnostics['rows']}")
+        print(f"pred_woba mean: {predictions['pred_woba'].mean():.4f}")
+        return
 
     fidelity = league_fidelity(predictions, pa_df, manifest, observed, args.eval_season)
     composition = league_composition(models, tensors, manifest, frame, tables, shares,
