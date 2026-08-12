@@ -41,6 +41,8 @@ throughout: no plate appearances are simulated and no quality chain is sampled.
 
 import argparse
 import json
+import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -85,6 +87,17 @@ ABSORBING_EVENTS = {"bb": ("walk",),
 # something on the other three is pure noise on it. A fix is CREDITED only if it moves a rate
 # by more than the between-seed spread, which is why the per-seed compositions are persisted.
 FIDELITY_TOLERANCE = {"bb": 0.02, "k": 0.02, "hbp": 0.20, "bip": 0.02}
+
+_STARTED = time.monotonic()
+
+
+def _progress(message):
+    """
+    Stderr, unbuffered, with elapsed wall time. `predict` over the full pitcher pool runs
+    hours and every print in this module used to land after the last group finished, so a
+    crash returned a zero-byte log and no way to tell how far it had got.
+    """
+    print(f"[{time.monotonic() - _STARTED:7.1f}s] {message}", file=sys.stderr, flush=True)
 
 
 def load_ensemble(checkpoint_paths, manifest, n_context):
@@ -464,7 +477,8 @@ def _sample_grid(repertoire, slots, stand_slot, n_pitches, generator):
 
 def _group_woba(models, kernels, tensors, frame, tables, points, n_bins, hitter_rows,
                 grid, pitcher_weights, split_head, chunk, w_bb, w_hbp,
-                use_league_split=False, measured_share=1.0, unmeasured_value=0.0):
+                use_league_split=False, measured_share=1.0, unmeasured_value=0.0,
+                progress=None):
     """
     Batters-faced-weighted mean of W(0,0) over the pitchers in `grid`, per hitter.
     Pitchers are processed in chunks so one forward pass covers many of them: the batch is
@@ -507,6 +521,8 @@ def _group_woba(models, kernels, tensors, frame, tables, points, n_bins, hitter_
         for key, rate in absorbing_rates(shaped).items():
             absorbing[key] += rate[:, :, 0, 0] @ weights
         used += float(weights.sum())
+        if progress is not None:
+            progress(stop, n_pitchers)
     return total, used, absorbing
 
 
@@ -625,10 +641,14 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
             assert usable.any(), f"no usable pitchers for {hand}HP against {stand}HB"
 
             weight_vector = panel_weights[usable]
+            label = f"{stand}HB vs {hand}HP"
+            _progress(f"{label}: {group.sum()} hitters x {int(usable.sum())} pitchers")
             total, used, absorbing = _group_woba(
                 models, kernels, tensors, frame, tables, points, n_bins, hitter_rows,
                 grid[usable], weight_vector, split_head, chunk, weights["wBB"],
-                weights["wHBP"], use_league_split, share, unmeasured)
+                weights["wHBP"], use_league_split, share, unmeasured,
+                progress=lambda done, n, label=label: _progress(
+                    f"  {label}: {done}/{n} pitchers"))
             totals[group] = total / used
             for key in ABSORBING_KEYS:
                 rates[key][group] = absorbing[key] / used
@@ -704,6 +724,7 @@ def league_composition(models, tensors, manifest, frame, tables, shares, eval_se
             if not usable.any():
                 continue
             weight_vector = panel_weights[usable]
+            _progress(f"probe {stand}HB vs {hand}HP: {int(usable.sum())} pitchers")
             total, part, absorbing = _group_woba(
                 models, kernels, tensors, frame, tables, points, n_bins, generic,
                 grid[usable], weight_vector, None, chunk, weights["wBB"], weights["wHBP"],
@@ -775,9 +796,15 @@ def main():
 
     claim1_eval.assert_not_test_season(args.eval_season, final_run=args.final_run)
 
+    label = args.label or args.arm
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    _progress("loading tensors and aligning the pitch frame")
     tensors, manifest = loader.load_tensors(args.data_dir)
     frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, tensors["season"])
     pa_df = pd.read_parquet(args.eval_targets)
+    _progress("fitting the four auxiliary tables")
     tables = build_tables(frame, tensors, manifest, pa_df,
                           take_count_offsets=args.take_count_offsets)
 
@@ -787,12 +814,27 @@ def main():
     shares = handedness_shares(pa_df, manifest["train_seasons"])
     observed, n_observed = observed_absorbing_rates(pa_df, manifest["train_seasons"])
     observed_eval, n_observed_eval = observed_absorbing_rates(pa_df, [args.eval_season])
+    reference = {"train_seasons": manifest["train_seasons"], "n_pa": n_observed,
+                 "rates": observed, "eval_season": args.eval_season,
+                 "eval_n_pa": n_observed_eval, "eval_rates": observed_eval,
+                 "handedness_shares": {f"{stand}HB_vs_{hand}HP": float(share)
+                                       for (stand, hand), share in shares.items()},
+                 "tolerance": FIDELITY_TOLERANCE}
+    # written BEFORE `predict`, which runs hours. These are read-only aggregates over the
+    # eval-target table and standards §6 wants them in the repository regardless of whether
+    # the composition that follows survives to the end.
+    (out_dir / "league_reference_rates.json").write_text(json.dumps(reference, indent=2))
+    _progress(f"wrote {out_dir / 'league_reference_rates.json'}")
 
     predictions, diagnostics = predict(models, tensors, manifest, frame, tables, pa_df,
                                        args.eval_season, n_pitchers=args.n_pitchers,
                                        n_pitches=args.n_pitches, seed=args.seed,
                                        use_league_split=args.league_split,
                                        unmeasured_split=not args.no_unmeasured_split)
+    # the CSV lands before the probe runs, for the same reason
+    predictions.to_csv(out_dir / f"d5_predictions_{label}.csv", index=False)
+    _progress(f"wrote {out_dir / f'd5_predictions_{label}.csv'}")
+
     fidelity = league_fidelity(predictions, pa_df, manifest, observed, args.eval_season)
     composition = league_composition(models, tensors, manifest, frame, tables, shares,
                                      args.eval_season, n_pitchers=args.n_pitchers,
@@ -804,6 +846,7 @@ def main():
     # against. One hitter per run, so five extra runs are cheap next to `predict`.
     per_seed = {}
     for seed, path in zip(args.seeds, paths):
+        _progress(f"per-seed composition, seed {seed}")
         single = league_composition(load_ensemble([path], manifest,
                                                  tensors["context"].shape[1]),
                                    tensors, manifest, frame, tables, shares,
@@ -815,17 +858,6 @@ def main():
                     - min(run[key] for run in per_seed.values()))
               for key in next(iter(per_seed.values()))} if per_seed else {}
 
-    label = args.label or args.arm
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    predictions.to_csv(out_dir / f"d5_predictions_{label}.csv", index=False)
-    reference = {"train_seasons": manifest["train_seasons"], "n_pa": n_observed,
-                 "rates": observed, "eval_season": args.eval_season,
-                 "eval_n_pa": n_observed_eval, "eval_rates": observed_eval,
-                 "handedness_shares": {f"{stand}HB_vs_{hand}HP": float(share)
-                                       for (stand, hand), share in shares.items()},
-                 "tolerance": FIDELITY_TOLERANCE}
-    (out_dir / "league_reference_rates.json").write_text(json.dumps(reference, indent=2))
     (out_dir / f"d5_diagnostics_{label}.json").write_text(
         json.dumps({**diagnostics, "composition": composition,
                     "composition_per_seed": per_seed, "composition_spread": spread,
