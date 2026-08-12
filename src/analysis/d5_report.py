@@ -121,6 +121,66 @@ def debiased_diagnostic(frames, name, seed=0):
     return excess, table
 
 
+def power_restatement(comparisons, opponent="c3_gbm_full", power=0.80, alpha=0.05):
+    """
+    D5-R18(4): restate a rank-gap null as what it is -- underpowered -- with the factor.
+
+    "Null" and "underpowered" are different claims about the same interval, and only one of them
+    is what this frame can support. The standard error comes from the bootstrap interval already
+    computed rather than from a formula, so it inherits the batter clustering; the multiplier is
+    the ratio of the z needed for `power` to the z observed, squared, which is the usual
+    sample-size scaling because the SE falls as 1/sqrt(n).
+
+    Reported for every stratum, including the ones that already resolve. A stratum whose interval
+    excludes zero gets a multiplier below 1, which is the honest reading of "already sufficient"
+    and is not evidence for anything on its own.
+    """
+    from scipy.stats import norm
+
+    z_needed = norm.ppf(1 - alpha / 2) + norm.ppf(power)
+    rows = comparisons[comparisons["opponent"] == opponent]
+    out = []
+    for _, row in rows.iterrows():
+        se = (row["ci_high_rank"] - row["ci_low_rank"]) / 2 / norm.ppf(1 - alpha / 2)
+        z = row["rank_difference"] / se if se else float("nan")
+        out.append({"stratum": row["stratum"], "n_batters": int(row["n_batters"]),
+                    "rank_difference": row["rank_difference"], "se_rank": se, "z": z,
+                    "batters_multiplier": (z_needed / z) ** 2 if z else float("nan"),
+                    "batters_needed": int(round(row["n_batters"] * (z_needed / z) ** 2)) if z
+                    else None})
+    return pd.DataFrame(out)
+
+
+def trained_row_spread(frame, vocabulary):
+    """
+    D5-R18(1): the predicted-spread diagnostic with cold-start rows separated out, not pooled.
+
+    A hitter outside the training vocabulary is routed to the reserved row, so every one of them
+    predicts from the SAME embedding and their spread measures context variation alone. Pooling
+    them into the low-exposure stratum drags that stratum's spread toward a constant and produces
+    the shrinkage story the pooled read tells. On trained rows the sign reverses: low-exposure
+    hitters spread WIDER than regulars, which is anti-shrinkage and the sharper finding.
+    """
+    frame = frame.copy()
+    frame["trained"] = frame["batter"].isin(vocabulary)
+    rows = []
+    for stratum in evaluation.STRATUM_NAMES:
+        group = frame[frame["stratum"] == stratum]
+        if not len(group):
+            continue
+        trained, cold = group[group["trained"]], group[~group["trained"]]
+        rows.append({"stratum": stratum, "n": len(group),
+                     "sd_pooled": group["pred_woba"].std(),
+                     "n_cold_start": len(cold),
+                     "cold_start_share": len(cold) / len(group),
+                     "sd_cold_start": cold["pred_woba"].std() if len(cold) > 1 else float("nan"),
+                     "distinct_cold_values": int(cold["pred_woba"].nunique()),
+                     "n_trained": len(trained),
+                     "sd_trained": trained["pred_woba"].std() if len(trained) > 1
+                     else float("nan")})
+    return pd.DataFrame(rows)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Score Phase D.5 against the Phase C ladder.")
     parser.add_argument("--predictions", default=str(DEFAULT_PREDICTIONS))
@@ -129,6 +189,9 @@ def main():
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--out-dir", default=str(OUT_DIR))
+    parser.add_argument("--manifest", default="data/processed/phase_d/manifest.json",
+                        help="the build the scored arm trained on; supplies the hitter "
+                             "vocabulary D5-R18(1) needs to separate cold-start rows")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--final-run", action="store_true",
                         help="the ONLY way the frozen test season is ever scored")
@@ -197,6 +260,26 @@ def main():
               f"ordering vs BOTH: "
               f"{'PASS' if verdict['ordering_gate_vs_both'] else 'not met':>7s}{mark}")
 
+    # D5-R18(4) and (1): both restate existing numbers, so they are computed here rather than
+    # quoted anywhere. (4) turns each stratum's rank null into a power statement; (1) splits the
+    # spread diagnostic on training-vocabulary membership, where its sign reverses.
+    power = power_restatement(comparisons)
+    power.to_csv(out_dir / f"d5_power_restatement_{args.label}.csv", index=False)
+    print("\nD5-R18(4): rank-gap power against c3_gbm_full -- a null with a factor attached")
+    print(power.to_string(index=False, float_format="%.5f"))
+
+    spread = None
+    manifest_path = Path(args.manifest)
+    if manifest_path.exists():
+        vocabulary = {int(key) for key in
+                      json.loads(manifest_path.read_text())["vocabulary"]}
+        spread = trained_row_spread(frames[args.label], vocabulary)
+        spread.to_csv(out_dir / f"d5_trained_spread_{args.label}.csv", index=False)
+        print("\nD5-R18(1): predicted spread, cold-start rows separated rather than pooled")
+        print(spread.to_string(index=False, float_format="%.4f"))
+    else:
+        print(f"\nD5-R18(1) skipped: no manifest at {manifest_path}")
+
     excess, debiased = debiased_diagnostic(frames, args.label, seed=args.seed)
     debiased.to_csv(out_dir / f"d5_claim1_debiased_{args.label}.csv", index=False)
     print(f"\ndebiased diagnostic (mean excess {excess:+.5f} removed) -- NOT a fix, see the "
@@ -217,6 +300,13 @@ def main():
          "debiased_mean_excess_removed": excess,
          "debiased_rmse_difference": debiased.set_index("stratum")[
              ["rmse_difference", "ci_low", "ci_high"]].to_dict("index"),
+         # a null in the verdict file that has a power factor beside it cannot be read as
+         # "measured and absent", which is the misreading D5-R18(4) is about
+         "rank_power": power.set_index("stratum")[
+             ["se_rank", "z", "batters_multiplier", "batters_needed"]].to_dict("index"),
+         "trained_row_spread": (spread.set_index("stratum")[
+             ["sd_pooled", "sd_trained", "cold_start_share"]].to_dict("index")
+             if spread is not None else None),
          "eval_season": args.eval_season, "label": args.label}, indent=2))
 
 

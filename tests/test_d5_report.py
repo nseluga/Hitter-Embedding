@@ -10,6 +10,7 @@ the diagnostic leaves the caller's frame untouched, since `frames` is scored aga
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.analysis import claim1_eval as ce, d5_report
 
@@ -101,3 +102,46 @@ def test_caller_frame_is_not_mutated():
     d5_report.debiased_diagnostic(frames, "d")
 
     pd.testing.assert_series_equal(frames["d"]["pred_woba"], before)
+
+
+def test_power_restatement_recovers_the_shipped_arms_factor():
+    """
+    D5-R18(4) is arithmetic on an interval that already exists, so it is checkable against the
+    shipped arm's own row. The SE must come from the bootstrap interval rather than a formula --
+    a formula would drop the batter clustering and shrink the factor.
+    """
+    comparisons = pd.DataFrame([
+        {"opponent": "c3_gbm_full", "stratum": "low", "n_batters": 239,
+         "rank_difference": 0.09080980514283296,
+         "ci_low_rank": -0.045614429019148604, "ci_high_rank": 0.2236977794028661},
+        {"opponent": "c2_bivariate", "stratum": "low", "n_batters": 239,
+         "rank_difference": 0.1184, "ci_low_rank": -0.0375, "ci_high_rank": 0.2716},
+    ])
+    table = d5_report.power_restatement(comparisons)
+
+    assert list(table["stratum"]) == ["low"], "the other opponent must not be pooled in"
+    row = table.iloc[0]
+    assert row["se_rank"] == pytest.approx(0.0687, abs=5e-5)
+    assert row["z"] == pytest.approx(1.322, abs=5e-4)
+    assert row["batters_multiplier"] == pytest.approx(4.49, abs=0.01)
+    assert row["batters_needed"] == 1074
+
+
+def test_trained_row_spread_reverses_when_cold_start_rows_come_out():
+    """
+    The whole point of D5-R18(1): cold-start rows all share the reserved embedding, so pooling
+    them compresses the low stratum's spread. Here the low stratum's trained rows are wide and
+    its cold rows are nearly constant, and the pooled sd must land BELOW the trained-only sd.
+    """
+    frame = _frame(pred=[0.26, 0.30, 0.40, 0.31, 0.2999, 0.32],
+                   woba=[0.30] * 6, denominator=[100.0] * 6)
+    frame["stratum"] = pd.Categorical(["low"] * 4 + ["high"] * 2,
+                                      categories=list(ce.STRATUM_NAMES))
+    vocabulary = {0, 2, 4, 5}  # batters 1 and 3 are cold start, and sit in the low stratum
+
+    table = d5_report.trained_row_spread(frame, vocabulary).set_index("stratum")
+    low = table.loc["low"]
+    assert low["n_cold_start"] == 2 and low["cold_start_share"] == pytest.approx(0.5)
+    assert low["sd_trained"] > low["sd_pooled"], \
+        "pooling near-constant cold-start rows must pull the spread DOWN"
+    assert table.loc["high", "n_cold_start"] == 0
