@@ -187,6 +187,13 @@ TAIL_BINS = 6
 # of 73.9. Unequal bins concentrate mass, so if a candidate pushes the SMALLEST occupied cell
 # below this the backoff has to be re-fit BEFORE the overnight rather than discovered during it.
 BACKOFF_MIN_CELL = 30
+# `_variance_min_edges` is O(n_bins * m^2) in the number of DISTINCT feature values, which is
+# affordable only because Statcast quantizes what it measures: `ev` has 1,074 distinct values over
+# 2015-2023 and `la` has 181. `spray` has 877,932 -- it is an arctangent of hit coordinates, not a
+# reported quantity, so it is effectively continuous and the DP does not terminate on it. Snapping
+# to a uniform grid of this many levels bounds the work; the exactness of the partition survives at
+# the snapped resolution, which for spray is 0.088 degrees against a phenomenon measured in feet.
+DP_MAX_DISTINCT = 2048
 
 
 def placeholder_mask(pitch_df):
@@ -236,6 +243,21 @@ def _top_decile_edges(values, n_bins, tail_share=TAIL_SHARE, tail_bins=TAIL_BINS
     return np.quantile(values, np.concatenate([body, tail]))
 
 
+def _snap_for_dp(values, cap=DP_MAX_DISTINCT):
+    """
+    `values` with at most `cap` distinct levels, by snapping to a uniform grid when it has more.
+
+    Returned unchanged when it already has at most `cap` levels, so a dimension Statcast reports at
+    a fixed resolution is never perturbed -- only a derived, effectively-continuous one is.
+    """
+    distinct = np.unique(values)
+    if len(distinct) <= cap:
+        return values
+    low, high = float(distinct[0]), float(distinct[-1])
+    step = (high - low) / (cap - 1)
+    return low + np.round((values - low) / step) * step
+
+
 def _variance_min_edges(values, target, n_bins):
     """
     Edges minimizing within-bin variance of `target`, by exact 1-D dynamic program.
@@ -248,8 +270,16 @@ def _variance_min_edges(values, target, n_bins):
 
     Exact, not greedy: the DP runs over DISTINCT feature values with the target's count, sum and
     sum-of-squares accumulated per value, which is what keeps an O(K * m^2) recurrence affordable
-    on a million rows. Statcast reports exit velocity to 0.1 mph, so m is in the low thousands.
+    on a million rows.
+
+    That affordability is a property of the FEATURE, not of the recurrence, so it is enforced
+    rather than assumed. Statcast reports exit velocity to 0.1 mph and launch angle to 1 degree, so
+    both give m in the hundreds or low thousands; `spray` is derived by arctangent and gives 877,932
+    distinct values, at which m^2 does not terminate. Anything above `DP_MAX_DISTINCT` is snapped to
+    a uniform grid of that many levels first -- the partition stays exact at the snapped resolution,
+    and the two dimensions Statcast actually reports pass through untouched.
     """
+    values = _snap_for_dp(values)
     order = np.argsort(values, kind="stable")
     unique, start = np.unique(values[order], return_index=True)
     m = len(unique)
@@ -372,6 +402,12 @@ def joint_cell_variance(pitch_df, train_seasons, edges, target, n_bins=DEFAULT_Q
         "occupied_cells": int(occupied.sum()),
         "min_cell_count": int(count[occupied].min()),
         "median_cell_count": float(np.median(count[occupied])),
+        # `min_cell_count` is 1 under the shipped equal-mass edges too, so it cannot discriminate
+        # between candidates. What the (ev, la) backoff is exposed to is how much in-play MASS
+        # lands in cells too thin to fit, which is comparable across schemes.
+        "cells_below_backoff": int((occupied & (count < BACKOFF_MIN_CELL)).sum()),
+        "mass_share_below_backoff": float(
+            count[occupied & (count < BACKOFF_MIN_CELL)].sum() / count.sum()),
         "top_ev_bin_span": float(values["ev"][usable].max() - edges["ev"][-1]),
         "ev_bin_spans": [round(b - a, 3) for a, b in zip(edges["ev"][:-1], edges["ev"][1:])],
     }
@@ -397,8 +433,18 @@ def encode_labels(pitch_df, edges):
         "contact": np.where(contact.isna(), MASKED,
                             contact.fillna(0).to_numpy(dtype="int64")).astype("int64"),
     }
+    # D5-R17: placeholder rows are dropped from the QUALITY targets as well as from the edge
+    # fit, since a target left in place teaches the heads to predict the placeholder. All three
+    # dimensions go, not `la` alone: the pair is fabricated in both members, so 34,001 rows at
+    # exactly 82.9 mph would put a point mass worth most of an equal-mass bin into head_ev's
+    # target, and the factorization conditions spray on both. The rows stay in the table and
+    # keep their swing, contact, and split labels -- a ball was put in play, it just was not
+    # measured -- so `fit_outcome_table` sees them as unmeasured in-play mass, which the
+    # unmeasured-category branch already prices at a scalar.
+    placeholders = placeholder_mask(pitch_df)
     for dimension in QUALITY_DIMENSIONS:
-        labels[dimension] = assign_bins(pitch_df[dimension], edges[dimension])
+        labels[dimension] = np.where(placeholders, MASKED,
+                                     assign_bins(pitch_df[dimension], edges[dimension]))
 
     # the fourth factor: which of the three things a bat-on-ball event actually was.
     # Defined on every contact event, which is strictly more rows than the quality heads

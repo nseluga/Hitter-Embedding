@@ -1,0 +1,10 @@
+train seasons: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+placeholder rows dropped from the edge fit: 0.036084503036764054
+rows with a realized-wOBA target: 7320750 of 7347953
+equal_mass         within-cell var 0.143116  explained 0.5783  top EV span  15.10 mph  min cell     1  occupied  13726
+top_decile_split   within-cell var 0.145093  explained 0.5725  top EV span  12.80 mph  min cell     1  occupied  13049
+variance_min       within-cell var 0.148714  explained 0.5619  top EV span  11.80 mph  min cell     1  occupied  11344
+
+wrote results/phase_d/d5_bin_design.json
+
+PRE-LAUNCH BLOCKER: min joint cell below 30 for {'equal_mass': 1, 'top_decile_split': 1, 'variance_min': 1} -- fit_outcome_table's (ev, la) backoff must be re-fit before the overnight if one of these wins

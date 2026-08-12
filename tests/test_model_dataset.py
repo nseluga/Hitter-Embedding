@@ -336,6 +336,33 @@ def test_placeholders_are_excluded_from_the_edge_computation():
     assert with_them["la"] != without["la"], "dropping the placeholders left the edges unchanged"
 
 
+def test_placeholders_are_masked_out_of_the_quality_targets():
+    """
+    D5-R17 drops the placeholders from the TARGETS too, and from all three dimensions rather
+    than `la` alone -- the pair fabricates the exit velocity as well, so a surviving `ev`
+    target would teach head_ev a point mass at 82.9 mph. The rest of the row's labels must
+    survive, because a ball WAS put in play; it just was not measured.
+    """
+    df = placeholder_frame()
+    df["swing"] = 1
+    df["contact"] = 1.0
+    df["description"] = "hit_into_play"
+    edges = md.fit_bin_edges(df, [2016], n_bins=4)
+    labels = md.encode_labels(df, edges)
+
+    placeholders = md.placeholder_mask(df)
+    assert placeholders.sum() == 12, "the fixture stopped carrying both pairs"
+    for dimension in md.QUALITY_DIMENSIONS:
+        assert (labels[dimension][placeholders] == md.MASKED).all(), \
+            f"{dimension} kept a placeholder target"
+        assert not (labels[dimension][~placeholders] == md.MASKED).any(), \
+            f"{dimension} masked a genuine batted ball"
+    # the row is still a swing, still contact, still in play -- only the measurement is gone
+    assert (labels["swing"][placeholders] == 1).all()
+    assert (labels["contact"][placeholders] == 1).all()
+    assert (labels["split"][placeholders] != md.MASKED).all()
+
+
 def test_variance_min_recovers_a_clean_step_target_exactly():
     """
     The exact 1-D dynamic program must find the true cut points, not merely good ones. A greedy
@@ -346,6 +373,32 @@ def test_variance_min_recovers_a_clean_step_target_exactly():
     target = np.where(values < 100, 0.0,
                       np.where(values < 200, 1.0, 2.0)) + rng.normal(0, 0.01, len(values))
     assert list(md._variance_min_edges(values, target, 3)) == [100.0, 200.0]
+
+
+def test_variance_min_terminates_on_a_continuous_feature_and_still_finds_the_cut():
+    """
+    The DP is O(n_bins * m^2) in DISTINCT values. `spray` is an arctangent of hit coordinates and
+    carries 877,932 distinct values over the train window, at which the recurrence does not
+    terminate -- so the snap is load-bearing, not tidying. Two things must hold together: the work
+    is bounded, AND bounding it does not cost the answer.
+    """
+    rng = np.random.default_rng(7)
+    values = rng.uniform(-90, 90, 60_000)          # continuous by construction, no repeats
+    assert len(np.unique(values)) > md.DP_MAX_DISTINCT, "the fixture stopped being continuous"
+    target = np.where(values < 0.0, 0.0, 1.0) + rng.normal(0, 0.01, len(values))
+
+    assert len(np.unique(md._snap_for_dp(values))) <= md.DP_MAX_DISTINCT
+    edges = md._variance_min_edges(values, target, 2)
+
+    # the true cut is at 0; the snapped grid's spacing over [-90, 90] is the tolerance it earns
+    assert abs(edges[0]) <= 180.0 / (md.DP_MAX_DISTINCT - 1), edges
+
+
+def test_snap_leaves_a_statcast_reported_dimension_untouched():
+    """Exit velocity arrives at 0.1 mph, well under the cap, so the DP must see it bit-identical."""
+    values = np.round(np.random.default_rng(1).normal(88, 14, 50_000), 1)
+    assert len(np.unique(values)) <= md.DP_MAX_DISTINCT, "the fixture is too wide for the premise"
+    np.testing.assert_array_equal(md._snap_for_dp(values), values)
 
 
 def test_variance_min_beats_equal_mass_on_its_own_objective():

@@ -1,0 +1,9 @@
+pitcher at-bat pitches dropped: 54632
+pitches: 7293321
+hitters in vocabulary: 1762
+context columns: 46
+pitches routed to the reserved row: 177234 (2.4301%)
+ev labelled pitches: 1220745
+la labelled pitches: 1221018
+spray labelled pitches: 1197477
+wrote data/processed/phase_d5

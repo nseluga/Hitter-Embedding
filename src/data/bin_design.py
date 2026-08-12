@@ -91,8 +91,10 @@ def main():
 
     # the guard belongs here rather than inside fit_bin_edges: it is a statement about the REAL
     # table, and the unit tests build synthetic frames that legitimately carry no placeholders
-    placeholders = md.assert_placeholders_present(pitch_df)
-    print(f"placeholder rows dropped from the edge fit: {placeholders}")
+    share = md.assert_placeholders_present(pitch_df)
+    placeholders = int(md.placeholder_mask(pitch_df).sum())
+    print(f"placeholder rows dropped from the edge fit: {placeholders} "
+          f"({share:.4%} of balls in play)")
 
     target = per_row_target(pitch_df, pa_df)
     print(f"rows with a realized-wOBA target: {int(np.isfinite(target).sum())} "
@@ -105,16 +107,23 @@ def main():
     out_path = out_dir / "d5_bin_design.json"
     out_path.write_text(json.dumps({"n_bins": args.n_bins,
                                     "train_seasons": train_seasons,
-                                    "placeholder_rows": int(placeholders),
+                                    "placeholder_rows": placeholders,
+                                    "placeholder_share_of_in_play": share,
                                     "schemes": results}, indent=2))
     print(f"\nwrote {out_path}")
 
-    blocker = {name: r["min_cell_count"] for name, r in results.items()
-               if r["min_cell_count"] < md.BACKOFF_MIN_CELL}
-    if blocker:
-        print(f"\nPRE-LAUNCH BLOCKER: min joint cell below {md.BACKOFF_MIN_CELL} for "
-              f"{blocker} -- fit_outcome_table's (ev, la) backoff must be re-fit before the "
-              f"overnight if one of these wins")
+    # `min_cell_count` cannot carry the blocker: it is 1 under the SHIPPED equal-mass edges too,
+    # so a test against an absolute floor fires on the status quo and discriminates nothing. What
+    # the backoff actually cares about is how much in-play MASS sits in cells too thin to fit, so
+    # the blocker is that share measured RELATIVE to the shipped binning.
+    reference = results["equal_mass"]["mass_share_below_backoff"]
+    print(f"\nbackoff exposure (share of in-play mass in cells below {md.BACKOFF_MIN_CELL})")
+    for name, record in results.items():
+        delta = record["mass_share_below_backoff"] - reference
+        flag = "  <- BLOCKER if this wins" if delta > 0 else ""
+        print(f"  {name:18s} {record['mass_share_below_backoff']:.4%}  "
+              f"cells {record['cells_below_backoff']:>6}  "
+              f"vs shipped equal-mass {delta:+.4%}{flag}")
 
 
 if __name__ == "__main__":

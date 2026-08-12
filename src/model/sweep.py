@@ -51,6 +51,16 @@ LEDGER_FIELDS = ("stage", "config", "seed", "status", "seconds", "best_val_loss"
 # which is why running them before this retrain would have produced an ablation table for
 # an architecture that is not the one shipping.
 NOBLOCK_DATA_DIR = "data/processed/phase_d_split_noblock"
+
+# `d10` is `d9`'s eight arms on the D5-R17 rebuild: the Statcast placeholder rows are gone from
+# the quantile-edge fit AND from all three quality targets, so the 24 bins per dimension are
+# different bins. That makes it a new stage rather than a relaunch of `d9`, for two reasons that
+# both bite. The ledger keys on (stage, config, seed) and every `d9` row is `ok`, so a relaunch
+# would silently skip all forty runs. And `reference` is log loss over the quality bins, so a d9
+# and a d10 `reference` are in different units for exactly the reason the d8 -> d9 note gives.
+# `block` gets its own rebuilt no-block dataset: leaving it on the d9 one would train seven arms
+# on the new edges and one on the old, turning the block contrast into block + edges.
+D10_NOBLOCK_DATA_DIR = "data/processed/phase_d5_noblock"
 STAGES = {
     "screen": [("log", []), ("rps", ["--loss-rule", "rps"])],
     "d6": [("baseline", [])],
@@ -68,8 +78,16 @@ STAGES = {
            ("invfreq", ["--split", "--contact-inverse-frequency"]),
            ("nospray", ["--split", "--no-spray"]),
            ("block", ["--split", "--data-dir", NOBLOCK_DATA_DIR])],
+    "d10": [("baseline", ["--split"]),
+            ("dim16", ["--split", "--embedding-dim", "16"]),
+            ("dim64", ["--split", "--embedding-dim", "64"]),
+            ("bilinear", ["--split", "--bilinear"]),
+            ("meanweight", ["--split", "--loss-weighting", "mean"]),
+            ("invfreq", ["--split", "--contact-inverse-frequency"]),
+            ("nospray", ["--split", "--no-spray"]),
+            ("block", ["--split", "--data-dir", D10_NOBLOCK_DATA_DIR])],
 }
-DEFAULT_SEEDS = {"screen": 2, "d6": 5, "d8": 5, "d9": 5}
+DEFAULT_SEEDS = {"screen": 2, "d6": 5, "d8": 5, "d9": 5, "d10": 5}
 FIRST_RUN_ESTIMATE_SECONDS = 45 * 60  # only used before any run has been timed
 
 
