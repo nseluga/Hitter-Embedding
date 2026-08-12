@@ -29,6 +29,7 @@ import argparse
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from src.analysis import c_report, claim1_eval as evaluation, c3_gbm as c3
@@ -71,6 +72,31 @@ def compare(frames, name=MODEL_NAME, seed=0):
         merged["rank_favours_phase_d"] = merged["ci_low_rank"] > 0
         tables.append(merged)
     return pd.concat(tables, ignore_index=True)
+
+
+def debiased_diagnostic(frames, name, seed=0):
+    """
+    Re-run the paired RMSE comparison with the PA-weighted mean excess removed from `name`.
+
+    Reported because it changes how the null READS: debiased, Phase D and C.3-full are tied
+    rather than second-and-first, so the significant loss lives in the level and in the high
+    stratum, not in the ordering. D5-R15 measured it and no reporting line carried it.
+
+    A DIAGNOSTIC, never a fix. The 2026-08-08 knob entry forbids subtracting a computed bias
+    off the level, and the excess is monotone in exposure (+0.01179 / +0.01785 / +0.01941), so
+    there is no single level to remove. The constant shift below is deliberately the thing the
+    real bias is not, which is why its result is a reading and not a correction.
+
+    Returns (mean_excess, table).
+    """
+    frame = frames[name].copy()
+    weights = frame["denominator"].to_numpy(dtype=float)
+    excess = float(np.average(frame["pred_woba"] - frame["woba"], weights=weights))
+    frame["pred_woba"] = frame["pred_woba"] - excess
+
+    table = evaluation.paired_rmse_difference(frame, frames["c3_gbm_full"], seed=seed)
+    table.insert(0, "opponent", "c3_gbm_full")
+    return excess, table
 
 
 def main():
@@ -136,6 +162,12 @@ def main():
               f"ordering vs BOTH: "
               f"{'PASS' if verdict['ordering_gate_vs_both'] else 'not met':>7s}{mark}")
 
+    excess, debiased = debiased_diagnostic(frames, args.label, seed=args.seed)
+    debiased.to_csv(out_dir / f"d5_claim1_debiased_{args.label}.csv", index=False)
+    print(f"\ndebiased diagnostic (mean excess {excess:+.5f} removed) -- NOT a fix, see the "
+          f"2026-08-08 knob entry")
+    print(debiased.to_string(index=False, float_format="%.5f"))
+
     decisive = verdicts[DECISIVE_STRATUM]
     rmse_pass, rank_pass = decisive["rmse_gate_vs_c3_full"], decisive["ordering_gate_vs_both"]
     print(f"\nRMSE gate vs C.3-full ({DECISIVE_STRATUM}): {'PASS' if rmse_pass else 'not met'}")
@@ -145,6 +177,11 @@ def main():
         {"decisive_stratum": DECISIVE_STRATUM,
          "rmse_gate_vs_c3_full": rmse_pass, "ordering_gate_vs_both": rank_pass,
          "by_stratum": verdicts,
+         # the debiased reading rides in the verdict file so it cannot be quoted without the
+         # excess that produced it
+         "debiased_mean_excess_removed": excess,
+         "debiased_rmse_difference": debiased.set_index("stratum")[
+             ["rmse_difference", "ci_low", "ci_high"]].to_dict("index"),
          "eval_season": args.eval_season, "label": args.label}, indent=2))
 
 
