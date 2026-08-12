@@ -182,6 +182,11 @@ BIN_SCHEMES = ("equal_mass", "top_decile_split", "variance_min")
 # `top_decile_split` puts this share of the mass in the tail and this many bins inside it
 TAIL_SHARE = 0.10
 TAIL_BINS = 6
+# Pre-launch blocker threshold. `query_tables.fit_outcome_table` backs a joint (ev, la, spray)
+# cell off to its (ev, la) marginal, and that backoff was fitted at an average joint cell count
+# of 73.9. Unequal bins concentrate mass, so if a candidate pushes the SMALLEST occupied cell
+# below this the backoff has to be re-fit BEFORE the overnight rather than discovered during it.
+BACKOFF_MIN_CELL = 30
 
 
 def placeholder_mask(pitch_df):
