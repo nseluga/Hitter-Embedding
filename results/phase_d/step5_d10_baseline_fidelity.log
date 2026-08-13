@@ -1,0 +1,51 @@
+[    0.0s] loading tensors and aligning the pitch frame
+[   15.9s] fitting the four auxiliary tables
+[   51.9s] wrote results/phase_d/league_reference_rates.json
+[   55.5s] LHB vs LHP: 210 hitters x 540 pitchers
+[  817.5s]   LHB vs LHP: 64/540 pitchers
+[ 1595.5s]   LHB vs LHP: 128/540 pitchers
+[ 2227.2s]   LHB vs LHP: 192/540 pitchers
+[ 2937.5s]   LHB vs LHP: 256/540 pitchers
+[ 3745.1s]   LHB vs LHP: 320/540 pitchers
+[ 4451.5s]   LHB vs LHP: 384/540 pitchers
+[ 5096.7s]   LHB vs LHP: 448/540 pitchers
+[ 5766.4s]   LHB vs LHP: 512/540 pitchers
+[ 5879.4s]   LHB vs LHP: 540/540 pitchers
+[ 5880.2s] RHB vs LHP: 423 hitters x 544 pitchers
+[ 7543.2s]   RHB vs LHP: 64/544 pitchers
+[ 9202.2s]   RHB vs LHP: 128/544 pitchers
+[10950.9s]   RHB vs LHP: 192/544 pitchers
+[12537.5s]   RHB vs LHP: 256/544 pitchers
+[14180.4s]   RHB vs LHP: 320/544 pitchers
+[15898.7s]   RHB vs LHP: 384/544 pitchers
+[18134.6s]   RHB vs LHP: 448/544 pitchers
+[20296.2s]   RHB vs LHP: 512/544 pitchers
+[21099.6s]   RHB vs LHP: 544/544 pitchers
+[21101.0s] LHB vs RHP: 287 hitters x 1475 pitchers
+[22228.3s]   LHB vs RHP: 64/1475 pitchers
+[23319.1s]   LHB vs RHP: 128/1475 pitchers
+[24496.5s]   LHB vs RHP: 192/1475 pitchers
+[25653.8s]   LHB vs RHP: 256/1475 pitchers
+[26800.2s]   LHB vs RHP: 320/1475 pitchers
+[27959.1s]   LHB vs RHP: 384/1475 pitchers
+[29105.0s]   LHB vs RHP: 448/1475 pitchers
+[30167.7s]   LHB vs RHP: 512/1475 pitchers
+[30973.1s]   LHB vs RHP: 576/1475 pitchers
+[31765.9s]   LHB vs RHP: 640/1475 pitchers
+[32755.7s]   LHB vs RHP: 704/1475 pitchers
+[33782.3s]   LHB vs RHP: 768/1475 pitchers
+[34823.4s]   LHB vs RHP: 832/1475 pitchers
+[35850.2s]   LHB vs RHP: 896/1475 pitchers
+[36774.9s]   LHB vs RHP: 960/1475 pitchers
+[38047.9s]   LHB vs RHP: 1024/1475 pitchers
+[39207.6s]   LHB vs RHP: 1088/1475 pitchers
+[40462.6s]   LHB vs RHP: 1152/1475 pitchers
+[41740.2s]   LHB vs RHP: 1216/1475 pitchers
+[43114.1s]   LHB vs RHP: 1280/1475 pitchers
+[44330.5s]   LHB vs RHP: 1344/1475 pitchers
+[45588.2s]   LHB vs RHP: 1408/1475 pitchers
+[46802.1s]   LHB vs RHP: 1472/1475 pitchers
+[46806.0s]   LHB vs RHP: 1475/1475 pitchers
+[46808.9s] RHB vs RHP: 359 hitters x 1481 pitchers
+[48347.2s]   RHB vs RHP: 64/1481 pitchers
+[50016.8s]   RHB vs RHP: 128/1481 pitchers

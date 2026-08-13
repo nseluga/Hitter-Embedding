@@ -1,0 +1,15 @@
+epoch   0  train 1.05640  val 1.04588  ref 1.04588  lr 1.00e-03  304s (719 steps)
+epoch   1  train 1.01626  val 1.03627  ref 1.03627  lr 1.00e-03  292s (719 steps)
+epoch   2  train 1.00929  val 1.03295  ref 1.03295  lr 1.00e-03  304s (719 steps)
+epoch   3  train 1.00557  val 1.03153  ref 1.03153  lr 1.00e-03  294s (719 steps)
+epoch   4  train 1.00315  val 1.02931  ref 1.02931  lr 1.00e-03  323s (719 steps)
+epoch   5  train 1.00149  val 1.02848  ref 1.02848  lr 1.00e-03  289s (719 steps)
+epoch   6  train 1.00016  val 1.02813  ref 1.02813  lr 1.00e-03  296s (719 steps)
+epoch   7  train 0.99910  val 1.02765  ref 1.02765  lr 1.00e-03  248s (719 steps)
+epoch   8  train 0.99828  val 1.02701  ref 1.02701  lr 1.00e-03  276s (719 steps)
+epoch   9  train 0.99743  val 1.02656  ref 1.02656  lr 1.00e-03  321s (719 steps)
+epoch  10  train 0.99677  val 1.02687  ref 1.02687  lr 1.00e-03  337s (719 steps)
+epoch  11  train 0.99612  val 1.02750  ref 1.02750  lr 3.00e-04  353s (719 steps)
+epoch  12  train 0.99313  val 1.02674  ref 1.02674  lr 3.00e-04  327s (719 steps)
+early stop: 3 epochs without improvement
+best val loss 1.02656 at epoch 9; reference 1.02656; checkpoint results/checkpoints/d10_dim64_s0.pt

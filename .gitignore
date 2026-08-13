@@ -17,3 +17,4 @@ data/processed/phase_d/
 mlruns/
 mlflow.db
 results/checkpoints/
+results/phase_d/STOP

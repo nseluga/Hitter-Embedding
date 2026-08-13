@@ -1,0 +1,14 @@
+      14 runs queued, 3 at a time, 2 threads each
+start d10_baseline_s1
+start d10_baseline_s0
+start d10_baseline_fidelity
+done  d10_baseline_s0
+start d10_baseline_s2
+done  d10_baseline_s1
+start d10_baseline_s3
+done  d10_baseline_s3
+start d10_baseline_s4
+done  d10_baseline_s2
+start d10_baseline
+done  d10_baseline_s4
+start d10_dim16
