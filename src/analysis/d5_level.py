@@ -547,8 +547,16 @@ def main():
             print(f"  seed {seed} direction R^2 {result['direction_r_squared']:.4f}  "
                   f"shrinkage in norm {result['shrinkage_in_norm']}  "
                   f"in wOBA direction {result['shrinkage_in_woba_direction']}")
-    # named rather than fixed, so a test-(b) run cannot land on top of step 3's attribution file
+    # named rather than fixed, so a test-(b) run cannot land on top of step 3's attribution file.
+    # Merged rather than replaced on top of that: the three gradient tests run on different
+    # populations -- (a) on all scored hitter-seasons, (c) on ~50 spanning the exposure range, (b)
+    # per seed -- so they are separate invocations by construction, and a plain write means the
+    # last one silently deletes the others' results. Already happened once: the full (a) run
+    # removed (c) from this file. A test whose result vanishes because a sibling test ran later is
+    # a worse failure than a stale key, so new keys win and absent ones are left alone.
     out_path = out_dir / args.out_name
+    if out_path.exists():
+        report = {**json.loads(out_path.read_text()), **report}
     out_path.write_text(json.dumps(report, indent=2))
     print(f"\nwrote {out_path}")
     return 0

@@ -56,5 +56,30 @@
     },
     "univariate_prior_pa_per_100": 0.00015402571397621213,
     "survives_talent_control": false
+  },
+  "gradient_c": {
+    "n_rows": 92,
+    "mean_delta": 0.0021122855465684786,
+    "slope_per_100_pa": {
+      "estimate": 3.979462152338978e-05,
+      "ci_low": 1.1135552950252222e-05,
+      "ci_high": 7.594956290869149e-05,
+      "excludes_zero": true
+    },
+    "by_stratum": {
+      "low": {
+        "n": 24,
+        "mean_delta": 0.000941148310923509
+      },
+      "medium": {
+        "n": 23,
+        "mean_delta": 0.0018098457566001842
+      },
+      "high": {
+        "n": 45,
+        "mean_delta": 0.0020944988363938185
+      }
+    },
+    "interacts_multiplicatively": true
   }
 }
