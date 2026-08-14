@@ -1,0 +1,5 @@
+=== d5_finish start 2026-08-14 18:39 | JOBS=1 THREADS=4 ===
+=== sweep clear 2026-08-14 19:32 ===
+trained runs in ledger: 40
+      14 runs queued, 1 at a time, 4 threads each
+start d10_baseline_fidelity

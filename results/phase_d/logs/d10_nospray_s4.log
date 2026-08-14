@@ -1,0 +1,17 @@
+epoch   0  train 0.84282  val 0.82865  ref 0.82865  lr 1.00e-03  28s (719 steps)
+epoch   1  train 0.81129  val 0.82272  ref 0.82272  lr 1.00e-03  28s (719 steps)
+epoch   2  train 0.80606  val 0.81965  ref 0.81965  lr 1.00e-03  28s (719 steps)
+epoch   3  train 0.80315  val 0.81734  ref 0.81734  lr 1.00e-03  28s (719 steps)
+epoch   4  train 0.80126  val 0.81811  ref 0.81811  lr 1.00e-03  28s (719 steps)
+epoch   5  train 0.79995  val 0.81598  ref 0.81598  lr 1.00e-03  30s (719 steps)
+epoch   6  train 0.79888  val 0.81550  ref 0.81550  lr 1.00e-03  31s (719 steps)
+epoch   7  train 0.79794  val 0.81654  ref 0.81654  lr 1.00e-03  38s (719 steps)
+epoch   8  train 0.79728  val 0.81499  ref 0.81499  lr 1.00e-03  33s (719 steps)
+epoch   9  train 0.79660  val 0.81530  ref 0.81530  lr 1.00e-03  53s (719 steps)
+epoch  10  train 0.79602  val 0.81559  ref 0.81559  lr 3.00e-04  66s (719 steps)
+epoch  11  train 0.79358  val 0.81377  ref 0.81377  lr 3.00e-04  28s (719 steps)
+epoch  12  train 0.79325  val 0.81425  ref 0.81425  lr 3.00e-04  29s (719 steps)
+epoch  13  train 0.79304  val 0.81384  ref 0.81384  lr 9.00e-05  32s (719 steps)
+epoch  14  train 0.79209  val 0.81388  ref 0.81388  lr 9.00e-05  34s (719 steps)
+early stop: 3 epochs without improvement
+best val loss 0.81377 at epoch 11; reference 0.81377; checkpoint results/checkpoints/d10_nospray_s4.pt

@@ -1,0 +1,16 @@
+[    0.0s] loading tensors and aligning the pitch frame
+[   12.0s] fitting the four auxiliary tables
+[   68.9s] wrote results/phase_d/league_reference_rates.json
+[   73.6s] LHB vs LHP: 210 hitters x 540 pitchers
+[  454.8s]   LHB vs LHP: 64/540 pitchers
+[  808.4s]   LHB vs LHP: 128/540 pitchers
+[ 1117.4s]   LHB vs LHP: 192/540 pitchers
+[ 1478.0s]   LHB vs LHP: 256/540 pitchers
+[ 1816.1s]   LHB vs LHP: 320/540 pitchers
+[ 2214.9s]   LHB vs LHP: 384/540 pitchers
+[ 2665.7s]   LHB vs LHP: 448/540 pitchers
+[ 3034.8s]   LHB vs LHP: 512/540 pitchers
+[ 3095.7s]   LHB vs LHP: 540/540 pitchers
+[ 3096.5s] RHB vs LHP: 423 hitters x 544 pitchers
+[ 4479.1s]   RHB vs LHP: 64/544 pitchers
+[ 5801.9s]   RHB vs LHP: 128/544 pitchers
