@@ -1,9 +1,7 @@
 {
   "stage": "d10",
   "decisive_stratum": "all",
-  "not_scored": [
-    "nospray"
-  ],
+  "not_scored": [],
   "arms": {
     "block": {
       "rmse_decisive": 0.04715094029869868,
@@ -51,6 +49,18 @@
       "ci_high": -8.232983732725298e-05,
       "resolved": true,
       "beats_baseline": true,
+      "wins_low_loses_decisive": false
+    },
+    "nospray": {
+      "rmse_decisive": 0.04782815434282211,
+      "rmse_low": 0.05956132276939859,
+      "rank_decisive": 0.45177866222066626,
+      "rank_low": 0.23578518496187006,
+      "rmse_difference": -0.00010245901861951484,
+      "ci_low": -0.0004735741588811272,
+      "ci_high": 0.0002692863955040847,
+      "resolved": false,
+      "beats_baseline": false,
       "wins_low_loses_decisive": false
     },
     "dim16": {

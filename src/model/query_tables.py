@@ -297,8 +297,13 @@ def fit_outcome_table(frame, bins, train_mask, pa_df, n_bins):
     table = (counts + alpha * marginal) / (totals + alpha)
 
     unmeasured = _unmeasured_outcomes(frame, train_mask, scored, outcome, len(rows))
+    # the raw joint cell counts, returned unshrunk: the `nospray` arm has no spray head, so
+    # its composition marginalises the points table over the TRAINING spray distribution
+    # P(spray | ev, la) rather than over a predicted one. That is a mass, not a conditional
+    # over outcome classes, so it must not be shrunk toward the (ev, la) pool the way `table`
+    # is -- shrinking it would move balls between spray bins that never went there.
     return (table.reshape(n_bins, n_bins, n_bins, len(BIP_CLASSES)), int(len(rows)),
-            unmeasured)
+            unmeasured, totals.reshape(n_bins, n_bins, n_bins))
 
 
 def _unmeasured_outcomes(frame, train_mask, scored, outcome, n_measured):

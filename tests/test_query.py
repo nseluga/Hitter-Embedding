@@ -61,6 +61,65 @@ def test_factored_expectation_matches_the_literal_joint(bilinear):
         f"factored and literal forms disagree by {np.abs(fast - naive).max():.2e}"
 
 
+def random_spray_mass(seed=7):
+    """Raw train cell counts, with one (ev, la) cell deliberately empty."""
+    generator = torch.Generator().manual_seed(seed)
+    mass = torch.randint(0, 400, (N_BINS, N_BINS, N_BINS), generator=generator).double()
+    mass[3, 4] = 0.0
+    return mass
+
+
+def test_the_league_spray_conditional_is_a_distribution_and_backs_off_when_empty():
+    """
+    P(spray | ev, la) must sum to 1 in EVERY cell, including cells no train ball reached.
+    A cell dividing by zero would return nan and poison the whole hitter's wOBA silently.
+    """
+    points, mass = random_points(), random_spray_mass()
+    ratio = query.league_spray_ratio(points, mass)
+
+    assert torch.isfinite(ratio).all()
+    assert ratio.shape == (N_BINS, N_BINS)
+    # the empty cell falls back to the global spray marginal, not to zero or nan
+    marginal = mass.sum(dim=(0, 1))
+    marginal = marginal / marginal.sum()
+    assert float(ratio[3, 4]) == pytest.approx(float((marginal * points[3, 4]).sum()))
+
+
+def test_a_spray_less_arm_still_matches_the_literal_joint():
+    """
+    D5-R16's `nospray` arm predicts no spray conditional, so the points table is collapsed
+    over the TRAINING P(spray | ev, la). The fast path must compute that same quantity --
+    it is the only arm whose ratio is hitter-independent, which is easy to get wrong by
+    broadcasting the wrong axis and impossible to notice from the wOBA it returns.
+    """
+    torch.manual_seed(11)
+    models = [HitterEmbeddingV1(N_HITTERS, N_CONTEXT, n_bins=N_BINS, spray=False).eval()]
+    hitter, context = sample_batch()
+    points, mass = random_points(), random_spray_mass()
+
+    kernels = [query.spray_kernels(model, points, N_BINS, mass) for model in models]
+    fast = query.expected_woba(models, hitter, context, points, N_BINS, kernels)[2]
+    naive = query.expected_woba_naive(models, hitter, context, points, N_BINS, mass)
+    assert np.allclose(fast, naive, atol=1e-5), \
+        f"spray-less factored and literal forms disagree by {np.abs(fast - naive).max():.2e}"
+
+
+def test_the_spray_less_branch_leaves_a_spray_headed_arm_untouched():
+    """
+    Two-sided: the branch must be inert for every other arm, or the seven arms already
+    scored under `bf4c3aa` stop being comparable to the eighth.
+    """
+    models = build_models(n=2)
+    hitter, context = sample_batch()
+    points, mass = random_points(), random_spray_mass()
+
+    without = query.expected_woba(models, hitter, context, points, N_BINS)[2]
+    passed = query.expected_woba(models, hitter, context, points, N_BINS,
+                                 [query.spray_kernels(m, points, N_BINS, mass)
+                                  for m in models])[2]
+    assert np.array_equal(without, passed), "spray_mass perturbed a spray-headed arm"
+
+
 def test_expectation_is_bounded_by_the_points_table():
     """An expectation over a distribution cannot leave the table's range."""
     models = build_models()
@@ -561,9 +620,12 @@ def outcome_fixture():
 
 def test_the_unmeasured_share_and_its_outcomes_are_measured_not_assumed():
     frame, bins, pa_df, train_mask = outcome_fixture()
-    _, n_joined, unmeasured = qt.fit_outcome_table(frame, bins, train_mask, pa_df, n_bins=1)
+    _, n_joined, unmeasured, spray_mass = qt.fit_outcome_table(frame, bins, train_mask,
+                                                               pa_df, n_bins=1)
 
     assert n_joined == 7
+    # the masses stay UNSHRUNK: seven retained balls in the single cell, nothing pooled in
+    assert spray_mass.shape == (1, 1, 1) and spray_mass.sum() == 7
     assert unmeasured["n_unmeasured"] == 3
     assert unmeasured["measured_share"] == pytest.approx(0.7)
     # all three excluded balls made outs, so the distribution is entirely on class OUT

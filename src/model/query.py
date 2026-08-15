@@ -138,12 +138,44 @@ def _trunk(model, hitter, context):
     return trunk
 
 
-def spray_kernels(model, points, n_bins):
+def league_spray_ratio(points, spray_mass):
+    """
+    E[wOBA points | ev, la] under the TRAINING spray distribution, as (K_e, K_l).
+
+    The `nospray` arm predicts no spray conditional, so the (K,K,K) points table has to be
+    collapsed with a distribution from somewhere. The only defensible one is the empirical
+    P(spray | ev, la) on the same train balls `V` itself is fit on -- a uniform prior would
+    be plainly wrong, since spray depends strongly on launch angle. So the arm is scored as
+    "baseline minus the spray head, plus a league spray prior", which is the ablation
+    question the arm was built to ask.
+
+    spray_mass: (K,K,K) raw train cell counts from `fit_outcome_table`. An (ev, la) cell with
+    no observations backs off to the global spray marginal rather than dividing by zero.
+    """
+    mass = spray_mass.to(points.dtype)
+    total = mass.sum(dim=-1, keepdim=True)                             # (K_e, K_l, 1)
+    globally = mass.sum(dim=(0, 1))
+    globally = globally / globally.sum()
+    conditional = torch.where(total > 0, mass / total.clamp(min=1.0), globally)
+    assert torch.allclose(conditional.sum(dim=-1), torch.ones(())), \
+        "P(spray | ev, la) must be a distribution over the spray axis"
+    return (conditional * points).sum(dim=-1)                          # (K_e, K_l)
+
+
+def spray_kernels(model, points, n_bins, spray_mass=None):
     """
     The (576, 24) matrices the factored spray sum contracts against, built once per model.
     points: (K, K, K) wOBA points per quality bin triple. Returns (weighted, plain), each
     (K*K, K), already max-shifted for stability -- constants across s cancel in R's ratio.
+
+    For a model with no spray head returns (None, R) instead, where R is the hitter-
+    INDEPENDENT (K_e, K_l) league ratio. `_conditionals` branches on `weighted is None`.
     """
+    if model.head_spray is None:
+        assert spray_mass is not None, \
+            "an arm with no spray head needs tables['spray_mass'] to marginalise the points"
+        return None, league_spray_ratio(points, spray_mass)
+
     hidden = model.head_spray.weight.shape[1] - 2 * n_bins
     column_ev = model.head_spray.weight[:, hidden:hidden + n_bins].T
     column_la = model.head_spray.weight[:, hidden + n_bins:].T
@@ -161,6 +193,9 @@ def _conditionals(model, trunk, weighted, kernel, n_bins):
     Returns (p_ev (M,K), p_la (M,K,K), R (M,K,K)) where R is the spray-marginalised
     expected wOBA points given (ev bin, la bin). R is linear in the spray conditional,
     so averaging R across seeds is exactly averaging that conditional.
+
+    weighted is None for an arm with no spray head; `kernel` is then the league (K_e, K_l)
+    ratio already, the same for every row, and there is no spray forward pass to run.
     """
     hidden = trunk.shape[1]
     p_ev = torch.softmax(model.head_ev(trunk), dim=1)
@@ -169,6 +204,9 @@ def _conditionals(model, trunk, weighted, kernel, n_bins):
     column_la = model.head_la.weight[:, hidden:].T                     # (K_e, K_l)
     la_logits = base_la.unsqueeze(1) + column_la.unsqueeze(0)          # (M, K_e, K_l)
     p_la = torch.softmax(la_logits, dim=-1)
+
+    if weighted is None:
+        return p_ev, p_la, kernel.expand(p_ev.shape[0], n_bins, n_bins)
 
     base_spray = (trunk @ model.head_spray.weight[:, :hidden].T + model.head_spray.bias)
     scaled = torch.exp(base_spray - base_spray.amax(dim=1, keepdim=True))   # (M, K_s)
@@ -211,11 +249,14 @@ def expected_woba(models, hitter, context, points, n_bins, kernels=None):
             quality.double().numpy(), split)
 
 
-def expected_woba_naive(models, hitter, context, points, n_bins):
+def expected_woba_naive(models, hitter, context, points, n_bins, spray_mass=None):
     """
     The literal spec §5.1 form, materialising the full (M, K, K, K) joint.
     Exists only as the reference `expected_woba` is tested against -- it is the
     algebra the fast path claims to compute, written the obvious way.
+
+    For an arm with no spray head the joint's spray axis is the league conditional
+    P(spray | ev, la), broadcast over rows, rather than a predicted softmax.
     """
     with torch.no_grad():
         total = None
@@ -226,14 +267,19 @@ def expected_woba_naive(models, hitter, context, points, n_bins):
             base_la = trunk @ model.head_la.weight[:, :hidden].T + model.head_la.bias
             p_la = torch.softmax(base_la.unsqueeze(1)
                                  + model.head_la.weight[:, hidden:].T.unsqueeze(0), dim=-1)
-            base_sp = (trunk @ model.head_spray.weight[:, :hidden].T
-                       + model.head_spray.bias)
-            column_ev = model.head_spray.weight[:, hidden:hidden + n_bins].T
-            column_la = model.head_spray.weight[:, hidden + n_bins:].T
-            joint = (base_sp[:, None, None, :] + column_ev[None, :, None, :]
-                     + column_la[None, None, :, :])
-            p_spray = torch.softmax(joint, dim=-1)
-            contribution = (p_ev, p_la, torch.einsum("mels,els->mel", p_spray, points))
+            if model.head_spray is None:
+                ratio = league_spray_ratio(points, spray_mass)
+                p_spray = None
+            else:
+                base_sp = (trunk @ model.head_spray.weight[:, :hidden].T
+                           + model.head_spray.bias)
+                column_ev = model.head_spray.weight[:, hidden:hidden + n_bins].T
+                column_la = model.head_spray.weight[:, hidden + n_bins:].T
+                joint = (base_sp[:, None, None, :] + column_ev[None, :, None, :]
+                         + column_la[None, None, :, :])
+                p_spray = torch.softmax(joint, dim=-1)
+                ratio = torch.einsum("mels,els->mel", p_spray, points)
+            contribution = (p_ev, p_la, ratio.expand(p_ev.shape[0], n_bins, n_bins))
             total = contribution if total is None else tuple(
                 a + b for a, b in zip(total, contribution))
         p_ev, p_la, ratio = (t / len(models) for t in total)
@@ -537,8 +583,8 @@ def build_tables(frame, tensors, manifest, pa_df, take_count_offsets=False):
     bins = {name: tensors[name].numpy() for name in ("ev", "la", "spray")}
 
     surfaces, take_alpha = qt.fit_take_surfaces(frame, train_mask)
-    outcome, n_joined, unmeasured = qt.fit_outcome_table(frame, bins, train_mask, pa_df,
-                                                        manifest["n_quality_bins"])
+    outcome, n_joined, unmeasured, spray_mass = qt.fit_outcome_table(
+        frame, bins, train_mask, pa_df, manifest["n_quality_bins"])
     repertoire = qt.build_repertoire(frame, train_mask)
     scored = int((train_mask & (bins["ev"] != -1) & (bins["la"] != -1)
                   & (bins["spray"] != -1)).sum())
@@ -550,6 +596,8 @@ def build_tables(frame, tensors, manifest, pa_df, take_count_offsets=False):
         "split": qt.fit_contact_split(frame, train_mask),
         "outcome": outcome,
         "unmeasured": unmeasured,
+        # raw train cell counts, unshrunk -- only the `nospray` arm reads them
+        "spray_mass": torch.from_numpy(spray_mass.astype("float64")),
         "repertoire": repertoire,
         "pitcher_weights": qt.pitcher_weights(pa_df, train_seasons, repertoire),
         "coverage": {"take_alpha": take_alpha, "bip_joined": int(n_joined),
@@ -612,7 +660,7 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
     share, unmeasured = _unmeasured_terms(tables, weights, unmeasured_split)
     vocabulary = {int(batter): row for batter, row in manifest["vocabulary"].items()}
     n_bins = manifest["n_quality_bins"]
-    kernels = [spray_kernels(model, points, n_bins) for model in models]
+    kernels = [spray_kernels(model, points, n_bins, tables["spray_mass"]) for model in models]
 
     rows = (eval_targets.drop_pitcher_batters(pa_df)
             .query("season == @eval_season")[["batter", "p_throws"]].drop_duplicates())
@@ -723,7 +771,7 @@ def league_composition(models, tensors, manifest, frame, tables, shares, eval_se
     weights = eval_targets.load_weights()[str(eval_season)]
     points = torch.from_numpy(qt.woba_points_table(tables["outcome"], weights)).float()
     n_bins = manifest["n_quality_bins"]
-    kernels = [spray_kernels(model, points, n_bins) for model in models]
+    kernels = [spray_kernels(model, points, n_bins, tables["spray_mass"]) for model in models]
     share, unmeasured = _unmeasured_terms(tables, weights, unmeasured_split)
     generator = np.random.default_rng(seed)
     repertoire, pool = tables["repertoire"], tables["pitcher_weights"]
