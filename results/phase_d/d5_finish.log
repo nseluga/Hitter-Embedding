@@ -3,3 +3,12 @@
 trained runs in ledger: 40
       14 runs queued, 1 at a time, 4 threads each
 start d10_baseline_fidelity
+done  d10_baseline_fidelity
+skip d10_baseline_s0 (already finished)
+skip d10_baseline_s1 (already finished)
+skip d10_baseline_s2 (already finished)
+skip d10_baseline_s3 (already finished)
+skip d10_baseline_s4 (already finished)
+start d10_baseline
+done  d10_baseline
+start d10_dim16
