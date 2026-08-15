@@ -1,0 +1,122 @@
+{
+  "stage": "d10",
+  "decisive_stratum": "all",
+  "not_scored": [
+    "nospray"
+  ],
+  "arms": {
+    "block": {
+      "rmse_decisive": 0.04715094029869868,
+      "rmse_low": 0.05917324571851967,
+      "rank_decisive": 0.4529374141302658,
+      "rank_low": 0.24023272000005932,
+      "rmse_difference": -0.0007796730627429443,
+      "ci_low": -0.0010661784081479914,
+      "ci_high": -0.0004820226737649692,
+      "resolved": true,
+      "beats_baseline": true,
+      "wins_low_loses_decisive": false
+    },
+    "bilinear": {
+      "rmse_decisive": 0.0473058907103092,
+      "rmse_low": 0.05838864581861325,
+      "rank_decisive": 0.4576245831606558,
+      "rank_low": 0.25588745494529036,
+      "rmse_difference": -0.0006247226511324269,
+      "ci_low": -0.0010484977309697372,
+      "ci_high": -0.00015569728512865208,
+      "resolved": true,
+      "beats_baseline": true,
+      "wins_low_loses_decisive": false
+    },
+    "meanweight": {
+      "rmse_decisive": 0.047489500199877445,
+      "rmse_low": 0.059554305678534904,
+      "rank_decisive": 0.4565312976831276,
+      "rank_low": 0.2255724479785602,
+      "rmse_difference": -0.0004411131615641786,
+      "ci_low": -0.000765658809734027,
+      "ci_high": -0.00010635876491334947,
+      "resolved": true,
+      "beats_baseline": true,
+      "wins_low_loses_decisive": false
+    },
+    "dim64": {
+      "rmse_decisive": 0.04764697358403229,
+      "rmse_low": 0.059280728087438624,
+      "rank_decisive": 0.4633808468989815,
+      "rank_low": 0.2503139128876924,
+      "rmse_difference": -0.00028363977740933355,
+      "ci_low": -0.00048122290568729557,
+      "ci_high": -8.232983732725298e-05,
+      "resolved": true,
+      "beats_baseline": true,
+      "wins_low_loses_decisive": false
+    },
+    "dim16": {
+      "rmse_decisive": 0.04790163885090004,
+      "rmse_low": 0.05925287739265443,
+      "rank_decisive": 0.45148693342196755,
+      "rank_low": 0.252945316926486,
+      "rmse_difference": -2.8974510541582288e-05,
+      "ci_low": -0.00039459596680009124,
+      "ci_high": 0.00034088813683510756,
+      "resolved": false,
+      "beats_baseline": false,
+      "wins_low_loses_decisive": false
+    },
+    "baseline": {
+      "rmse_decisive": 0.047930613361441624,
+      "rmse_low": 0.05923029855668104,
+      "rank_decisive": 0.45910288820904444,
+      "rank_low": 0.2592411358329265,
+      "rmse_difference": NaN,
+      "ci_low": NaN,
+      "ci_high": NaN,
+      "resolved": NaN,
+      "beats_baseline": NaN,
+      "wins_low_loses_decisive": NaN
+    },
+    "invfreq": {
+      "rmse_decisive": 0.06066851287304733,
+      "rmse_low": 0.07105831567557809,
+      "rank_decisive": 0.3939530811941649,
+      "rank_low": 0.23322446125539784,
+      "rmse_difference": 0.012737899511605706,
+      "ci_low": 0.009495780875016143,
+      "ci_high": 0.01578070449173864,
+      "resolved": true,
+      "beats_baseline": false,
+      "wins_low_loses_decisive": false
+    }
+  },
+  "baseline_seed_spread": {
+    "low": {
+      "n_seeds": 5,
+      "mean": 0.059435705047024744,
+      "sd": 0.00043742067954840756,
+      "range": 0.00094298314247028
+    },
+    "medium": {
+      "n_seeds": 5,
+      "mean": 0.049454654931506775,
+      "sd": 0.0007516714835131587,
+      "range": 0.0020003986220732475
+    },
+    "high": {
+      "n_seeds": 5,
+      "mean": 0.043795275371520614,
+      "sd": 0.000980732559782294,
+      "range": 0.002450446055666758
+    },
+    "all": {
+      "n_seeds": 5,
+      "mean": 0.04815189542657086,
+      "sd": 0.0007554392280731859,
+      "range": 0.0018633720162482964
+    }
+  },
+  "seed_noise_assumption": "only baseline has per-seed runs; other arms' intervals assume their seed noise resembles baseline's",
+  "reference_column_incomparable": "sweep_log.csv `reference` is log loss over the quality bins, which the D5-R17 rebuild moved and which nospray factorizes differently; it is not comparable across arms or against d9",
+  "any_arm_beats_baseline": true
+}

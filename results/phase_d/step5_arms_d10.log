@@ -1,0 +1,20 @@
+NOT SCORED (no predictions CSV): nospray
+
+claim-1 by arm, decisive stratum 'all' (pre-registered). NEGATIVE rmse_difference favours the arm.
+       arm  rmse_decisive  rmse_low  rank_decisive  rank_low  rmse_difference   ci_low  ci_high resolved beats_baseline wins_low_loses_decisive
+     block        0.04715   0.05917        0.45294   0.24023         -0.00078 -0.00107 -0.00048     True           True                   False
+  bilinear        0.04731   0.05839        0.45762   0.25589         -0.00062 -0.00105 -0.00016     True           True                   False
+meanweight        0.04749   0.05955        0.45653   0.22557         -0.00044 -0.00077 -0.00011     True           True                   False
+     dim64        0.04765   0.05928        0.46338   0.25031         -0.00028 -0.00048 -0.00008     True           True                   False
+     dim16        0.04790   0.05925        0.45149   0.25295         -0.00003 -0.00039  0.00034    False          False                   False
+  baseline        0.04793   0.05923        0.45910   0.25924              NaN      NaN      NaN      NaN            NaN                     NaN
+   invfreq        0.06067   0.07106        0.39395   0.23322          0.01274  0.00950  0.01578     True          False                   False
+
+baseline seed spread -- CONTEXT, never the test. Every other arm's interval assumes its seed noise resembles this.
+stratum  n_seeds    mean      sd   range
+    low        5 0.05944 0.00044 0.00094
+ medium        5 0.04945 0.00075 0.00200
+   high        5 0.04380 0.00098 0.00245
+    all        5 0.04815 0.00076 0.00186
+
+wrote results/phase_d/d5_arms_verdict_d10.json

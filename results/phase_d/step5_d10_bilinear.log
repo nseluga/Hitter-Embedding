@@ -1,61 +1,134 @@
 [    0.0s] loading tensors and aligning the pitch frame
-[    5.0s] fitting the four auxiliary tables
-[   31.3s] wrote results/phase_d/league_reference_rates.json
-[   33.0s] LHB vs LHP: 210 hitters x 540 pitchers
-[  128.5s]   LHB vs LHP: 64/540 pitchers
-[  232.4s]   LHB vs LHP: 128/540 pitchers
-[  365.3s]   LHB vs LHP: 192/540 pitchers
-[  483.3s]   LHB vs LHP: 256/540 pitchers
-[  589.0s]   LHB vs LHP: 320/540 pitchers
-[  744.4s]   LHB vs LHP: 384/540 pitchers
-[  887.2s]   LHB vs LHP: 448/540 pitchers
-[  995.4s]   LHB vs LHP: 512/540 pitchers
-[ 1033.6s]   LHB vs LHP: 540/540 pitchers
-[ 1033.9s] RHB vs LHP: 423 hitters x 544 pitchers
-[ 1492.6s]   RHB vs LHP: 64/544 pitchers
-[ 2103.5s]   RHB vs LHP: 128/544 pitchers
-[ 2542.8s]   RHB vs LHP: 192/544 pitchers
-[ 3002.1s]   RHB vs LHP: 256/544 pitchers
-[ 3438.1s]   RHB vs LHP: 320/544 pitchers
-[ 3903.1s]   RHB vs LHP: 384/544 pitchers
-[ 4309.7s]   RHB vs LHP: 448/544 pitchers
-[ 4723.9s]   RHB vs LHP: 512/544 pitchers
-[ 4762.6s]   RHB vs LHP: 544/544 pitchers
-[ 4763.2s] LHB vs RHP: 287 hitters x 1475 pitchers
-[ 4937.8s]   LHB vs RHP: 64/1475 pitchers
-[ 5116.9s]   LHB vs RHP: 128/1475 pitchers
-[ 5274.7s]   LHB vs RHP: 192/1475 pitchers
-[ 5442.7s]   LHB vs RHP: 256/1475 pitchers
-[ 5641.0s]   LHB vs RHP: 320/1475 pitchers
-[ 5853.4s]   LHB vs RHP: 384/1475 pitchers
-[ 6072.4s]   LHB vs RHP: 448/1475 pitchers
-[ 6287.2s]   LHB vs RHP: 512/1475 pitchers
-[ 6443.3s]   LHB vs RHP: 576/1475 pitchers
-[ 6638.2s]   LHB vs RHP: 640/1475 pitchers
-[ 6825.4s]   LHB vs RHP: 704/1475 pitchers
-[ 7035.5s]   LHB vs RHP: 768/1475 pitchers
-[ 7235.2s]   LHB vs RHP: 832/1475 pitchers
-[ 7459.0s]   LHB vs RHP: 896/1475 pitchers
-[ 7619.7s]   LHB vs RHP: 960/1475 pitchers
-[ 7782.0s]   LHB vs RHP: 1024/1475 pitchers
-[ 7960.5s]   LHB vs RHP: 1088/1475 pitchers
-[ 8118.6s]   LHB vs RHP: 1152/1475 pitchers
-[ 8278.8s]   LHB vs RHP: 1216/1475 pitchers
-[ 8440.3s]   LHB vs RHP: 1280/1475 pitchers
-[ 8575.5s]   LHB vs RHP: 1344/1475 pitchers
-[ 8763.0s]   LHB vs RHP: 1408/1475 pitchers
-[ 8910.0s]   LHB vs RHP: 1472/1475 pitchers
-[ 8912.8s]   LHB vs RHP: 1475/1475 pitchers
-[ 8913.3s] RHB vs RHP: 359 hitters x 1481 pitchers
-[ 9169.7s]   RHB vs RHP: 64/1481 pitchers
-[ 9463.7s]   RHB vs RHP: 128/1481 pitchers
-[ 9816.3s]   RHB vs RHP: 192/1481 pitchers
-[10099.2s]   RHB vs RHP: 256/1481 pitchers
-[10401.3s]   RHB vs RHP: 320/1481 pitchers
-[10833.9s]   RHB vs RHP: 384/1481 pitchers
-[11677.1s]   RHB vs RHP: 448/1481 pitchers
-[12608.1s]   RHB vs RHP: 512/1481 pitchers
-[13480.1s]   RHB vs RHP: 576/1481 pitchers
-[14529.9s]   RHB vs RHP: 640/1481 pitchers
-[15768.0s]   RHB vs RHP: 704/1481 pitchers
-[16891.7s]   RHB vs RHP: 768/1481 pitchers
+[    3.7s] fitting the four auxiliary tables
+[   18.1s] wrote results/phase_d/league_reference_rates.json
+[   18.8s] LHB vs LHP: 210 hitters x 540 pitchers
+[   44.9s]   LHB vs LHP: 64/540 pitchers
+[   69.5s]   LHB vs LHP: 128/540 pitchers
+[   93.1s]   LHB vs LHP: 192/540 pitchers
+[  116.7s]   LHB vs LHP: 256/540 pitchers
+[  137.4s]   LHB vs LHP: 320/540 pitchers
+[  159.8s]   LHB vs LHP: 384/540 pitchers
+[  181.3s]   LHB vs LHP: 448/540 pitchers
+[  206.0s]   LHB vs LHP: 512/540 pitchers
+[  213.4s]   LHB vs LHP: 540/540 pitchers
+[  213.5s] RHB vs LHP: 423 hitters x 544 pitchers
+[  336.4s]   RHB vs LHP: 64/544 pitchers
+[  448.1s]   RHB vs LHP: 128/544 pitchers
+[  571.5s]   RHB vs LHP: 192/544 pitchers
+[  694.1s]   RHB vs LHP: 256/544 pitchers
+[  809.5s]   RHB vs LHP: 320/544 pitchers
+[  915.5s]   RHB vs LHP: 384/544 pitchers
+[ 1024.2s]   RHB vs LHP: 448/544 pitchers
+[ 1121.7s]   RHB vs LHP: 512/544 pitchers
+[ 1135.1s]   RHB vs LHP: 544/544 pitchers
+[ 1135.5s] LHB vs RHP: 287 hitters x 1475 pitchers
+[ 1170.8s]   LHB vs RHP: 64/1475 pitchers
+[ 1214.9s]   LHB vs RHP: 128/1475 pitchers
+[ 1251.2s]   LHB vs RHP: 192/1475 pitchers
+[ 1293.1s]   LHB vs RHP: 256/1475 pitchers
+[ 1327.0s]   LHB vs RHP: 320/1475 pitchers
+[ 1369.0s]   LHB vs RHP: 384/1475 pitchers
+[ 1401.8s]   LHB vs RHP: 448/1475 pitchers
+[ 1426.2s]   LHB vs RHP: 512/1475 pitchers
+[ 1456.9s]   LHB vs RHP: 576/1475 pitchers
+[ 1489.3s]   LHB vs RHP: 640/1475 pitchers
+[ 1521.0s]   LHB vs RHP: 704/1475 pitchers
+[ 1555.2s]   LHB vs RHP: 768/1475 pitchers
+[ 1584.7s]   LHB vs RHP: 832/1475 pitchers
+[ 1613.9s]   LHB vs RHP: 896/1475 pitchers
+[ 1641.5s]   LHB vs RHP: 960/1475 pitchers
+[ 1684.0s]   LHB vs RHP: 1024/1475 pitchers
+[ 1723.4s]   LHB vs RHP: 1088/1475 pitchers
+[ 1756.0s]   LHB vs RHP: 1152/1475 pitchers
+[ 1787.4s]   LHB vs RHP: 1216/1475 pitchers
+[ 1816.5s]   LHB vs RHP: 1280/1475 pitchers
+[ 1845.2s]   LHB vs RHP: 1344/1475 pitchers
+[ 1877.4s]   LHB vs RHP: 1408/1475 pitchers
+[ 1904.2s]   LHB vs RHP: 1472/1475 pitchers
+[ 1905.2s]   LHB vs RHP: 1475/1475 pitchers
+[ 1905.6s] RHB vs RHP: 359 hitters x 1481 pitchers
+[ 1952.1s]   RHB vs RHP: 64/1481 pitchers
+[ 1994.2s]   RHB vs RHP: 128/1481 pitchers
+[ 2036.7s]   RHB vs RHP: 192/1481 pitchers
+[ 2081.1s]   RHB vs RHP: 256/1481 pitchers
+[ 2129.9s]   RHB vs RHP: 320/1481 pitchers
+[ 2180.2s]   RHB vs RHP: 384/1481 pitchers
+[ 2226.7s]   RHB vs RHP: 448/1481 pitchers
+[ 2272.2s]   RHB vs RHP: 512/1481 pitchers
+[ 2314.1s]   RHB vs RHP: 576/1481 pitchers
+[ 2371.1s]   RHB vs RHP: 640/1481 pitchers
+[ 2413.9s]   RHB vs RHP: 704/1481 pitchers
+[ 2456.4s]   RHB vs RHP: 768/1481 pitchers
+[ 2497.2s]   RHB vs RHP: 832/1481 pitchers
+[ 2537.2s]   RHB vs RHP: 896/1481 pitchers
+[ 2578.0s]   RHB vs RHP: 960/1481 pitchers
+[ 2631.3s]   RHB vs RHP: 1024/1481 pitchers
+[ 2736.2s]   RHB vs RHP: 1088/1481 pitchers
+[ 2775.2s]   RHB vs RHP: 1152/1481 pitchers
+[ 2807.5s]   RHB vs RHP: 1216/1481 pitchers
+[ 2836.7s]   RHB vs RHP: 1280/1481 pitchers
+[ 2875.6s]   RHB vs RHP: 1344/1481 pitchers
+[ 2908.4s]   RHB vs RHP: 1408/1481 pitchers
+[ 2937.3s]   RHB vs RHP: 1472/1481 pitchers
+[ 2941.4s]   RHB vs RHP: 1481/1481 pitchers
+[ 2941.6s] wrote results/phase_d/d5_predictions_d10_bilinear.csv
+[ 2942.2s] probe LHB vs LHP: 540 pitchers
+[ 2944.9s] probe RHB vs LHP: 544 pitchers
+[ 2946.2s] probe LHB vs RHP: 1475 pitchers
+[ 2949.1s] probe RHB vs RHP: 1481 pitchers
+[ 2951.4s] per-seed composition, seed 0
+[ 2951.5s] probe LHB vs LHP: 540 pitchers
+[ 2951.9s] probe RHB vs LHP: 544 pitchers
+[ 2952.4s] probe LHB vs RHP: 1475 pitchers
+[ 2953.5s] probe RHB vs RHP: 1481 pitchers
+[ 2954.3s] per-seed composition, seed 1
+[ 2954.4s] probe LHB vs LHP: 540 pitchers
+[ 2954.8s] probe RHB vs LHP: 544 pitchers
+[ 2955.3s] probe LHB vs RHP: 1475 pitchers
+[ 2956.3s] probe RHB vs RHP: 1481 pitchers
+[ 2957.1s] per-seed composition, seed 2
+[ 2957.2s] probe LHB vs LHP: 540 pitchers
+[ 2957.6s] probe RHB vs LHP: 544 pitchers
+[ 2958.1s] probe LHB vs RHP: 1475 pitchers
+[ 2959.1s] probe RHB vs RHP: 1481 pitchers
+[ 2960.0s] per-seed composition, seed 3
+[ 2960.0s] probe LHB vs LHP: 540 pitchers
+[ 2960.4s] probe RHB vs LHP: 544 pitchers
+[ 2960.9s] probe LHB vs RHP: 1475 pitchers
+[ 2961.9s] probe RHB vs RHP: 1481 pitchers
+[ 2962.8s] per-seed composition, seed 4
+[ 2962.9s] probe LHB vs LHP: 540 pitchers
+[ 2963.2s] probe RHB vs LHP: 544 pitchers
+[ 2963.7s] probe LHB vs RHP: 1475 pitchers
+[ 2964.7s] probe RHB vs RHP: 1481 pitchers
+arm: d10_bilinear seeds: [0, 1, 2, 3, 4]
+rows: 1279
+pred_woba mean: 0.3075
+pred_woba sd: 0.0330
+backoff levels (exact, strikes, stand, empty): [40384, 6252, 1844, 14]
+pitcher cells dropped: 14
+
+-- unscored zero-row probe (§5.4) --
+league_pred_woba: 0.2952  (seed spread 0.0145)
+league_pred_woba_uniform: 0.2920  (seed spread 0.0136)
+rate_bb: 0.0807  (seed spread 0.0020)
+rate_k: 0.2655  (seed spread 0.0232)
+rate_hbp: 0.0110  (seed spread 0.0001)
+rate_bip: 0.6428  (seed spread 0.0249)
+mass_ball_00: 0.3820  (seed spread 0.0048)
+mass_strike_00: 0.3834  (seed spread 0.0118)
+mass_hbp_00: 0.0025  (seed spread 0.0000)
+mass_foul_00: 0.1207  (seed spread 0.0058)
+mass_bip_00: 0.1114  (seed spread 0.0040)
+mass_bip_points_00: 0.0418  (seed spread 0.0021)
+
+-- SCORED league fidelity (§8), trained hitters, PA-weighted --
+1074 hitters, 169589 plate appearances
+  bb: 0.08572 vs 0.08042 observed  (+6.6% of 2% allowed)  FAIL
+   k: 0.22280 vs 0.22338 observed  (-0.3% of 2% allowed)  PASS
+ hbp: 0.01090 vs 0.01049 observed  (+3.9% of 20% allowed)  PASS
+ bip: 0.68057 vs 0.68571 observed  (-0.7% of 2% allowed)  PASS
+fidelity: FAIL
+bip joined to a PA outcome: 948226 of 948226 (100.0%)
+contact split from: trained_head
+wrote results/phase_d/d5_predictions_d10_bilinear.csv

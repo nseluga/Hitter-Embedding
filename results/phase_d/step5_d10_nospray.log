@@ -1,0 +1,26 @@
+[    0.0s] loading tensors and aligning the pitch frame
+[    2.7s] fitting the four auxiliary tables
+[   14.9s] wrote results/phase_d/league_reference_rates.json
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/nateseluga/hitter-embedding/src/model/query.py", line 929, in <module>
+    main()
+    ~~~~^^
+  File "/Users/nateseluga/hitter-embedding/src/model/query.py", line 848, in main
+    predictions, diagnostics = predict(models, tensors, manifest, frame, tables, pa_df,
+                               ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       args.eval_season, n_pitchers=args.n_pitchers,
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+                                       unmeasured_split=not args.no_unmeasured_split,
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       batters=args.batters)
+                                       ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/nateseluga/hitter-embedding/src/model/query.py", line 615, in predict
+    kernels = [spray_kernels(model, points, n_bins) for model in models]
+               ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/nateseluga/hitter-embedding/src/model/query.py", line 147, in spray_kernels
+    hidden = model.head_spray.weight.shape[1] - 2 * n_bins
+             ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'weight'
