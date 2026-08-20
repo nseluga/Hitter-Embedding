@@ -113,6 +113,7 @@ def main():
 
     claim1_eval.assert_not_test_season(args.eval_season, final_run=args.final_run)
     out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     directory = Path(args.data_dir)
     manifest = json.loads((directory / "manifest.json").read_text())
     season = np.load(directory / "season.npy", mmap_mode="r")

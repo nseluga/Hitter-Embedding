@@ -1,0 +1,79 @@
+{
+  "provenance": {
+    "data_dir": "data/processed/phase_d5",
+    "manifest_sha256": "cc01c16ef6a9835d46352c8ccbe51b82272128f844886f8d1fbaa2c54601f952",
+    "train_seasons": [
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023
+    ],
+    "quality_bin_edges_present": [
+      "ev",
+      "la",
+      "spray"
+    ],
+    "arm": "d10_baseline",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "eval_season": 2024,
+    "git_revision": "5ccaa90cbd34174aaf25c71a592c9c1d06a12386"
+  },
+  "pooled_hand_label": "B",
+  "pooling_weight": "prior side-specific denominator PA, normalized within batter",
+  "rungs_pooled": [
+    "c1_bucketed",
+    "c1_raw",
+    "no_info_league_average",
+    "phase_d"
+  ],
+  "rungs_omitted": [
+    "c2_bivariate",
+    "c2_book_rho_reference",
+    "c3_gbm_outcome",
+    "c3_gbm_full"
+  ],
+  "omission_reason": "C.2 needs its fitted prior parameters and C.3 needs a GBM refit; both gate opponents are therefore absent and this table is not a gate",
+  "stratum_caveat": "STRATUM_BOUNDARIES was calibrated on side-specific prior PA; pooled exposure is roughly double, so these strata are not comparable to the side-specific strata elsewhere",
+  "coverage": {
+    "eval_season": 2024,
+    "actual_groups": 649,
+    "dropped_below_min_eval_pa": 32,
+    "min_eval_pa": 10,
+    "dropped_no_prediction": 0,
+    "scored_groups": 617,
+    "by_stratum": {
+      "low": {
+        "scored": 161,
+        "dropped": 19,
+        "share_dropped": 0.10555555555555556,
+        "mean_woba_scored": 0.26481036988582085,
+        "mean_woba_dropped": 0.15133268588137008
+      },
+      "medium": {
+        "scored": 108,
+        "dropped": 8,
+        "share_dropped": 0.06896551724137931,
+        "mean_woba_scored": 0.28144098822172253,
+        "mean_woba_dropped": 0.296359375
+      },
+      "high": {
+        "scored": 348,
+        "dropped": 5,
+        "share_dropped": 0.014164305949008499,
+        "mean_woba_scored": 0.3000900158882775,
+        "mean_woba_dropped": 0.1127
+      }
+    }
+  }
+}

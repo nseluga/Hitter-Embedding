@@ -186,7 +186,7 @@ def main():
         "take_alpha": float(alpha),
         "overall_sampled_ball": float(np.average(table["sampled_ball"],
                                                  weights=table["share"])),
-        "overall_exact_ball": float(np.average(table["exact_ball"].fillna(0),
+        "overall_exact_ball": float(np.average(table["exact_ball"],
                                                weights=table["share"])),
         "overall_league_ball": float(np.average(table["league_ball"],
                                                 weights=table["share"])),
