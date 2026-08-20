@@ -1,0 +1,14 @@
+{
+  "n_pa": 1501600,
+  "n_pitchers": 1705,
+  "observed_bb": 0.0811154768247203,
+  "pooled_chain_bb": 0.08169570438963587,
+  "per_pitcher_chain_bb": 0.08228130735972017,
+  "structural_bb_bias_pooled": 0.0005802275649155753,
+  "structural_bb_bias_per_pitcher": 0.0011658305349998704,
+  "jensen_term_bb": 0.0005856029700842952,
+  "structural_bb_bias_relative": 0.014372479588809828,
+  "residual_walk_excess": 0.002259999999999998,
+  "share_of_residual_explained": 0.5158542190264918,
+  "structural_k_bias_relative": 0.004419014927336651
+}

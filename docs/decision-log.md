@@ -552,3 +552,124 @@ Append-only. Format fixed by `~/os/knowledge/frameworks/research-standards.md`
 - **Rationale:** The gap the step closes is that every architecture verdict in the phase rested on a metric its own report says "says which model predicts PITCHES better and nothing at all about whether it projects HITTERS better than empirical Bayes," and the zero rank correlation makes that concrete rather than rhetorical — `baseline` is first on log loss and sixth on claim 1, `block` is sixth and first. The size of the result is what governs its reading: the whole spread from best arm to baseline is 0.00078 wOBA while baseline's five seeds span 0.00186 in the same stratum, so architecture is resolved but is not what limits claim 1, which makes the phase's null attributable rather than rescued. `block` — B.2's five flagged pitcher release and spin features removed — winning claim 1 while ranking sixth on log loss is the coherent reading of both numbers at once: those features help predict the next pitch and do not transfer to next-season hitter projection. `nospray`'s null says the spray head carries no measurable claim-1 signal, and its scored fidelity says it is not free: strikeouts land 2.7% low against the 2% band where baseline is 1.7% low and passes.
 - **Reference:** `src/analysis/d5_arms.py`, `src/model/query.py` (`league_spray_ratio`, `spray_kernels`, `_conditionals`, `expected_woba_naive`), `src/model/query_tables.py` (`fit_outcome_table`'s fourth return), `tests/test_query.py`, `results/phase_d/d5_arms_d10.csv`, `d5_arms_paired_d10.csv`, `d5_arms_verdict_d10.json`, `d5_arms_baseline_per_seed_d10.csv`. Decisive stratum `all`, 1,149 hitter-side rows and 604 distinct batters, negative favours the arm: `block` −0.000780 [−0.001066, −0.000482], `bilinear` −0.000625 [−0.001048, −0.000156], `meanweight` −0.000441 [−0.000766, −0.000106], `dim64` −0.000284 [−0.000481, −0.000082], `nospray` −0.000102 [−0.000474, +0.000269], `dim16` −0.000029 [−0.000395, +0.000341], `invfreq` +0.012738 [+0.009496, +0.015781]; baseline RMSE 0.047931. Baseline per-seed spread, context only: low 0.05944 sd 0.00044 range 0.00094, medium 0.04945 / 0.00075 / 0.00200, high 0.04380 / 0.00098 / 0.00245, all 0.04815 / 0.00076 / 0.00186. `block` by stratum −0.000057 [−0.000666, +0.000568] low, −0.000946 [−0.001648, −0.000243] medium, −0.001022 [−0.001344, −0.000676] high, so it wins where hitters have history and is null where they do not. No arm wins `low` while losing the decisive stratum. Mean reference log loss over five seeds: baseline 1.025800, bilinear 1.026030, dim64 1.026068, dim16 1.026534, meanweight 1.027236, block 1.027548, invfreq 1.051688; `nospray`'s 0.814064 is incomparable by construction, since its objective sums fewer log-loss terms. Verification for the spray-less path: the factored form matches the literal (M, 24, 24, 24) joint, P(spray | ev, la) sums to 1 in every cell including unobserved ones, and passing the mass table to a spray-headed arm leaves its predictions bit-identical, so the seven arms scored before the fix stay comparable to the eighth. 316 tests pass.
 - **Revisit if:** Phase E re-scores the ladder on the no-block build, at which point `block`'s selection stops being a recorded table row and becomes an architecture decision with the ladder numbers to support it; or a future arm's claim-1 margin exceeds the between-seed range of a single arm, which is the first margin this instrument could call large rather than merely resolved; or `nospray` is revisited for cost rather than signal, since removing the head is a real reduction in the output space and its only measured price is league fidelity.
+
+---
+
+## 2026-08-18 — the 2025 final run moves after Phase O; Phase E evaluates on the 2024 frame only
+- **Decision:** Phase E computes every validation and every effectiveness number on the **2024** frame. The refit on 2015–2024 and the single 2025 report are moved to the end of Phase O and happen once, on whatever configuration Phase O settles. The refit itself is unchanged and remains mandatory before any 2025 number is quoted. `assert_not_test_season` keeps refusing 2025 outside `--final-run` at all six call sites, and nothing in Phase E passes that flag.
+- **Alternatives:** Following the architecture plan's literal order — report 2025 in Phase E, then optimize in Phase O (rejected: Phase O would then have no untouched season to prove a gain on, so either its result is never tested out-of-sample or 2025 is scored twice and stops being a test season; both void the protocol the phase order exists to protect). Scoring 2025 now from the 2015–2023 checkpoints without a refit (rejected on the plan's own number: 75% of the 2025 low-exposure stratum would sit on the reserved zero embedding row against 42.7% with the refit, so the headline stratum would be measuring the context tower and would not be comparable to any Phase C baseline, all of which were produced at 42.7%). Refitting twice, once for Phase E and once after Phase O (rejected: the second report is test-set reuse regardless of how the first is labelled, and a discarded first report is not recoverable as unspent). Dropping the refit requirement (not available: it is the architecture plan's §5 protocol and its justification is numerical, not stylistic).
+- **Rationale:** Three lines of the architecture plan cannot all hold in the order written. Line 167 places the 2025 claim-1 table in Phase E, line 169 places optimization after it, and line 120 requires that only the **winning** configuration be carried across the refit. Under the written order the winning configuration does not yet exist when the refit fires. The resolution keeps every substantive requirement — one refit, one 2025 report, the 42.7% cold-start share — and changes only which phase boundary they sit behind, so the test season is spent last, on the final configuration, which is what the one-shot rule was for. The Oct 1 deadline does not force the earlier order: line 175 asks the abstract for "a **preliminary** claim-1 table", and the 2024 table is that. The manifest makes `docs/decision-log.md` the authority where it and the architecture plan disagree, so this entry is the mechanism the plan itself names for the change.
+- **Reference:** `~/os/knowledge/library/baseball-research/Layer1_Architecture_Plan_v2.md` lines 119–120 (frozen splits and the selection frame, quoted: "then refit the winning configuration from scratch on **2015–2024** and report on **2025**. Only the configuration — including the epoch count — carries across the refit"), 167 (Phase E contents), 169 (Phase O contents), 175 (timeline anchor); `docs/phase-e-spec.md` §2; `src/analysis/claim1_eval.py:655` and its six call sites (`d5_level.py:460`, `d5_report.py:200`, `c_report.py:349`, `d5_arms.py:168`, `query.py:864`, `train.py:319`). Not a §3a search trigger: this is a phase-ordering call on this project's own protocol, not a technique adoption, and no external precedent settles it. The argument is internal and is stated in full above.
+- **Revisit if:** Phase O returns no adopted change, in which case the configuration Phase E evaluated is already final and the refit could fire immediately with nothing lost; or the abstract deadline is moved forward such that a 2025 number is required before Phase O can complete, in which case the choice becomes an explicit trade of protocol for deadline and is recorded as one rather than absorbed silently.
+
+---
+
+## 2026-08-18 — the D.5 credit rule is repaired: a paired delta is graded against the spread of the paired delta, not the spread of a level
+- **Decision:** A composition fix is credited when the mean paired difference across seeds exceeds the between-seed spread **of that paired difference**, measured on identical seeds with the knob off and on. The rule this replaces graded a paired delta against the between-seed spread of a **level** (0.00587 for the walk rate). The credit verdict and the 2% band verdict are always reported together. This amends the 2026-08-12 level-bias entry, governs Phase E forward, and does **not** retroactively re-credit D.5's published verdicts.
+- **Alternatives:** Leaving the rule as written (rejected: it is not conservative, it is inoperative — the seed effect cancels inside a paired difference and does not cancel inside a level, so the comparison denominator is the wrong order of magnitude and essentially no real fix can clear it). Widening or narrowing the level spread by a fudge factor (rejected: the defect is that the two sides measure different quantities, and no scalar makes a level spread into a paired-delta spread). Re-crediting D.5's count offsets under the corrected rule inside this window (declined: that reopens a closed phase's published verdicts and is owed its own entry with its own numbers, not a footnote to a repair). Dropping the credit rule and reporting only the 2% band (rejected: the band says whether a rate is acceptable and says nothing about whether a change was real, and D.5's whole difficulty was moves smaller than their own noise).
+- **Rationale:** Both sides of a paired comparison share the seed, so the seed's contribution to the level enters both terms and subtracts out. What remains in the difference is the knob's effect plus the seed-by-knob interaction, which is small. Grading that residual against the spread of the un-differenced level asks the effect to exceed noise that the pairing already removed, which is why every D.5 move came back uncredited regardless of size. The repair costs nothing new to compute: the per-seed compositions D.5 already persists carry both terms, so the corrected denominator is a re-read of committed files rather than a re-run. Reporting the credit verdict and the band verdict together is not decoration — they answer different questions, a knob can move a rate by a real and measurable amount and still leave it outside tolerance, and D.5's summary language collapsed the two.
+- **Reference:** `docs/decision-log.md` 2026-08-12 (the entry this amends, which records the defect without repairing it); `src/model/query.py:89` `FIDELITY_TOLERANCE` and the per-seed composition block in `main`; `results/phase_d/d5_diagnostics_d10_baseline_s0.json` through `_s4.json` (the per-seed files the corrected denominator is computed from); `docs/phase-e-spec.md` §9. Not a §3a search trigger: this is internal statistical bookkeeping on a paired-versus-unpaired variance comparison, not a technique adoption, and the argument is the standard one that a paired difference removes the shared component's variance. Verified against this project's own per-seed files rather than asserted.
+- **Revisit if:** a future arm is scored with fewer than three seeds, at which point the paired-difference spread has too few draws to be a denominator and the rule needs a stated fallback; or D.5's count offsets are re-graded under this rule, which is the entry this one explicitly does not write.
+
+## 2026-08-18 — the walk gap is 54% population, 24% composition structure, and 0% resampler
+
+- **Decision:** the shipped `+6.17%` walk-rate fidelity failure is decomposed and reported as
+  three parts rather than carried as one number. E.1's population-matched control accounts for
+  54% of it (matched observed walk rate 0.08312 against the shipped unmatched 0.08042, leaving
+  a residual excess of +2.71%). E.10 accounts for 51.6% of that residual (+0.001166) as a
+  structural property of the independent-pitch count chain, measured model-free. E.7-E.9 price
+  both channels of the pitch resampler and find them net zero (-0.00003). Roughly 22% of the
+  original gap has no named owner and is recorded as open.
+- **Alternatives:** carry the +6.17% headline unattributed into Phase O, which is what D.5
+  shipped; or stop after E.1's population control, which halves the number without explaining
+  the rest; or attribute the residual to the swing head, which was the handoff's stated
+  suspect and which E.6 refutes on 705,344 real held-out pitches (+0.27% overall, and
+  over-predicting swings in every three-ball count, the wrong sign to make walks).
+- **Rationale:** standing risk §8 makes composition fidelity a gate on reading any ablation
+  result, so an unattributed failure blocks the phase. A gap with three measured parts and one
+  named open residual is a gate a reviewer can evaluate; a single number is not. E.10 is the
+  load-bearing piece because it is model-free: every transition in it is a counted frequency
+  from real pitches, so the +1.44% relative walk bias it returns cannot be blamed on anything
+  Phase D trained, and no retrain can fix it.
+- **Reference:** none — internal measurement against this project's own data. No §3a trigger
+  fires: no named technique is adopted, and the decomposition is arithmetic on the project's
+  own chain, not a modeling choice with a literature answer.
+- **Revisit if:** the composition is ever changed to condition on within-plate-appearance
+  history (a sequence model, or a count chain conditioned on the pitch that preceded it), which
+  would move the E.10 term directly; or if the unnamed 22% is closed by a later diagnostic.
+
+## 2026-08-18 — the swing head is exonerated as the owner of the walk gap
+
+- **Decision:** the swing head is recorded as calibrated and removed from the suspect list.
+  Scored on 705,344 real held-out 2024 pitches with the resampler removed from the
+  measurement entirely, the 5-seed ensemble predicts a swing rate of 0.479256 against an
+  observed 0.477975, a relative gap of +0.27%; trained hitters +0.14%; every handedness cell
+  within +0.5%.
+- **Alternatives:** treat the handoff's framing as settled and open a Phase O retrain item on
+  the swing head, which is what the D.5 handoff implied.
+- **Rationale:** §8 pre-registered the signature a head-owned gap would leave — a swing
+  SHORTFALL concentrated in three-ball counts, where an extra take converts directly into a
+  walk. The measured result is the opposite sign in all three: 3-0 +8.7% (n=6,807), 3-1 +0.9%,
+  3-2 +2.1%. A head that swings too often cannot manufacture an excess of walks. Recording
+  this closes a retrain item that would otherwise have been opened on a suspicion.
+- **Reference:** none — internal measurement. Deep-ensemble averaging of probabilities rather
+  than logits follows the project's own frozen architecture decision #5 and `query.expected_woba`.
+- **Revisit if:** the head is retrained, or the eval season changes, since calibration is a
+  property of a fitted model and not of the architecture.
+
+## 2026-08-18 — the walk excess is a spread problem, not only a level problem
+
+- **Decision:** the walk gap is treated as claim-1 relevant rather than as a fidelity-only
+  issue. E.2's noise-corrected compression coefficient is `b = 0.642` for walks (k 0.773,
+  bip 0.736, hbp 0.095): the model expresses about 64% of the true between-hitter spread in
+  walk rate, so the error is not a uniform level shift that a constant would absorb.
+- **Alternatives:** read the naive regression of `modelled - observed` on `observed`, which
+  returns a compressive slope even at zero true compression, because target sampling noise in
+  the regressor produces a mechanical slope of `-var(e)/var(o)`. Reporting that alone would
+  have manufactured the finding.
+- **Rationale:** a pure level bias would leave hitter ranking intact and would be a
+  presentation problem. Compression of the between-hitter spread is exactly the quantity
+  claim 1 is about, so it belongs in the claim's evidence and not in a fidelity appendix. The
+  errors-in-variables correction uses the binomial noise variance `p(1-p)/n`, which is
+  available per hitter and needs no extra assumption.
+- **Reference:** none — the errors-in-variables correction is standard regression algebra
+  applied to this project's own counts; no technique is adopted from outside.
+- **Revisit if:** the walk gap is closed, since compression measured against a biased level
+  is not the same quantity as compression measured against a calibrated one.
+
+## 2026-08-18 — the platoon adoption rule is not met on 2024
+
+- **Decision:** the model's platoon differential is **not** adopted over Route A (overall
+  skill plus the league-average side split). No stratum's paired 95% interval excludes zero on
+  rank: low +0.0436 [-0.0396, +0.1185], medium -0.0313, high -0.0076, all -0.0029. RMSE favours
+  the model only pooled, -0.001148 [-0.002160, -0.000166]. The result is kept and reported.
+- **Alternatives:** read the pooled RMSE interval alone and call it adoption, which would rest
+  the claim on the one metric-stratum pair out of eight that clears; or defer the reading until
+  after the walk gap is fixed, which would mean entering Phase O with no evaluation of the
+  claim the project exists to make.
+- **Rationale:** the sharpest statement is the decomposition, not the interval: 81.7% of the
+  model's predicted differential variance is the batter-stand effect alone, against 10.9% of
+  the observed differential's. Route A is 100% by construction, so the model has moved about
+  a fifth of the way from "the league split applied to everyone" toward a hitter-specific
+  differential. That is a real but small departure, and frozen rule #1 makes beating baselines
+  only in aggregate a null. Honest reporting of non-results is manifest working style #7.
+- **Reference:** none — the adoption rule is this project's own, pre-registered in
+  `docs/phase-e-spec.md` §7 before any platoon number was read.
+- **Revisit if:** the walk gap is closed and the C-ladder is re-scored under `d10`, since both
+  change the level the differential is read off; or if the eventual 2015-2024 refit changes the
+  low-exposure stratum, where 42.7% of hitters currently sit on the reserved zero row.
+
+## 2026-08-18 — model confidence tracks exposure, and is reported unscored
+
+- **Decision:** E.4's calibration is recorded as a described property, not as a scored gate:
+  regression slope of observed on modelled is 0.529 in the low-exposure stratum (z = -4.90
+  against 1), 0.664 medium, 0.998 high, 0.841 pooled.
+- **Alternatives:** treat the low-exposure slope as a failure and open a remediation item.
+- **Rationale:** the pattern is exactly what the architecture predicts — the embedding is
+  under-dispersed where hitters lack history and calibrated where they have it — so it
+  describes the shrinkage working, not a defect. It stays unscored because scoring a
+  query-machinery property on a claim-1-adjacent metric is the circularity `phase-d5-spec.md`
+  §9 forbids: the scorer is the model.
+- **Reference:** none — judgment call on reporting status, not a technique adoption.
+- **Revisit if:** the exposure-conditional prior declined in D.5 is ever adopted, since it
+  targets precisely the low-exposure under-dispersion this measures.

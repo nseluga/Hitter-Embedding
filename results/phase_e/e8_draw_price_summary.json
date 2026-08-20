@@ -1,0 +1,11 @@
+{
+  "league_chain_bb": 0.08169570438963587,
+  "league_chain_k": 0.22146004446376732,
+  "shifted_bb": 0.08262761205989527,
+  "shifted_k": 0.21990827916350378,
+  "delta_bb_from_draw": 0.0009319076702593992,
+  "delta_k_from_draw": -0.0015517653002635468,
+  "sum_of_per_count_delta_bb": 0.0009323162042498834,
+  "residual_walk_excess": 0.002259999999999998,
+  "share_of_residual_explained": 0.41234852666345134
+}

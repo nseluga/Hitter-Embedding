@@ -1,0 +1,15 @@
+{
+  "eval_season": 2024,
+  "take_count_offsets": false,
+  "take_alpha": 0.36429667605179034,
+  "overall_sampled_ball": 0.4967388468676906,
+  "overall_exact_ball": 0.4944368021406711,
+  "overall_league_ball": 0.49552915869192465,
+  "three_ball_draw_gap": 0.0018753889522618767,
+  "backoff_levels": [
+    40384,
+    6252,
+    1844,
+    14
+  ]
+}

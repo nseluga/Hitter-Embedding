@@ -136,3 +136,57 @@ appends to it every session.
 - **Found:** The level bias is now two-thirds accounted for and the remainder is one rate — the check fails on walks alone, and under the pre-registered credit rule none of the improvement is credited, since every move is smaller than its own between-seed spread. Equal-mass binning won its own contest outright, so the top exit-velocity bin cannot be fixed by re-binning at fixed `n_bins`. Claim-1 and held-out log loss have a rank correlation of exactly 0.000 across the seven comparable arms, and four arms beat baseline by margins that all sit inside one arm's own seed range. Gradient (b) reversed the phase's expectation: low-exposure rows are displaced, not shrunk — AdamW decay is wired correctly at `v1.py:250` but removes only ~8% of an embedding's length over a whole run, roughly 12× too weak to bind, and the anti-shrinkage shows at the output as predicted sd 0.0374 at low exposure against 0.0281 for regulars.
 - **Learned:** the exact 1-D dynamic program for supervised binning and why a per-dimension objective is the wrong one when the model predicts into a joint cell; the paired bootstrap's clustering unit as the thing that decides what the interval means; that a metric can be a perfectly valid model comparison and still carry no information about the claim it is being used to settle; and that a shrunk conditional and an unshrunk mass are different objects that live in the same array. Also that a credit rule comparing a paired delta to the dispersion of a level credits nothing, however real the fix.
 - **Next:** Phase E. The walk gap is the open thread and the named suspect is take frequency rather than ball-given-take, so the swing head is where to look. The exposure finding needs measuring with a committed direction before Phase O can tune against it legally, and adopting `block` needs the ladder re-scored on the no-block build rather than a table row. Still owed: the bat-tracking exclusion needs a decision-log entry in Nate's words, and D5-R13's alternative chain order stays open and declined.
+
+## 2026-08-18 — Phase E opening window: validate the scorer, then evaluate the claim
+
+- **Did:** pre-registered the whole window in `docs/phase-e-spec.md` before reading any
+  number, then built and ran ten steps. `src/analysis/e_eval.py` carries E.1-E.5
+  (population-matched fidelity, contamination, level-bias closure, calibration, platoon
+  differential); `src/analysis/e_swing.py` carries E.6 (swing-head calibration on real
+  pitches); `e_resample.py`, `e_price_draw.py`, `e_take_mass.py` and `e_structure.py` carry
+  E.7-E.10, the four steps E.6's pre-registered fork opened. Outputs in `results/phase_e/`,
+  16 new tests in `tests/test_e_eval.py`, five decision-log entries. `query.py` was not
+  touched, so the byte-identical scorer gate holds trivially. Nothing trained; the 2025 final
+  run was moved out of Phase E to after Phase O and 2025 was never scored.
+- **Why:** the order was the point. Validate that the scorer says what it claims (E.1-E.3),
+  then evaluate whether the model does what it set out to do (E.4-E.5), and only then chase
+  the residual. Two traps were designed around rather than discovered afterwards. First, the
+  D.5 walk gap compared a modelled side averaged over 1,074 hitters holding a trained
+  embedding row against an observed side averaged over every plate appearance in the train
+  window — selection on exposure, with a known sign — so E.1 rebuilt the observed side over
+  exactly the scored population and 54% of the gap evaporated. Second, the contamination test
+  regresses `modelled - observed` on `observed`, which has a mechanically negative slope of
+  `-var(e)/var(o)` from target sampling noise alone; reporting the naive slope would have
+  manufactured a compression finding, so the binomial noise variance `p(1-p)/n` corrects it.
+  The residual chase was disciplined by writing the fork down first: §8 said in advance that a
+  calibrated head hands ownership to the resampler, and when E.6 came back at +0.27% the
+  branch was already chosen rather than picked to suit the result. E.7-E.10 are labelled
+  fork-opened, not pre-registered, and are credited under no rule.
+- **Learned:**
+  - **Errors-in-variables in a residual-on-target regression.** Regressing an error on the
+    noisy quantity it was measured against is biased toward finding compression, because the
+    noise sits in the regressor. The bias is computable — `-var(e)/var(o)` — so the honest
+    test reports the excess over that null, not the raw slope.
+  - **Route A as the platoon null.** A model can score side-specific wOBA well while knowing
+    nothing about platoon skill: learn overall hitting ability, apply the league-average
+    left/right split. Only the DIFFERENCE between the two sides separates a real platoon
+    signal from that. Scoring levels would have flattered the model badly.
+  - **Oaxaca-style decomposition.** A level bias in a composed metric splits into a RATE
+    effect (the four absorbing-state frequencies are wrong) and a VALUE effect (what a ball
+    in play is worth is wrong). Only 25.5% of the +0.013876 wOBA bias is rate; the rest is
+    modelled E[wOBA | BIP] of 0.37864 against an observed 0.36353.
+  - **A Markov chain fed perfect transitions can still be wrong.** E.10 is the result worth
+    remembering. Build the count chain from counted frequencies of real pitches — no model
+    anywhere — and it still over-predicts walks by +1.44% relative, because it treats a plate
+    appearance as independent draws from a count cell when real plate appearances are
+    sequences. That is a property of the composition, not of anything trained, and no retrain
+    touches it.
+  - **Two channels, opposite signs, cancelling.** The resampler distorts `P(ball | take)` one
+    way (+0.00093 in walks) and `p_swing` the other (-0.00096). Pricing only the first would
+    have named the wrong owner with a confident number attached.
+- **Next:** the strikeout side is the open thread. It passed unmatched at -1.67% and FAILS
+  matched at -4.78%, and E.10's structural bias on strikeouts is +0.44% — the wrong sign to
+  explain it. Roughly 22% of the original walk gap is likewise unowned. Both are candidates
+  for the same unexamined component, the contact-split table, which decides how often a
+  two-strike plate appearance survives on a foul. That is the next diagnostic, and it needs no
+  retrain either.
