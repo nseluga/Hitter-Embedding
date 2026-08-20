@@ -1,0 +1,91 @@
+{
+  "arm": "d10_baseline",
+  "eval_season": 2024,
+  "data_dir": "data/processed/phase_d5",
+  "build_note": "the D.10 composition's train constants reproduce ONLY from data/processed/phase_d5 (measured_share 0.92313); data/processed/phase_d, whose quality bin edges differ, gives 0.96371",
+  "gap_being_explained": {
+    "value_modelled_bip": 0.37864233821410337,
+    "value_observed_bip": 0.3635263829493724,
+    "gap": 0.015115955264730974,
+    "note": "value_modelled.bip is a RESIDUAL in e_eval.level_closure, so it absorbs every error not expressible in the bb/hbp/k rates",
+    "n_groups": 1074,
+    "n_pa": 169589.0
+  },
+  "check_a_measured_share_seam": {
+    "train_constants": {
+      "measured_share": 0.9231315908347482,
+      "unmeasured_points": 0.1414959852073254
+    },
+    "observed_2024_matched_population": {
+      "n_measured": 113588,
+      "n_unmeasured": 1409,
+      "measured_share": 0.9877475064566902,
+      "unmeasured_points": 0.10515968772178849,
+      "measured_points": 0.3660281543825052,
+      "categories_unmeasured": [
+        0.9141234918381831,
+        0.05819730305180979,
+        0.0028388928317956,
+        0.0014194464158978,
+        0.0234208658623137
+      ]
+    },
+    "absolute_differences": {
+      "measured_share": 0.06461591562194202,
+      "unmeasured_points": -0.036336297485536906
+    },
+    "attribution": {
+      "implied_quality": 0.3983893202001586,
+      "repriced_under_2024_constants": 0.3947965260215103,
+      "share_term": -0.016599398057736196,
+      "unmeasured_term": 0.00044521025032932566,
+      "total": -0.016154187807406906
+    },
+    "share_of_gap": -1.0686845471882527
+  },
+  "jensen_refuted_structurally": true,
+  "jensen_refutation_reason": "V is a lookup table of category probabilities per (ev, la, spray) bin and the composition forms sum_b p(b) * points(b), a LINEAR functional of the bin distribution; Jensen's inequality requires a convex map of the quantity being averaged, so over-dispersion buys no premium here.",
+  "check_b_era_drift": {
+    "status": "fork-opened, not pre-registered \u2014 substitute for the refuted Jensen test",
+    "priced_under_weights": "2024 wOBA weights, both sides",
+    "n_bip_train": 948226,
+    "n_bip_obs": 121153,
+    "conditional_drift": 0.02883560571259934,
+    "mix_drift": 0.0027852143064778694,
+    "value_train_conditionals_train_mix": 0.39213058018240443,
+    "value_obs_conditionals_train_mix": 0.3632949744698051,
+    "value_train_conditionals_obs_mix": 0.3893453658759265,
+    "value_obs_conditionals_obs_mix": 0.3631857406833795,
+    "conditional_share_of_gap": 1.9076270872459837,
+    "mix_note": "mix drift does NOT enter the composition \u2014 the model predicts its own bin distribution; it says what the model should have shifted"
+  },
+  "residual_unexplained": 0.0024345373595385383,
+  "residual_share_of_gap": 0.16105745994226897,
+  "expectations": {
+    "check_a_preregistered": {
+      "statement": "a minority of the gap, order 0.002-0.004",
+      "observed": -0.016154187807406906,
+      "held": false
+    },
+    "check_b_preregistered_jensen": {
+      "statement": "the larger share, order 0.008-0.012 of the gap",
+      "observed": null,
+      "held": false,
+      "why": "not testable \u2014 refuted structurally before running (see above)"
+    },
+    "stop_rule": {
+      "statement": "if the two checks leave more than a third of the gap unexplained, the residual is unowned and Phase E closes on it",
+      "residual_share": 0.16105745994226897,
+      "triggered": false
+    }
+  },
+  "assumptions": [
+    "Check A treats the model's implied E[points | measured] as correct and prices only the two league constants; any error inside `quality` itself lands in the residual, not in Check A.",
+    "The matched population is reproduced at PA level by (batter, p_throws) group membership; group denominator equals that group's denominator PA count, so pooling PAs reproduces E.3's denominator weighting exactly.",
+    "Check B's 2024 V is fit with the same shrinkage estimator as the train V, so a 2024 cell with little data is pulled toward the 2024 (ev, la) marginal. That attenuates per-cell conditional drift toward its own-season aggregate; the aggregate itself is close to preserved, but the reported conditional drift is a mildly conservative estimate rather than an unbiased one.",
+    "Bins are the tensors' train-fit equal-mass indices for both fits; 2024 balls outside the train support are clipped into edge cells by `assign_bins`.",
+    "Two tensor builds sit on disk with different quality bin edges; this module uses phase_d5 because it is the one that reproduces the D.10 run's league constants exactly. Whether E.3 itself was computed against the same build is not re-verified here beyond the matched population's PA count matching.",
+    "Balls in play whose PA does not join a wOBA category (SH, INT, unjoined rows) drop from both V fits, as they do in the shipped `fit_outcome_table`.",
+    "The two checks are treated as additive when summed against the gap; they touch different terms (the seam's constants against V's conditionals) but the split is not orthogonalised, so the residual carries any interaction between them."
+  ]
+}

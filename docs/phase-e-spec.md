@@ -364,3 +364,178 @@ retroactively re-credited in this window.
 | resampler exonerated as the walk-gap owner | E.9, both channels priced, net -0.00003 |
 | composition structure as the named residual owner | E.10, model-free, +0.00117 |
 | the strikeout shortfall has no named owner | open, §8b — E.10's structural K bias is the wrong sign |
+| E.11-E.12 | **fork-opened, not pre-registered** — §12.0 |
+| E.13-E.15 | pre-registered here, §12 |
+| E.16 (non-handedness conditional query) | deferred to the frontend phase, §12.6 |
+| full calibration/refinement decomposition of a proper score | **retired**, §12.4 |
+| ensemble interval coverage in low-exposure strata | owed since 2026-08-08, discharged in E.14 |
+| deployment-bias audit (architecture §5 item 5) | deferred to write-up, §12.6 |
+| the claim-1 verdict on disk is from the D.8 arm | superseded by E.11 |
+
+---
+
+## 12. Remaining steps (2026-08-19)
+
+### 12.0 Pre-registration disclosure
+
+E.11 and E.12 were proposed **after** an exploratory read of the numbers underlying them
+(`d5_arms_verdict_d10.json`, `d5_predictions_d10_*.csv`, `c_claim1_scores.csv`). They carry
+the same `fork-opened` label E.7-E.10 carry and are not blind predictions. E.13, E.14 and
+E.15 are pre-registered: the expectation recorded under each was written before the step ran.
+
+The corrected credit rule of §9 applies unchanged — a paired difference is compared against
+the between-seed spread **of that paired difference**, not against the spread of either side.
+
+### 12.1 E.11 — the §189 claim-1 gate, re-scored on the D.10 arm
+
+**Why this exists.** The gate is not unbuilt; `d5_report.py` implements it in full, and
+D5-R18(3) already replaced the single hard-coded stratum with a per-stratum verdict whose
+decisive row is pre-registered as `low`. What is wrong is the *vintage*:
+`results/phase_d/d5_claim1_verdict_phase_d_baseline.json` is dated 2026-08-09, the D.10
+prediction tables are dated 2026-08-14, and the on-disk verdict carries four keys where the
+current code writes twelve. Every claim-1 number quoted in this project to date is therefore
+a **D.8** number read through a superseded verdict schema.
+
+**Method.** Re-run `d5_report.py` unchanged against `d5_predictions_d10_baseline.csv`, writing
+under label `e11_d10_baseline` into `results/phase_e/`. No new code, no edit to the scorer, no
+touch to any Phase D artefact. This is the module's own rule 1 — the ladder is re-scored, not
+remembered.
+
+**Read against.** §189: RMSE against C.3-full; ordering against **both** C.2 and C.3-full on
+the denominator-weighted rank correlation; each by paired bootstrap with batter clustering and
+a 95% interval excluding zero; decisive stratum `low`. The power restatement travels with any
+null, so a null cannot be read as "measured and absent" (D5-R18(4)).
+
+**Standing caveat, not re-litigated here.** Architecture §243: 42.7% of the reported low
+stratum sits on the shared cold-start row. A low-stratum result is substantially a statement
+about the context tower, not about the embedding. `d5_trained_spread_*` splits it.
+
+### 12.2 E.12 — is the D.10 ablation table ranking arms by level bias?
+
+**Claim under test.** Across the seven non-degenerate D.10 arms, the decisive RMSE column may
+be tracking each arm's mean predicted wOBA rather than its ranking skill. If so, the ablation
+table selects arms for having a smaller level offset, and Phase O — which is specified to
+select on that table — would inherit the confound.
+
+**Method.** For each arm, mean `pred_woba` from `d5_predictions_d10_<arm>.csv` against that
+arm's decisive RMSE and rank correlation from `d5_arms_verdict_d10.json`. Pearson and Spearman
+on both, plus the five-seed within-arm spread of the mean as the scale the between-arm spread
+must beat. `invfreq` is reported but excluded from the correlation as degenerate (its level
+moved -0.050 and its RMSE blew out to 0.0607); excluding it is stated, not silent.
+
+**Why it is not a proposal to debias.** It is not. The `+0.01771` level bias is never
+subtracted (§10), and D.5-style knobs validate on composition fidelity, never on claim-1. E.12
+is a statement about **what the table measures**, addressed to Phase O's selection criterion.
+
+**Where the finding goes.** Decision log only. Per the 2026-08-19 scope ruling, no Phase E
+finding amends the architecture plan; the §3 Phase O selection line is proposed for amendment
+when Phase O opens, and the log is the authority in the interval (architecture §7).
+
+### 12.3 E.13 — why is modelled `E[wOBA | BIP]` 0.37864 against 0.36353 observed?
+
+E.3 localizes 74.5% of the total level bias in the **value** channel, not the rate channel,
+and the balls-in-play term carries it. Two candidate mechanisms, **hard cap at two** — if
+neither convicts, the residual is reported as unexplained rather than pursued.
+
+**Check A — the measured-share seam** (`src/model/query.py:460-500`). `quality` is
+`E[points | in play AND Statcast measured it]`; the unmeasured remainder is priced at a fixed
+league constant. If the modelled and observed populations differ in measured share, or if the
+unmeasured constant is set above the truth, the seam produces a level offset with no
+mispredicted pitch behind it. **Expectation before running:** this accounts for a minority of
+the gap, order 0.002-0.004 of the 0.0151, because `measured_share` is a league rate applied
+uniformly and cannot easily generate a one-sided error of this size.
+
+**Check B — Jensen's inequality on a convex payoff.** `V` maps batted-ball descriptors to
+points and is convex over the region that matters (barrels are worth disproportionately more).
+The model emits a distribution over descriptors and integrates; if its distribution is
+over-dispersed relative to the truth, `E[V(x)] > V(E[x])` inflates the value with correctly
+centred inputs. This is structurally identical to what E.10 convicted the count chain of.
+**Expectation before running:** this is the larger share, order 0.008-0.012, and the test is
+whether re-integrating `V` against the *observed* descriptor distribution over the same
+population closes most of the gap.
+
+**Stop rule.** Both checks are read-only against existing prediction tables and the fitted `V`.
+Neither edits `query.py`. If the two together leave more than a third of 0.0151 unexplained,
+that residual is written down as unowned and Phase E closes on it.
+
+### 12.4 E.14 — the §5.1 probe, and the ensemble coverage owed since 2026-08-08
+
+Two questions, one step, because both read the same frozen checkpoints.
+
+**Probe (architecture §5 item 1).** The plan's §1.4 pre-registered failure mode is that the
+model learns hitter main effects plus context main effects and no interaction, in which case
+every query returns the league-average context penalty and platoon skill washes out. The probe
+checkpoint was specified as the *early detector* and never ran. It is run here as a
+**retrospective diagnostic**, which is a demotion and is logged as one: it can no longer stop
+anything, only explain. **Method:** linear decode of the C.2-estimated true split
+(`c2_prior_parameters.csv`, `tau2_split_derived`) from the frozen hitter embeddings,
+cross-validated by batter, reported as decoded-versus-true correlation, separately by stand.
+**Expectation before running:** LHB decodes meaningfully and RHB decodes near zero, tracking
+E.5's recovered-spread asymmetry (54% LHB against 18% RHB). If instead both decode well, the
+failure is in the composition, not the representation, and that is the more interesting result.
+
+**Coverage (architecture §5 item 3, decision log 2026-08-08).** The 2026-08-08 entry closed the
+RPS screen on its first promotion clause alone and recorded that the reliability machinery *"is
+owed exactly once, to §5.3's ensemble calibration check in the low-exposure strata"*. That debt
+is discharged here. **Method:** the five per-seed compositions §1.3 retains are used as the
+uncertainty source; for nominal levels 50/80/95% the empirical coverage of the observed wOBA is
+computed per exposure stratum, with a reliability diagram. **This is not E.4.** E.4 measured
+the *slope* of observed on predicted — whether the spread of point predictions is right, and it
+is not (0.529 low). Coverage asks whether the stated intervals are honest, which is a different
+property and can fail or pass independently. **Expectation before running:** intervals are too
+narrow in the low stratum, because a five-seed spread measures disagreement between seeds and
+not the shared shrinkage all five inherit from the same prior.
+
+**Consequence is bounded in advance, and this is why the step is safe to run.** Architecture
+§2.1 line 124: *"if calibration fails, that is a reported limitation, not a rebuild."* The
+hierarchical-Bayes fallback is out of scope. Failure produces a sentence, not a work item.
+
+**Retired here: the full calibration/refinement decomposition of a proper score.** The
+three-way split (uncertainty - resolution + reliability) is a decomposition of a *probabilistic
+forecast of a categorical outcome*. Claim-1 is RMSE on a continuous target, so the machinery
+does not fit the surface it is owed on, and forcing it there would be machinery for its own
+sake. The reliability half is discharged by the coverage check above; the resolution half is
+already answered in substance by E.4's slope and by the rank correlations. **Cost, recorded:**
+if a reviewer asks how much of the score is resolution against reliability, there is no number.
+Accepted 2026-08-19.
+
+### 12.5 E.15 — the measurement ceiling on the observed platoon differential
+
+**Why.** E.5 reports a within-stand rank correlation of 0.146 and this has been read in-session
+as "essentially zero". That reading is wrong if the quantity is close to unmeasurable, and
+`c2_prior_parameters.csv` says it is: rho = 0.652 LHB / 0.719 RHB, true split sd 0.0271 / 0.0222,
+`n_star_split_implied` 320.65 / 562.98 against single-season exposures far below both.
+
+**Method.** Reliability = true-talent variance over observed variance, from the C.2 posterior
+variance components and the realized per-hitter denominators. The ceiling on achievable rank
+correlation is approximately the square root of reliability. Report E.5's 0.146 as a fraction
+of its own ceiling. Split-half with a Spearman-Brown correction is computed as an independent
+check on the C.2-derived number, and if the two disagree by more than a factor of 1.5 both are
+reported and neither is adopted.
+
+**The errors-in-variables correction this step also discharges.** The "81.7% against 10.9%"
+framing used in-session compared a noise-free predicted variance against a noise-dominated
+observed one — the exact trap E.2 was written to avoid, committed one level up in the framing
+rather than in the code. The corrected share is recomputed here with the binomial noise
+variance removed from the observed side, and the decision-log entry of 2026-08-18 that quotes
+the uncorrected figures is superseded by name.
+
+**Expectation before running:** single-season reliability lands near 0.13 LHB and 0.06 RHB,
+capping achievable rank correlation near 0.36 and 0.25, which would make E.5's 0.146 roughly
+40-55% of ceiling. If reliability comes back far higher than that, E.5 is a genuine failure and
+should be reported as one.
+
+### 12.6 Explicitly deferred out of this window
+
+**E.16, non-handedness conditional queries** (pitch-type, velocity band, location). Architecture
+§1.3 states these are the same machinery with the pitcher population filtered and no new code
+path, so nothing is learned about the *model* by running one here. Moved to the frontend phase,
+where the query surface is the deliverable. 2026-08-19.
+
+**Deployment-bias audit** (architecture §5 item 5). Observed matchups are non-random because
+managers already platoon: a fringe hitter's weak-side sample is selected on the very trait being
+predicted, and the few PAs he does get are taken in unrepresentative contexts (pinch-hit,
+blowout, injury cover), so the answer key is biased and not merely noisy. The remedy §5 names is
+the natural experiment of hitters whose cross-side exposure expanded in the held-out season, and
+it is also the direct answer to the regression-to-archetype objection. That cohort has to be
+built, and the SSAC abstract is due Oct 1. Deferred to write-up. 2026-08-19.

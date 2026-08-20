@@ -1,0 +1,55 @@
+{
+  "n_arms_total": 8,
+  "n_arms_in_correlation": 7,
+  "excluded_as_degenerate": [
+    "invfreq"
+  ],
+  "decisive_stratum": "all",
+  "rmse_decisive": {
+    "direction": "lower is better",
+    "pearson_r": 0.8879779210636858,
+    "pearson_p": 0.007588213019395068,
+    "spearman_rho": 0.8571428571428573,
+    "spearman_p": 0.013697326615325611
+  },
+  "rank_decisive": {
+    "direction": "higher is better",
+    "pearson_r": 0.0786282049751082,
+    "pearson_p": 0.8669288540117911,
+    "spearman_rho": 0.14285714285714288,
+    "spearman_p": 0.7599453002180928
+  },
+  "rmse_low": {
+    "direction": "lower is better",
+    "pearson_r": 0.756304771695735,
+    "pearson_p": 0.04913425861179082,
+    "spearman_rho": 0.5357142857142858,
+    "spearman_p": 0.21521745567801284
+  },
+  "rank_low": {
+    "direction": "higher is better",
+    "pearson_r": 0.005960262363787688,
+    "pearson_p": 0.989881724075303,
+    "spearman_rho": 0.14285714285714288,
+    "spearman_p": 0.7599453002180928
+  },
+  "scale": {
+    "arm_level_spread_sd": 0.0019248672235190455,
+    "arm_level_range": 0.005052024499441143,
+    "seed_level_spread_sd": 0.001774781590700746,
+    "seed_level_range": 0.0043934113793918095,
+    "seed_means": [
+      0.3159293209668387,
+      0.31153590958744687,
+      0.31182268166023797,
+      0.31243742049668843,
+      0.3124424529840609
+    ],
+    "arm_over_seed_sd_ratio": 1.084565691691134
+  },
+  "rank_spread": {
+    "rank_decisive_min": 0.45148693342196755,
+    "rank_decisive_max": 0.4633808468989815,
+    "rank_decisive_range": 0.011893913477013962
+  }
+}

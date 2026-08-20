@@ -1,0 +1,535 @@
+{
+  "arm": "d10_baseline",
+  "eval_season": 2024,
+  "sources": {
+    "per_seed_predictions": [
+      "results/phase_d/d5_predictions_d10_baseline_s0.csv",
+      "results/phase_d/d5_predictions_d10_baseline_s1.csv",
+      "results/phase_d/d5_predictions_d10_baseline_s2.csv",
+      "results/phase_d/d5_predictions_d10_baseline_s3.csv",
+      "results/phase_d/d5_predictions_d10_baseline_s4.csv"
+    ],
+    "prediction_column": "pred_woba",
+    "eval_targets": "data/processed/eval_targets_pa.parquet",
+    "eval_frame_builder": "src/analysis/claim1_eval.py::build_eval_frame (MIN_EVAL_PA=10, strata=['low', 'medium', 'high'])",
+    "target_noise": "src/analysis/claim1_eval.py::sampling_noise -> noise_var",
+    "manifest": "data/processed/phase_d5/manifest.json"
+  },
+  "z_by_level": {
+    "0.5": 0.6744897501960817,
+    "0.8": 1.2815515655446004,
+    "0.95": 1.959963984540054
+  },
+  "interval_kinds": {
+    "seed_only": "(a) mean +/- z*seed_sd against observed wOBA \u2014 the ensemble alone",
+    "seed_plus_target_noise": "(b) mean +/- z*sqrt(seed_sd^2 + noise_var) \u2014 the FAIR test"
+  },
+  "eval_frame_coverage": {
+    "eval_season": 2024,
+    "actual_groups": 1279,
+    "dropped_below_min_eval_pa": 130,
+    "min_eval_pa": 10,
+    "dropped_no_prediction": 0,
+    "scored_groups": 1149,
+    "by_stratum": {
+      "low": {
+        "scored": 380,
+        "dropped": 85,
+        "share_dropped": 0.1827956989247312,
+        "mean_woba_scored": 0.2715274403871476,
+        "mean_woba_dropped": 0.1978559710550887
+      },
+      "medium": {
+        "scored": 280,
+        "dropped": 33,
+        "share_dropped": 0.10543130990415335,
+        "mean_woba_scored": 0.2861702757268614,
+        "mean_woba_dropped": 0.22453930976430975
+      },
+      "high": {
+        "scored": 489,
+        "dropped": 12,
+        "share_dropped": 0.023952095808383235,
+        "mean_woba_scored": 0.3042298857630782,
+        "mean_woba_dropped": 0.17301157407407408
+      }
+    }
+  },
+  "n_scored_groups": 1149,
+  "mean_seed_sd": 0.004319007344829594,
+  "mean_target_noise_sd": 0.05341533185737889,
+  "reliability": [
+    {
+      "slice": "low",
+      "n_groups": 380,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_only",
+      "empirical": 0.02631578947368421,
+      "ci_low": 0.014355814052561183,
+      "ci_high": 0.04775696264942429,
+      "gap": -0.4736842105263158,
+      "mean_half_width": 0.003195893020370808
+    },
+    {
+      "slice": "low",
+      "n_groups": 380,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.3894736842105263,
+      "ci_low": 0.34178485765153754,
+      "ci_high": 0.43937479024559245,
+      "gap": -0.1105263157894737,
+      "mean_half_width": 0.0466314828436953
+    },
+    {
+      "slice": "low",
+      "n_groups": 380,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_only",
+      "empirical": 0.05526315789473684,
+      "ci_low": 0.03642637536468484,
+      "ci_high": 0.08300173164995708,
+      "gap": -0.7447368421052633,
+      "mean_half_width": 0.006072296432048974
+    },
+    {
+      "slice": "low",
+      "n_groups": 380,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.7263157894736842,
+      "ci_low": 0.6793908078857271,
+      "ci_high": 0.7687108654677688,
+      "gap": -0.0736842105263158,
+      "mean_half_width": 0.08860127203509141
+    },
+    {
+      "slice": "low",
+      "n_groups": 380,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_only",
+      "empirical": 0.09473684210526316,
+      "ci_low": 0.0692165523912906,
+      "ci_high": 0.1283688232315192,
+      "gap": -0.8552631578947368,
+      "mean_half_width": 0.009286775991108463
+    },
+    {
+      "slice": "low",
+      "n_groups": 380,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.8526315789473684,
+      "ci_low": 0.8134659561895865,
+      "ci_high": 0.8847389767100466,
+      "gap": -0.09736842105263155,
+      "mean_half_width": 0.13550395227321152
+    },
+    {
+      "slice": "medium",
+      "n_groups": 280,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_only",
+      "empirical": 0.03214285714285714,
+      "ci_low": 0.01700091020469933,
+      "ci_high": 0.059948591504603896,
+      "gap": -0.46785714285714286,
+      "mean_half_width": 0.0029922195078898985
+    },
+    {
+      "slice": "medium",
+      "n_groups": 280,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.425,
+      "ci_low": 0.36849671562566044,
+      "ci_high": 0.48353335716743406,
+      "gap": -0.07500000000000001,
+      "mean_half_width": 0.03707958026877297
+    },
+    {
+      "slice": "medium",
+      "n_groups": 280,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_only",
+      "empirical": 0.06785714285714285,
+      "ci_low": 0.04386856123392936,
+      "ci_high": 0.10354281057390034,
+      "gap": -0.7321428571428572,
+      "mean_half_width": 0.005685310404901791
+    },
+    {
+      "slice": "medium",
+      "n_groups": 280,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.6892857142857143,
+      "ci_low": 0.6328248558638263,
+      "ci_high": 0.740623055658364,
+      "gap": -0.11071428571428577,
+      "mean_half_width": 0.07045235917872474
+    },
+    {
+      "slice": "medium",
+      "n_groups": 280,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_only",
+      "empirical": 0.09642857142857143,
+      "ci_low": 0.06711925421718709,
+      "ci_high": 0.13666161366946383,
+      "gap": -0.8535714285714285,
+      "mean_half_width": 0.008694931935729858
+    },
+    {
+      "slice": "medium",
+      "n_groups": 280,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.875,
+      "ci_low": 0.831117358891611,
+      "ci_high": 0.9087322771429169,
+      "gap": -0.07499999999999996,
+      "mean_half_width": 0.10774758529322308
+    },
+    {
+      "slice": "high",
+      "n_groups": 489,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_only",
+      "empirical": 0.034764826175869123,
+      "ci_low": 0.02181689895913551,
+      "ci_high": 0.05496531597717251,
+      "gap": -0.4652351738241309,
+      "mean_half_width": 0.0026481005659311665
+    },
+    {
+      "slice": "high",
+      "n_groups": 489,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.3721881390593047,
+      "ci_low": 0.33049607668784764,
+      "ci_high": 0.4158726636792699,
+      "gap": -0.1278118609406953,
+      "mean_half_width": 0.02759098734810776
+    },
+    {
+      "slice": "high",
+      "n_groups": 489,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_only",
+      "empirical": 0.07975460122699386,
+      "ci_low": 0.05888898875369944,
+      "ci_high": 0.10717142957338316,
+      "gap": -0.7202453987730062,
+      "mean_half_width": 0.005031473680663121
+    },
+    {
+      "slice": "high",
+      "n_groups": 489,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.6625766871165644,
+      "ci_low": 0.6195456721730015,
+      "ci_high": 0.703073290080025,
+      "gap": -0.13742331288343568,
+      "mean_half_width": 0.052423736640340966
+    },
+    {
+      "slice": "high",
+      "n_groups": 489,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_only",
+      "empirical": 0.1165644171779141,
+      "ci_low": 0.09106470972058792,
+      "ci_high": 0.14804151138076482,
+      "gap": -0.8334355828220859,
+      "mean_half_width": 0.007694974957227115
+    },
+    {
+      "slice": "high",
+      "n_groups": 489,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.8466257668711656,
+      "ci_low": 0.811995606703346,
+      "ci_high": 0.8758523694210312,
+      "gap": -0.10337423312883431,
+      "mean_half_width": 0.08017518647906897
+    },
+    {
+      "slice": "all",
+      "n_groups": 1149,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_only",
+      "empirical": 0.031331592689295036,
+      "ci_low": 0.02271634743938548,
+      "ci_high": 0.04307019956619894,
+      "gap": -0.46866840731070497,
+      "mean_half_width": 0.002913126185109155
+    },
+    {
+      "slice": "all",
+      "n_groups": 1149,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.3907745865970409,
+      "ci_low": 0.36297082239412826,
+      "ci_high": 0.4193062651624192,
+      "gap": -0.1092254134029591,
+      "mean_half_width": 0.036200381870396287
+    },
+    {
+      "slice": "all",
+      "n_groups": 1149,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_only",
+      "empirical": 0.06875543951261967,
+      "ci_low": 0.05551531851847047,
+      "ci_high": 0.08486951721275904,
+      "gap": -0.7312445604873804,
+      "mean_half_width": 0.0055350306243649935
+    },
+    {
+      "slice": "all",
+      "n_groups": 1149,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.6901653611836379,
+      "ci_low": 0.662830719182281,
+      "ci_high": 0.7162326781794269,
+      "gap": -0.10983463881636213,
+      "mean_half_width": 0.06878185479591332
+    },
+    {
+      "slice": "all",
+      "n_groups": 1149,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_only",
+      "empirical": 0.10443864229765012,
+      "ci_low": 0.08805364438426858,
+      "ci_high": 0.12345979222490155,
+      "gap": -0.8455613577023499,
+      "mean_half_width": 0.00846509884482997
+    },
+    {
+      "slice": "all",
+      "n_groups": 1149,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.855526544821584,
+      "ci_low": 0.8340130235685641,
+      "ci_high": 0.874670719325064,
+      "gap": -0.09447345517841599,
+      "mean_half_width": 0.10519276930738691
+    },
+    {
+      "slice": "low_cold_start",
+      "n_groups": 162,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_only",
+      "empirical": 0.0,
+      "ci_low": 1.734723475976807e-18,
+      "ci_high": 0.023163440842904462,
+      "gap": -0.5,
+      "mean_half_width": 0.0018617521500319191
+    },
+    {
+      "slice": "low_cold_start",
+      "n_groups": 162,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.37037037037037035,
+      "ci_low": 0.2998159760621741,
+      "ci_high": 0.44693010119339366,
+      "gap": -0.12962962962962965,
+      "mean_half_width": 0.05130406680903018
+    },
+    {
+      "slice": "low_cold_start",
+      "n_groups": 162,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_only",
+      "empirical": 0.0,
+      "ci_low": 1.734723475976807e-18,
+      "ci_high": 0.023163440842904462,
+      "gap": -0.8,
+      "mean_half_width": 0.003537387160940273
+    },
+    {
+      "slice": "low_cold_start",
+      "n_groups": 162,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.7222222222222222,
+      "ci_low": 0.6487119162195688,
+      "ci_high": 0.7854376656280292,
+      "gap": -0.07777777777777783,
+      "mean_half_width": 0.09747932732677327
+    },
+    {
+      "slice": "low_cold_start",
+      "n_groups": 162,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_only",
+      "empirical": 0.024691358024691357,
+      "ci_low": 0.009642932765064897,
+      "ci_high": 0.06175935050535045,
+      "gap": -0.9253086419753086,
+      "mean_half_width": 0.005409966809935625
+    },
+    {
+      "slice": "low_cold_start",
+      "n_groups": 162,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.8703703703703703,
+      "ci_low": 0.8099547131927153,
+      "ci_high": 0.9136279232199479,
+      "gap": -0.0796296296296296,
+      "mean_half_width": 0.14908176614530275
+    },
+    {
+      "slice": "low_trained",
+      "n_groups": 218,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_only",
+      "empirical": 0.045871559633027525,
+      "ci_low": 0.02510451175434196,
+      "ci_high": 0.08236619704569463,
+      "gap": -0.4541284403669725,
+      "mean_half_width": 0.004187318804751084
+    },
+    {
+      "slice": "low_trained",
+      "n_groups": 218,
+      "nominal": 0.5,
+      "z": 0.6744897501960817,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.4036697247706422,
+      "ci_low": 0.3407533241530652,
+      "ci_high": 0.46992228074391224,
+      "gap": -0.09633027522935778,
+      "mean_half_width": 0.04315919567679508
+    },
+    {
+      "slice": "low_trained",
+      "n_groups": 218,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_only",
+      "empirical": 0.0963302752293578,
+      "ci_low": 0.06387095568217216,
+      "ci_high": 0.1427696743623048,
+      "gap": -0.7036697247706423,
+      "mean_half_width": 0.007956036349111404
+    },
+    {
+      "slice": "low_trained",
+      "n_groups": 218,
+      "nominal": 0.8,
+      "z": 1.2815515655446004,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.7293577981651376,
+      "ci_low": 0.6667865949081514,
+      "ci_high": 0.7839857743847592,
+      "gap": -0.07064220183486247,
+      "mean_half_width": 0.08200381810274066
+    },
+    {
+      "slice": "low_trained",
+      "n_groups": 218,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_only",
+      "empirical": 0.14678899082568808,
+      "ci_low": 0.10593583300232758,
+      "ci_high": 0.19987471828658976,
+      "gap": -0.8032110091743119,
+      "mean_half_width": 0.01216770758445709
+    },
+    {
+      "slice": "low_trained",
+      "n_groups": 218,
+      "nominal": 0.95,
+      "z": 1.959963984540054,
+      "interval": "seed_plus_target_noise",
+      "empirical": 0.8394495412844036,
+      "ci_low": 0.7849060712026003,
+      "ci_high": 0.8822370353509076,
+      "gap": -0.11055045871559632,
+      "mean_half_width": 0.1254140171939511
+    }
+  ],
+  "expectation": {
+    "pre_registered": "intervals are too narrow in the low-exposure stratum, because a 5-seed spread measures seed disagreement, not the shared shrinkage all five inherit from the same empirical-Bayes prior",
+    "held": true,
+    "judged_on": "the fair interval (seed spread convolved with target sampling noise)",
+    "low_stratum_fair": [
+      {
+        "nominal": 0.5,
+        "empirical": 0.3894736842105263,
+        "ci_low": 0.34178485765153754,
+        "ci_high": 0.43937479024559245
+      },
+      {
+        "nominal": 0.8,
+        "empirical": 0.7263157894736842,
+        "ci_low": 0.6793908078857271,
+        "ci_high": 0.7687108654677688
+      },
+      {
+        "nominal": 0.95,
+        "empirical": 0.8526315789473684,
+        "ci_low": 0.8134659561895865,
+        "ci_high": 0.8847389767100466
+      }
+    ],
+    "cold_start_share_of_low": 0.4263157894736842,
+    "note": "architecture \u00a7243: a large share of the low stratum sits on the shared cold-start row, so the low-stratum number is substantially a statement about the context tower, not about the hitter embedding",
+    "not_a_fix": "architecture \u00a72.1 line 124 \u2014 if calibration fails that is a reported limitation, not a rebuild. No remedy is proposed here."
+  },
+  "not_e4": "E.4 measured the SLOPE of observed on predicted (0.529 low / 0.664 medium / 0.998 high / 0.841 pooled). This step measures INTERVAL HONESTY. They are different properties and can pass or fail independently.",
+  "assumptions": [
+    "The C.2 posterior mean split is treated as the hitter's TRUE split. It is an estimate, shrunk toward the league split, so it is smoother than the truth; the probe therefore measures agreement with a shrunk target and is conservative about idiosyncratic hitters and generous about the league-average component.",
+    "A LINEAR read-out is taken as the test of whether platoon information is present. A non-linear probe could find structure a ridge cannot, so a null probe bounds LINEARLY DECODABLE information only.",
+    "Seeds are treated as exchangeable draws whose embedding coordinate systems are NOT aligned, so correlations are averaged and raw embeddings are never averaged.",
+    "The seed standard deviation is computed with ddof=1 over five seeds: the ensemble is a sample of the init distribution. With n=5 that estimate is itself noisy.",
+    "The interval is Gaussian: mean +/- z * sd with normal quantiles. Five seeds cannot identify a tail shape, so this is an assumption, not a measurement.",
+    "The target's sampling noise is taken as independent of the ensemble spread when the two are convolved in quadrature. They share no data-generating channel, so this is reasonable, but it is not verified here.",
+    "claim1_eval.sampling_noise estimates each group's within-group wOBA variance from the eval season itself, so for a group with few scorable PA the noise estimate is noisy.",
+    "Cold-start hitters are excluded from the probe entirely, so the probe speaks only about hitters who own a trained embedding row.",
+    "The POOLED probe row is the weakest of the four to interpret: LHB and RHB splits have opposite signs, so pooled target sd (0.0263) is roughly double either within-stand sd (0.0127 L / 0.0093 R) and a pooled decode can score by recovering STAND alone. The per-stand rows are the ones that speak to platoon SKILL; pooled is reported for completeness, not as the headline."
+  ]
+}

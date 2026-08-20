@@ -1,0 +1,95 @@
+{
+  "decisive_stratum": "low",
+  "rmse_gate_vs_c3_full": false,
+  "ordering_gate_vs_both": false,
+  "by_stratum": {
+    "all": {
+      "rmse_gate_vs_c3_full": false,
+      "ordering_gate_vs_both": false,
+      "n_comparisons": 2
+    },
+    "high": {
+      "rmse_gate_vs_c3_full": false,
+      "ordering_gate_vs_both": false,
+      "n_comparisons": 2
+    },
+    "low": {
+      "rmse_gate_vs_c3_full": false,
+      "ordering_gate_vs_both": false,
+      "n_comparisons": 2
+    },
+    "medium": {
+      "rmse_gate_vs_c3_full": false,
+      "ordering_gate_vs_both": false,
+      "n_comparisons": 2
+    }
+  },
+  "debiased_mean_excess_removed": 0.014328411015594357,
+  "debiased_rmse_difference": {
+    "low": {
+      "rmse_difference": -0.00028003822323550975,
+      "ci_low": -0.0026505727077412427,
+      "ci_high": 0.0020008958292344124
+    },
+    "medium": {
+      "rmse_difference": -0.0020925782845069435,
+      "ci_low": -0.004705494457377533,
+      "ci_high": 0.00045465548658734636
+    },
+    "high": {
+      "rmse_difference": -0.00016405295367876577,
+      "ci_low": -0.001745076766459745,
+      "ci_high": 0.0013427118684196093
+    },
+    "all": {
+      "rmse_difference": -0.0006029146372971417,
+      "ci_low": -0.0017439597680333108,
+      "ci_high": 0.0005921769337124798
+    }
+  },
+  "rank_power": {
+    "low": {
+      "se_rank": 0.06472128073826787,
+      "z": 1.4329189706331757,
+      "batters_multiplier": 3.822648888615355,
+      "batters_needed": 914
+    },
+    "medium": {
+      "se_rank": 0.05141442551574615,
+      "z": 1.5043542395150742,
+      "batters_multiplier": 3.4682264501692384,
+      "batters_needed": 825
+    },
+    "high": {
+      "se_rank": 0.02837086851798123,
+      "z": -1.2250472491572353,
+      "batters_multiplier": 5.230003695239781,
+      "batters_needed": 1663
+    },
+    "all": {
+      "se_rank": 0.02104313841194494,
+      "z": 0.824682520069304,
+      "batters_multiplier": 11.540751662411607,
+      "batters_needed": 6971
+    }
+  },
+  "trained_row_spread": {
+    "low": {
+      "sd_pooled": 0.029390313938217442,
+      "sd_trained": 0.03533456959445189,
+      "cold_start_share": 0.4263157894736842
+    },
+    "medium": {
+      "sd_pooled": 0.026410305615026018,
+      "sd_trained": 0.026410305615026018,
+      "cold_start_share": 0.0
+    },
+    "high": {
+      "sd_pooled": 0.026790388983536546,
+      "sd_trained": 0.026790388983536546,
+      "cold_start_share": 0.0
+    }
+  },
+  "eval_season": 2024,
+  "label": "e11_d10_baseline"
+}

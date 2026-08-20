@@ -1,0 +1,356 @@
+{
+  "step": "E.15",
+  "spec": "docs/phase-e-spec.md \u00a712.5",
+  "eval_season": 2024,
+  "read_only": true,
+  "sources": {
+    "e5_frame": "results/phase_e/e5_platoon_frame.csv",
+    "e5_frame_producer": "src/analysis/e_eval.py:platoon_frame",
+    "c2_prior_parameters": "results/phase_c/c2_prior_parameters.csv",
+    "pa_level_eval_targets": "data/processed/eval_targets_pa.parquet",
+    "e5_reported_within_stand_rank_corr": "results/phase_e/e_report.json -> e5_platoon.decomposition",
+    "withdrawn_claim": "docs/decision-log.md 2026-08-18 (81.7% vs 10.9%), withdrawn 2026-08-19 and corrected in Part 2 here"
+  },
+  "c2_components_used": {
+    "L": {
+      "tau2_split": 0.0007322758887773,
+      "tau_split": 0.027060596607933463,
+      "rho": 0.6522096127023044,
+      "rho_ci": [
+        0.3836437322791474,
+        0.9018270776891698
+      ],
+      "n_star_split_implied": 320.6537753249699,
+      "sigma2_within_pa_vs_L": 0.234807028315911,
+      "sigma2_within_pa_vs_R": 0.2688982792863081
+    },
+    "R": {
+      "tau2_split": 0.000491773116724,
+      "tau_split": 0.022175958079054894,
+      "rho": 0.7186911558233854,
+      "rho_ci": [
+        0.4787401720879577,
+        0.9866296927780608
+      ],
+      "n_star_split_implied": 562.981877970528,
+      "sigma2_within_pa_vs_L": 0.2768593527887524,
+      "sigma2_within_pa_vs_R": 0.2602648778769718
+    },
+    "S": {
+      "tau2_split": 0.0005882205471304,
+      "tau_split": 0.02425325848479746,
+      "rho": 0.7126876111242142,
+      "rho_ci": [
+        0.0926128313258819,
+        0.999
+      ],
+      "n_star_split_implied": 435.081845958692,
+      "sigma2_within_pa_vs_L": 0.255924081476354,
+      "sigma2_within_pa_vs_R": 0.2542632906621693
+    }
+  },
+  "per_pa_variance_cross_check": {
+    "L_vs_L": {
+      "realized_2024": 0.24080449889830827,
+      "c2_sigma2_within_pa": 0.234807028315911,
+      "ratio": 1.0255421254866708
+    },
+    "L_vs_R": {
+      "realized_2024": 0.2694324666129713,
+      "c2_sigma2_within_pa": 0.2688982792863081,
+      "ratio": 1.0019865777054469
+    },
+    "R_vs_L": {
+      "realized_2024": 0.26628528803612195,
+      "c2_sigma2_within_pa": 0.2768593527887524,
+      "ratio": 0.9618070885230356
+    },
+    "R_vs_R": {
+      "realized_2024": 0.25660370396681237,
+      "c2_sigma2_within_pa": 0.2602648778769718,
+      "ratio": 0.9859328929050117
+    }
+  },
+  "sampling_variance_source": {
+    "rule": "hitter's own realized per-PA wOBA variance when that side has >= 50 denominator PAs, else the league (stand, p_throws) per-PA variance",
+    "why": "wOBA is a weighted sum over outcome categories, not a rate, so its per-PA variance is the realized variance of woba_points; p(1-p) on a rate would be wrong. Per-hitter estimates below ~50 PA of a heavy-tailed outcome are noisier than the league value they replace.",
+    "fell_back_L_share": 0.344954128440367,
+    "fell_back_R_share": 0.12293577981651377,
+    "all_league_sensitivity_mean_ratio": 1.041372183984688
+  },
+  "part1_ceiling": {
+    "by_stand": [
+      {
+        "stand": "L",
+        "n_hitters": 221,
+        "tau2_split_true": 0.0007322758887773,
+        "tau_split_true": 0.027060596607933463,
+        "mean_sampling_var_weighted": 0.003922478896463031,
+        "mean_sampling_var_unweighted": 0.007035063800588563,
+        "mean_sampling_var_league_weighted": 0.003934630024700847,
+        "median_denom_L": 67.0,
+        "median_denom_R": 288.0,
+        "reliability_variance_ratio": 0.15731782286346405,
+        "reliability_variance_ratio_unweighted": 0.09427627966108486,
+        "reliability_mean_per_hitter": 0.14872638321042886,
+        "ceiling_rank_corr": 0.3966331086324792,
+        "ceiling_rank_corr_unweighted": 0.30704442620097316
+      },
+      {
+        "stand": "R",
+        "n_hitters": 324,
+        "tau2_split_true": 0.0004917731167240001,
+        "tau_split_true": 0.022175958079054894,
+        "mean_sampling_var_weighted": 0.0041868010431916,
+        "mean_sampling_var_unweighted": 0.008360123939736544,
+        "mean_sampling_var_league_weighted": 0.004260910265874671,
+        "median_denom_L": 94.0,
+        "median_denom_R": 182.0,
+        "reliability_variance_ratio": 0.1051117498440746,
+        "reliability_variance_ratio_unweighted": 0.05555567508154427,
+        "reliability_mean_per_hitter": 0.10245094687268191,
+        "ceiling_rank_corr": 0.3242094228181448,
+        "ceiling_rank_corr_unweighted": 0.23570251394829092
+      },
+      {
+        "stand": "pooled",
+        "n_hitters": 545,
+        "tau2_split_true": 0.0005903354341683785,
+        "tau_split_true": 0.024296819424944875,
+        "mean_sampling_var_weighted": 0.004078477121970155,
+        "mean_sampling_var_unweighted": 0.007822805975054518,
+        "mean_sampling_var_league_weighted": 0.004127194814564713,
+        "median_denom_L": 86.0,
+        "median_denom_R": 223.0,
+        "reliability_variance_ratio": 0.12644230777528392,
+        "reliability_variance_ratio_unweighted": 0.07005359053772359,
+        "reliability_mean_per_hitter": 0.12121584858028207,
+        "ceiling_rank_corr": 0.355587271672207,
+        "ceiling_rank_corr_unweighted": 0.2646763883268086
+      }
+    ],
+    "e5_within_stand_rank_corr_recomputed": 0.14626474805407283,
+    "e5_within_stand_rank_corr_reported": 0.14626474805407289,
+    "recomputation_matches_report": true,
+    "e5_within_stand_rank_corr_by_stand": {
+      "L": 0.22570916212303577,
+      "R": 0.039417885242445196
+    },
+    "fraction_of_ceiling": {
+      "pooled": 0.41133291235718045,
+      "L": 0.5690628371928935,
+      "R": 0.12158155336698968
+    },
+    "split_half": [
+      {
+        "stand": "L",
+        "n_hitters": 185,
+        "half_split_spearman": -0.1547666881467723,
+        "half_split_pearson": -0.1146703354448399,
+        "reliability_spearman_brown": -0.36621057399509377,
+        "reliability_spearman_brown_ci_low": -0.8435635870592535,
+        "reliability_spearman_brown_ci_high": 0.0075224905012505035,
+        "reliability_spearman_brown_pearson": -0.2590455059527612,
+        "ceiling_rank_corr": NaN,
+        "median_half_denom_L": 40.0,
+        "median_half_denom_R": 162.0
+      },
+      {
+        "stand": "R",
+        "n_hitters": 268,
+        "half_split_spearman": 0.05362249360523725,
+        "half_split_pearson": 0.019345220427093773,
+        "reliability_spearman_brown": 0.1017869188076163,
+        "reliability_spearman_brown_ci_low": -0.14261961810370472,
+        "reliability_spearman_brown_ci_high": 0.29744649571358894,
+        "reliability_spearman_brown_pearson": 0.03795617037177719,
+        "ceiling_rank_corr": 0.3190406225038064,
+        "median_half_denom_L": 54.0,
+        "median_half_denom_R": 114.0
+      },
+      {
+        "stand": "pooled",
+        "n_hitters": 453,
+        "half_split_spearman": -0.036345355034375075,
+        "half_split_pearson": -0.03581826824984697,
+        "reliability_spearman_brown": -0.07543232469070198,
+        "reliability_spearman_brown_ci_low": -0.29564128191356887,
+        "reliability_spearman_brown_ci_high": 0.10834651178081936,
+        "reliability_spearman_brown_pearson": -0.0742977533598998,
+        "ceiling_rank_corr": NaN,
+        "median_half_denom_L": 50.0,
+        "median_half_denom_R": 136.0
+      }
+    ],
+    "reliability_route_agreement": {
+      "L": {
+        "c2_derived_reliability": 0.15731782286346405,
+        "split_half_reliability": -0.36621057399509377,
+        "disagreement_factor": NaN,
+        "agree_within_1_5x": false
+      },
+      "R": {
+        "c2_derived_reliability": 0.1051117498440746,
+        "split_half_reliability": 0.1017869188076163,
+        "disagreement_factor": 1.0326646201241483,
+        "agree_within_1_5x": true
+      },
+      "pooled": {
+        "c2_derived_reliability": 0.12644230777528392,
+        "split_half_reliability": -0.07543232469070198,
+        "disagreement_factor": NaN,
+        "agree_within_1_5x": false
+      }
+    },
+    "adopt_a_single_reliability": false,
+    "adoption_note": "the two routes DISAGREE by more than 1.5x. Both are reported and NEITHER is adopted, per spec \u00a712.5. Any downstream reading of E.5 must carry both ceilings.",
+    "decomposition_from_e_eval": {
+      "delta_obs": {
+        "variance": 0.00470881178875325,
+        "between_stand": 0.0005131826955664018,
+        "within_stand": 0.004195629093186848,
+        "share_between_stand": 0.10898348003462612
+      },
+      "delta_pred": {
+        "variance": 0.0005674880018011178,
+        "between_stand": 0.00046357741658848133,
+        "within_stand": 0.00010391058521263651,
+        "share_between_stand": 0.8168937759338689
+      },
+      "delta_route_a": {
+        "variance": 0.00041470161321681827,
+        "between_stand": 0.0004147016132168182,
+        "within_stand": 5.421010862427522e-20,
+        "share_between_stand": 0.9999999999999999
+      },
+      "post_hoc_within_stand_rank_corr": 0.14626474805407283,
+      "post_hoc_note": "added after the pre-registered E.5 table was read; descriptive, not evidence for the adoption rule"
+    }
+  },
+  "part2_errors_in_variables": {
+    "observed_variance_raw": 0.00470881178875325,
+    "between_stand_variance": 0.0005131826955664018,
+    "within_stand_variance_raw": 0.004195629093186848,
+    "mean_sampling_variance_weighted": 0.004078477121970155,
+    "observed_variance_noise_corrected": 0.0006303346667830946,
+    "within_stand_variance_noise_corrected": 0.0001171519712166928,
+    "share_between_stand_corrected": 0.8141432204346677,
+    "share_between_stand_uncorrected": 0.10898348003462612,
+    "ci_low": 0.4217529927271177,
+    "ci_high": 3.4966938730263655,
+    "n_boot": 2000,
+    "n_boot_usable": 1976,
+    "seed": 0,
+    "noise_share_of_observed_variance": 0.8661372135771882
+  },
+  "part3_recovery": {
+    "by_stand": [
+      {
+        "stand": "L",
+        "n_hitters": 221,
+        "sd_pred_within_stand": 0.015378576369871241,
+        "sd_obs_within_stand_raw": 0.06232922012326187,
+        "var_obs_within_stand_noise_corrected": -3.7547215288997755e-05,
+        "noise_corrected_variance_is_positive": false,
+        "sd_obs_within_stand_true": NaN,
+        "mean_sampling_var_weighted": 0.003922478896463031,
+        "tau_split_c2": 0.027060596607933463,
+        "ratio_vs_c2": 0.5683014529458912,
+        "ratio_vs_realized_true": NaN,
+        "sd_obs_within_stand_raw_aweights": 0.0625352786371206,
+        "sd_pred_within_stand_aweights": 0.015429417477553513,
+        "var_obs_within_stand_noise_corrected_aweights": -1.1817822240717257e-05,
+        "ratio_vs_realized_true_aweights": NaN
+      },
+      {
+        "stand": "R",
+        "n_hitters": 324,
+        "sd_pred_within_stand": 0.0034410944057789972,
+        "sd_obs_within_stand_raw": 0.0664181819483767,
+        "var_obs_within_stand_noise_corrected": 0.00022457385013607226,
+        "noise_corrected_variance_is_positive": true,
+        "sd_obs_within_stand_true": 0.014985788272095407,
+        "mean_sampling_var_weighted": 0.0041868010431916,
+        "tau_split_c2": 0.022175958079054894,
+        "ratio_vs_c2": 0.15517229936636187,
+        "ratio_vs_realized_true": 0.22962385049751152,
+        "sd_obs_within_stand_raw_aweights": 0.06656075264821511,
+        "sd_pred_within_stand_aweights": 0.003448480925904214,
+        "var_obs_within_stand_noise_corrected_aweights": 0.00024353274990527446,
+        "ratio_vs_realized_true_aweights": 0.22097805252022032
+      }
+    ],
+    "asymmetry_vs_c2": 3.662389841914575,
+    "asymmetry_vs_realized_true": NaN,
+    "asymmetry_vs_realized_true_aweights": NaN,
+    "in_session_uncorrected": {
+      "L": 0.54,
+      "R": 0.18
+    }
+  },
+  "pre_registered_expectations": {
+    "part1_reliability_near_0.13_L_and_0.06_R": {
+      "expected": {
+        "L": 0.13,
+        "R": 0.06
+      },
+      "observed": {
+        "L": 0.15731782286346405,
+        "R": 0.1051117498440746
+      },
+      "held": true,
+      "rule": "held if each observed reliability is within a factor of 2 of its expectation"
+    },
+    "part1_ceiling_near_0.36_L_and_0.25_R": {
+      "expected": {
+        "L": 0.36,
+        "R": 0.25
+      },
+      "observed": {
+        "L": 0.3966331086324792,
+        "R": 0.3242094228181448
+      },
+      "held": true,
+      "rule": "held if each ceiling is within 0.10 of its expectation"
+    },
+    "part1_e5_is_40_to_55_percent_of_ceiling": {
+      "expected": [
+        0.4,
+        0.55
+      ],
+      "observed": 0.41133291235718045,
+      "held": true
+    },
+    "part2_corrected_share_50_to_60_percent": {
+      "expected": [
+        0.5,
+        0.6
+      ],
+      "observed": 0.8141432204346677,
+      "held": false
+    },
+    "part3_asymmetry_survives_correction": {
+      "expected": "the LHB/RHB recovery ratio stays near 3x after noise correction",
+      "observed": {
+        "asymmetry_vs_c2": 3.662389841914575,
+        "asymmetry_vs_realized_true": NaN,
+        "asymmetry_vs_realized_true_aweights": NaN
+      },
+      "held": false,
+      "rule": "held if the noise-corrected LHB:RHB recovery ratio is at least 2x; NaN when a stand's noise-corrected variance is not positive, in which case only the C.2-denominated ratio is interpretable",
+      "both_stands_noise_corrected_positive": false
+    }
+  },
+  "assumptions": [
+    "C.2's tau2_split_derived is the true within-stand variance of the platoon differential and transfers to the 2024 eval population unchanged.",
+    "The two sides' plate appearances are independent samples, so Var[delta_obs] sampling noise is the SUM of the two sides' sampling variances.",
+    "Per-PA wOBA variance is the realized variance of woba_points over the wOBA denominator; wOBA is a weighted category sum, so no p(1-p) rate form is used.",
+    "Per-hitter per-PA variance is used when a side has >= 50 denominator PAs, otherwise the league (stand, p_throws) value.",
+    "ceiling ~= sqrt(reliability) is the Pearson attenuation bound; it is applied to a WEIGHTED SPEARMAN correlation, which it bounds only approximately. Rank correlations are typically slightly lower than Pearson for the same signal, so using it as the ceiling is mildly conservative against the model.",
+    "delta_pred is treated as noise-free (it is a deterministic model output), so all attenuation is charged to the observed side.",
+    "Stand in the E.5 frame is the modal batting side in 2024, so switch hitters are assigned to whichever C.2 batter_type they batted from more often; C.2's separate S row is not used. 2024 switch hitters are a small minority of the 545.",
+    "All weighted variances use the POPULATION form (np.average of squared deviations), matching e_eval.platoon_decomposition, so the corrected share in Part 2 is directly comparable to the 10.9% it supersedes. np.cov's aweights bias-corrected form is reported alongside in Part 3; within a stand the two differ by well under 1% and the LHB negative sign holds under both.",
+    "The between-stand main effect's own sampling variance is treated as negligible (two cells of 221 and 324 hitters) and is not subtracted in Part 2.",
+    "The split-half route splits on game_pk parity, which keeps within-game correlation inside a half; Spearman-Brown assumes the two halves are parallel measurements of equal length, which odd/even games approximately are."
+  ]
+}
