@@ -26,6 +26,7 @@ the deliverable D.6's compute decision rests on, so it is written to
 """
 
 import csv
+import math
 import os
 import resource
 import subprocess
@@ -55,8 +56,19 @@ CHECKPOINT_DIR = Path("results/checkpoints")
 EXPERIMENT = "phase_d"
 
 LEARNING_RATE = 1e-3
+# Phase O tunes lr and warmup and nothing else. WEIGHT_DECAY and BATCH_SIZE are
+# deliberately NOT exposed as arguments: they are one setting (they set the
+# decay-to-gradient ratio an embedding row sees), that ratio is the shrinkage the
+# low-exposure claim is about, and tuning it would reimplement C.2 inside the network
+# and then score the result against C.2. Architecture plan section 3, Phase O.
 WEIGHT_DECAY = 1e-2
 BATCH_SIZE = 8192
+# Linear warmup over optimizer steps, off by default so every pre-Phase-O run is
+# reproduced exactly. Warmup must finish before ReduceLROnPlateau can first fire
+# (patience 1 => epoch 2 at the earliest), or the two would fight over param_group lr;
+# WARMUP_MAX_EPOCHS enforces that.
+WARMUP_STEPS = 0
+WARMUP_MAX_EPOCHS = 2
 PLATEAU_FACTOR = 0.3
 PLATEAU_PATIENCE = 1
 EARLY_STOPPING_PATIENCE = 3
@@ -104,8 +116,60 @@ def scored_rows(labels):
 CANONICAL = {"rule": "log", "weighting": "sum", "contact_pos_weight": None}
 
 
+class LinearWarmup:
+    """
+    Scales lr from base/steps up to base over the first `steps` optimizer steps, then
+    stands down permanently and lets ReduceLROnPlateau own the learning rate.
+
+    Why warmup is Phase O's second knob and not decoration: D.5 gradient (b) measured
+    every embedding row starting at norm 0.057 and the RAREST rows finishing furthest
+    from the origin, pointing the wrong way along the wOBA axis. AdamW normalises each
+    coordinate by its own second moment, so a row seen in 30 batches takes a near-full
+    step every one of those 30 and lands on a large-norm random walk. Capping early step
+    size is the direct lever on that, and it is a lever weight decay cannot be, since at
+    the 10th percentile of exposure decay already loses to the gradient 23.9:1.
+    """
+
+    def __init__(self, optimizer, steps, base_lr):
+        self.optimizer, self.steps, self.base_lr = optimizer, int(steps), base_lr
+        self.step_count = 0
+
+    @property
+    def done(self):
+        return self.step_count >= self.steps
+
+    def step(self):
+        """Call BEFORE optimizer.step(). No-op once warmup is over."""
+        if self.done:
+            return
+        self.step_count += 1
+        scale = self.step_count / self.steps
+        for group in self.optimizer.param_groups:
+            group["lr"] = self.base_lr * scale
+
+
+def warmup_for(optimizer, args, n_train_rows):
+    """
+    The warmup schedule for this run, or None. Refuses a warmup long enough to still be
+    running when ReduceLROnPlateau can first cut the lr (patience 1, so epoch 2): past
+    that point warmup would raise the rate the schedule just lowered and the run would be
+    on neither schedule while both logged as if it were.
+    """
+    if args.warmup_steps <= 0:
+        return None
+    steps_per_epoch = math.ceil(n_train_rows / args.batch_size)
+    limit = WARMUP_MAX_EPOCHS * steps_per_epoch
+    if args.warmup_steps > limit:
+        raise ValueError(
+            f"--warmup-steps {args.warmup_steps} exceeds {WARMUP_MAX_EPOCHS} epochs "
+            f"({limit} steps at batch {args.batch_size}). Past that point "
+            f"ReduceLROnPlateau can already have cut the lr and warmup would raise it "
+            f"back, so the run would be on neither schedule.")
+    return LinearWarmup(optimizer, args.warmup_steps, args.lr)
+
+
 def run_epoch(model, tensors, indices, optimizer, generator, args, on_step=None,
-              objective=None):
+              objective=None, warmup=None):
     """
     One pass over `indices`. Returns (loss per scored row, steps, seconds).
     optimizer=None evaluates instead of training: no grad, no dropout, fixed order.
@@ -128,6 +192,8 @@ def run_epoch(model, tensors, indices, optimizer, generator, args, on_step=None,
             if training:
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
+                if warmup is not None:
+                    warmup.step()
                 optimizer.step()
             batch_rows = scored_rows(labels)
             total, rows, steps = total + loss.item(), rows + batch_rows, steps + 1
@@ -168,6 +234,13 @@ def fit(model, tensors, indices, optimizer, generator, args):
     """
     schedule = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, factor=PLATEAU_FACTOR, patience=PLATEAU_PATIENCE)
+    warmup = warmup_for(optimizer, args, len(indices["train"]))
+    # Warmup finishes inside epoch 0 and the epoch-end line prints the rate AFTER it has
+    # returned to base, so a warmed run and a cold one produce byte-identical logs. Print
+    # the ramp itself, or the ledger records a knob with no evidence it ever moved.
+    if warmup is not None:
+        print(f"warmup: linear over {warmup.steps} steps to lr {args.lr:.2e} "
+              f"(first step at lr {args.lr / warmup.steps:.2e})", flush=True)
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
     checkpoint = CHECKPOINT_DIR / f"{run_name(args)}.pt"
     best, best_epoch, since_best, best_reference = float("inf"), -1, 0, float("nan")
@@ -176,9 +249,13 @@ def fit(model, tensors, indices, optimizer, generator, args):
         def log_step(step, loss_per_row, epoch=epoch):
             mlflow.log_metric("train_loss_per_row", loss_per_row,
                               step=epoch * 10_000 + step)
+            if warmup is not None and not warmup.done:
+                mlflow.log_metric("warmup_lr", optimizer.param_groups[0]["lr"],
+                                  step=epoch * 10_000 + step)
 
         train_loss, steps, seconds = run_epoch(model, tensors, indices["train"], optimizer,
-                                               generator, args, on_step=log_step)
+                                               generator, args, on_step=log_step,
+                                               warmup=warmup)
         val_loss, _, _ = run_epoch(model, tensors, indices[args.eval_split], None,
                                    None, args)
         # the arm's own objective drives early stopping, but three of the six D.8 arms
@@ -194,6 +271,8 @@ def fit(model, tensors, indices, optimizer, generator, args):
                             "val_reference_epoch": reference,
                             "lr": optimizer.param_groups[0]["lr"],
                             "epoch_seconds": seconds}, step=epoch)
+        if warmup is not None and warmup.done and epoch == 0:
+            print(f"warmup: complete after {warmup.step_count} steps", flush=True)
         print(f"epoch {epoch:>3d}  train {train_loss:.5f}  val {val_loss:.5f}  "
               f"ref {reference:.5f}  lr {optimizer.param_groups[0]['lr']:.2e}  "
               f"{seconds:.0f}s ({steps} steps)")
@@ -240,7 +319,7 @@ def run(args):
                               bilinear=args.bilinear,
                               split=getattr(args, "split", False),
                               spray=not getattr(args, "no_spray", False)).to(args.device)
-    optimizer = torch.optim.AdamW(weight_decay_groups(model, WEIGHT_DECAY), lr=LEARNING_RATE)
+    optimizer = torch.optim.AdamW(weight_decay_groups(model, WEIGHT_DECAY), lr=args.lr)
 
     mlflow.set_tracking_uri(TRACKING_URI)
     mlflow.set_experiment(EXPERIMENT)
@@ -248,7 +327,8 @@ def run(args):
                                    f"{args.device}-{run_name(args)}"):
         mlflow.log_params({
             "seed": args.seed, "device": args.device, "embedding_dim": args.embedding_dim,
-            "batch_size": args.batch_size, "lr": LEARNING_RATE,
+            "batch_size": args.batch_size, "lr": args.lr,
+            "warmup_steps": args.warmup_steps,
             "weight_decay": WEIGHT_DECAY, "loss_rule": args.loss_rule,
             "bilinear": args.bilinear, "loss_weighting": args.loss_weighting,
             "contact_inverse_frequency": args.contact_inverse_frequency,
@@ -287,6 +367,11 @@ def main():
     parser.add_argument("--embedding-dim", type=int, default=DEFAULT_EMBEDDING_DIM)
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
     parser.add_argument("--max-epochs", type=int, default=MAX_EPOCHS)
+    parser.add_argument("--lr", type=float, default=LEARNING_RATE,
+                        help="Phase O knob. Held at 1e-3 for all 119 pre-O ledger runs.")
+    parser.add_argument("--warmup-steps", type=int, default=WARMUP_STEPS,
+                        help="Phase O knob. Linear lr warmup over this many optimizer "
+                             "steps; 0 reproduces every pre-O run exactly.")
     parser.add_argument("--loss-rule", choices=list(LOSS_RULES), default="log",
                         help="'rps' is the promote-only screen arm, never the default")
     parser.add_argument("--loss-weighting", choices=list(WEIGHTINGS), default="sum",

@@ -32,6 +32,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from src.analysis import provenance
+from src.model.train import LEARNING_RATE
+
 OUT_DIR = Path("results/phase_d")
 LEDGER = OUT_DIR / "sweep_log.csv"
 LOG_DIR = OUT_DIR / "logs"
@@ -40,8 +43,20 @@ STOP_FLAG = OUT_DIR / "STOP"
 # meanweight, and invfreq each train against something other than the likelihood.
 # reference is the same quantity for every arm (unweighted log loss per scored row)
 # and is the only column that may be read down.
+# lr and warmup_steps were added 2026-08-20 for Phase O. Every pre-O row is backfilled
+# with the constants those runs actually used (1e-3, no warmup) rather than left blank:
+# blank would read as "unknown", and it is not unknown -- it is the single value the
+# knob was pinned at for all 119 of them, which is itself the Phase O finding.
+# data_dir was added at the same time and for the same reason `reference` carries the
+# warning above: log loss over quality bins is only comparable within one tensor build, and
+# until now the build a run used was recoverable only from shell history. The d9/d10 rows are
+# backfilled to `phase_d5`, established 2026-08-20 by re-running d10 baseline seed 0 on each
+# candidate build: phase_d5 reproduces its epoch-0 train/val (1.05990/1.04681) exactly, and
+# the older phase_d build raises KeyError('split') because it predates the contact split, so
+# no --split run could ever have used it.
 LEDGER_FIELDS = ("stage", "config", "seed", "status", "seconds", "best_val_loss",
-                 "reference", "best_epoch", "finished_at")
+                 "reference", "best_epoch", "lr", "warmup_steps", "data_dir",
+                 "finished_at")
 
 # `d9` is the retrain carrying the three-class contact split (2026-08-08). Every arm moves
 # to it together, on purpose: the split head changes the loss, so a d8 `reference` and a d9
@@ -87,7 +102,57 @@ STAGES = {
             ("nospray", ["--split", "--no-spray"]),
             ("block", ["--split", "--data-dir", D10_NOBLOCK_DATA_DIR])],
 }
-DEFAULT_SEEDS = {"screen": 2, "d6": 5, "d8": 5, "d9": 5, "d10": 5}
+# Phase O. A 3x2 factorial on the two knobs that were never varied, on the d10 baseline
+# architecture with everything else frozen. `lr1e3` is the incumbent control and must stay
+# in the grid: without it the tuned build has nothing to be tuned RELATIVE TO, and a
+# ledger `reference` from a different stage is not comparable (see the d8->d9 note above).
+# Warmup is one epoch of optimizer steps: ceil(5.88M train rows / 8,192) = 719, which is the
+# step count every d10 log reports. Not 718 -- an off-by-one here would be invisible.
+O1_WARMUP_STEPS = "719"
+# Pinned, not inherited. This module's --data-dir DEFAULT is `phase_d`, but d10 trained on
+# `phase_d5` (different quality-bin edges, different manifest sha), and `reference` is log
+# loss over those bins. Inheriting the default would put o1 and its own d10 incumbent in
+# different units while every column still lined up, which is the failure mode the
+# d8->d9 and d9->d10 notes above exist to prevent. Pin it to the build d10 shipped on.
+O1_DATA_DIR = provenance.CANONICAL_DATA_DIR
+O1_BASE = ["--split", "--data-dir", O1_DATA_DIR]
+STAGES["o1"] = [
+    ("lr3e4", [*O1_BASE, "--lr", "3e-4"]),
+    ("lr1e3", [*O1_BASE, "--lr", "1e-3"]),
+    ("lr3e3", [*O1_BASE, "--lr", "3e-3"]),
+    ("lr3e4_warm", [*O1_BASE, "--lr", "3e-4", "--warmup-steps", O1_WARMUP_STEPS]),
+    ("lr1e3_warm", [*O1_BASE, "--lr", "1e-3", "--warmup-steps", O1_WARMUP_STEPS]),
+    ("lr3e3_warm", [*O1_BASE, "--lr", "3e-3", "--warmup-steps", O1_WARMUP_STEPS]),
+]
+
+DEFAULT_SEEDS = {"screen": 2, "d6": 5, "d8": 5, "d9": 5, "d10": 5, "o1": 2}
+
+
+# The ledger is keyed and read as text, so `1e-3` and `0.001` are two different values in a
+# column that has to be groupable. Everything written to `lr` goes through here, and the 119
+# pre-O rows were re-backfilled to match.
+def canonical_lr(value):
+    return f"{float(value):g}"
+
+
+QUARANTINED_FLAGS = ("--batch-size", "--weight-decay")
+
+
+def knobs(extra, default_data_dir):
+    """The Phase O knobs this config actually ran at, for the ledger.
+
+    argparse takes the last occurrence, and `launch` puts `extra` after the sweep-level
+    --data-dir, so a stage tuple's own --data-dir wins. Resolve it the same way here or the
+    ledger records a build the run did not use."""
+    lr, warmup, data_dir = canonical_lr(LEARNING_RATE), "0", default_data_dir
+    for flag, value in zip(extra, extra[1:]):
+        if flag == "--lr":
+            lr = canonical_lr(value)
+        elif flag == "--warmup-steps":
+            warmup = value
+        elif flag == "--data-dir":
+            data_dir = value
+    return lr, warmup, data_dir
 FIRST_RUN_ESTIMATE_SECONDS = 45 * 60  # only used before any run has been timed
 
 
@@ -103,8 +168,19 @@ def read_ledger():
 
 
 def append_ledger(row):
+    """Appending a dict to a CSV trusts the header on disk to match LEDGER_FIELDS. When a
+    column is added, an older ledger silently takes the new row's values in the new order
+    under the old names -- every column after the insertion point shifts by one and nothing
+    raises. Check before writing, not after."""
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     new = not LEDGER.exists()
+    if not new:
+        with LEDGER.open() as handle:
+            header = tuple(next(csv.reader(handle), ()))
+        if header != LEDGER_FIELDS:
+            raise ValueError(
+                f"{LEDGER} header does not match LEDGER_FIELDS. Appending would shift "
+                f"columns silently.\n  on disk: {header}\n  expected: {LEDGER_FIELDS}")
     with LEDGER.open("a", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=LEDGER_FIELDS)
         if new:
@@ -140,7 +216,9 @@ def launch(stage, name, extra, seed, args):
     return status, seconds, best_loss, best_epoch, reference
 
 
-def main():
+def main_argv(argv=None):
+    """Argument parsing and the quarantine check, split out so both are testable without
+    launching a training run."""
     parser = argparse.ArgumentParser(description="Run a Phase D stage overnight.")
     parser.add_argument("--stage", choices=sorted(STAGES), required=True)
     parser.add_argument("--hours", type=float, default=9.0,
@@ -151,8 +229,23 @@ def main():
     parser.add_argument("--train-args", nargs=argparse.REMAINDER, default=[],
                         help="everything after this is passed straight to train.py")
     parser.add_argument("--dry-run", action="store_true", help="print the queue and exit")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
+    # Phase O quarantines batch size and weight decay: they are one setting (the
+    # decay-to-gradient ratio), the ratio is 23.9:1 at the 10th exposure percentile, and
+    # moving either mid-phase would change what every earlier o1 arm's `reference` means.
+    # train.py still exposes --batch-size, and --train-args is forwarded verbatim, so the
+    # quarantine is only real if it is enforced here. Batch size also silently rescales
+    # `warmup_for`'s per-epoch cap, so a change would move a knob Phase O IS tuning.
+    smuggled = [f for f in QUARANTINED_FLAGS if f in args.train_args]
+    if smuggled and args.stage.startswith("o"):
+        parser.error(f"{', '.join(smuggled)} is quarantined for Phase O and is not recorded "
+                     f"in the ledger. Unpin it in train.py and open a new stage instead.")
+    return args
+
+
+def main(argv=None):
+    args = main_argv(argv)
     seeds = args.seeds or DEFAULT_SEEDS[args.stage]
     done, history = read_ledger()
     pending = [item for item in queue(args.stage, seeds)
@@ -184,9 +277,11 @@ def main():
         print(f"[{datetime.now():%H:%M}] {name} seed {seed} ...", flush=True)
         status, seconds, best_loss, best_epoch, reference = launch(
             args.stage, name, extra, seed, args)
+        lr, warmup, data_dir = knobs([*args.train_args, *extra], args.data_dir)
         append_ledger({"stage": args.stage, "config": name, "seed": seed, "status": status,
                        "seconds": round(seconds, 1), "best_val_loss": best_loss,
                        "reference": reference, "best_epoch": best_epoch,
+                       "lr": lr, "warmup_steps": warmup, "data_dir": data_dir,
                        "finished_at": f"{datetime.now():%Y-%m-%d %H:%M}"})
         print(f"    {status} in {seconds / 60:.1f} min, ref {reference or '-'}")
         if status == "ok":

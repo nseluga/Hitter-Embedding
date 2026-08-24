@@ -1,0 +1,34 @@
+### phase_d
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/nateseluga/hitter-embedding/src/model/train.py", line 404, in <module>
+    main()
+    ~~~~^^
+  File "/Users/nateseluga/hitter-embedding/src/model/train.py", line 400, in main
+    run(args)
+    ~~~^^^^^^
+  File "/Users/nateseluga/hitter-embedding/src/model/train.py", line 341, in run
+    best, best_epoch, reference, checkpoint = fit(model, tensors, indices, optimizer,
+                                              ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                  generator, args)
+                                                  ^^^^^^^^^^^^^^^^
+  File "/Users/nateseluga/hitter-embedding/src/model/train.py", line 247, in fit
+    train_loss, steps, seconds = run_epoch(model, tensors, indices["train"], optimizer,
+                                 ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                           generator, args, on_step=log_step,
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                           warmup=warmup)
+                                           ^^^^^^^^^^^^^^
+  File "/Users/nateseluga/hitter-embedding/src/model/train.py", line 190, in run_epoch
+    loss, _ = factorized_loss(model(hitter, context, labels["ev"], labels["la"]),
+              ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              labels, **objective)
+                              ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/nateseluga/hitter-embedding/src/model/v1.py", line 242, in factorized_loss
+    parts[name] = _quality_loss(outputs[name], labels[name], masks[name], rule)
+                                               ~~~~~~^^^^^^
+KeyError: 'split'
+### phase_d5
+epoch   0  train 1.05990  val 1.04681  ref 1.04681  lr 1.00e-03  41s (719 steps)
+best val loss 1.04681 at epoch 0; reference 1.04681; checkpoint results/checkpoints/probe_phase_d5_s0.pt

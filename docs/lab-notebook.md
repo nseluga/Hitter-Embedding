@@ -170,3 +170,86 @@ appends to it every session.
   - Still owed from D.5: decision-log entries in Nate's words for the bat-tracking exclusion and for C.2 inheriting frozen rule #1's empirical-Bayes role.
   - **The Book p.157 remains UNVERIFIED and decision-bearing** (`src/analysis/c_report.py:45` records that we have no copy). This blocks the write-up, not the code.
 - **Next:** re-execute notebooks 04 and 05 against `results/phase_f`, then Phase O. Notebook 04 gets refreshed after the O refit regardless.
+
+## 2026-08-20 — the project stops trying to win and starts measuring the ceiling
+- **Did:** restructured the remaining arc in the architecture plan — Phase O narrowed from arm selection to hyperparameter tuning, a new Phase M added as the measurement phase, order fixed at O → M → V → 2025 run → write-up. Built Phase O: `--lr` and `--warmup-steps` on `train.py` (both were module constants), a `LinearWarmup` that stands down permanently once done and a `warmup_for` guard that refuses a warmup still running when `ReduceLROnPlateau` can first fire, an `o1` sweep stage (3 learning rates × {no warmup, one epoch}, pinned to the build D.10 trained on), and `src/analysis/o1_select.py` whose promotion rule is fixed in code before any `o1` run exists. `sweep_log.csv` gains `lr` and `warmup_steps`, backfilled. 24 new tests, suite 378 → 399 → 402. One two-epoch smoke run confirms warmup end to end. `docs/phase-o-spec.md`, five decision-log entries, and a gate-outcome note in the manifest.
+- **Why:** the session opened on whether the platoon goal is feasible at all and whether the project should become embedding-building with platoon left to a frontend. It should not: that converts a pre-registered null into an unstated one and leaves nothing falsifiable. The gate failed against a target where noise is 86.6% of observed platoon-differential variance and the maximum achievable rank correlation is 0.356 — so the honest headline is the ceiling, with the failed gate reported prominently as its setup. Phase O exists because a null on an untuned model is a weaker null, and "the learning rate was 1e-3 for all 119 runs and was never varied" does not survive review.
+- **Found:**
+  - The displacement artifact is a block inside `d5_level_attribution.json`, not its own file. Every embedding row initialises at norm 0.057 and travels **outward**; the rarest quintile ends at mean norm 0.74–1.00 against the most-exposed quintile's 0.52–0.61, while its projection on the wOBA-raising axis runs −0.16 to −0.22 against +0.06 to +0.07. Consistent in all five seeds. Nothing is being pulled toward the origin.
+  - That **rules out weight decay and batch size as the cause.** At the 10th percentile of exposure the decay-to-gradient ratio is 23.9:1, so a binding decay would crush the rarest rows *into* the origin. They are the furthest out, so decay is being overwhelmed.
+  - `o1` had to pin `provenance.CANONICAL_DATA_DIR` explicitly. The sweep's `--data-dir` default is `phase_d` but D.10 trained on `phase_d5`, and the two builds have different quality-bin edges and different manifest shas — so inheriting the default would have put `o1` and its own incumbent in different units with every column still lining up.
+- **Learned:**
+  - **A metric can be barred for ranking and legitimate for detection.** Held-out likelihood correlates 0.000 with claim 1 across seven converged arms, which says it cannot *rank* good models. It can still detect an *undertrained* one, because an undertrained run is worse on its own objective. Conflating the two nearly cost the project its tuning phase.
+  - **A selection axis and a tuning knob are different things,** and the guard against the first is not a reason to skip the second.
+  - **Weight decay's strength is not the same question as whether it binds.** The decay-to-gradient ratio said the rarest rows should be the most shrunk; the artifact says they are the least. The ratio was computed correctly and still pointed the wrong way, because it measures decay's opportunity, not its outcome against AdamW's per-coordinate normalisation.
+  - **A screen that selects among many challengers against one incumbent has to say so in its own artifact.** The verdict carries `requires_confirmation` rather than leaving the five-seed re-run to a line in the spec.
+- **Open:**
+  - The strikeout residual still has two unowned suspects — the early-count swing rate and E.10's count-chain independence assumption.
+  - No low-exposure platoon ceiling exists: E.15 stratified by stand, not by exposure, and the low stratum is the one the project is about.
+  - C.2 and C.3 have never been scored on the platoon-differential cut, so the ceiling table has no incumbent in it. This is a prerequisite to the reframe, not an item inside it.
+  - E.15 Part 3's noise-corrected LHB within-stand variance is negative (−3.75e-05), so the L/R asymmetry cannot be presented as a finding and the by-stand fractions stay descriptive.
+  - **The Book p.157 remains UNVERIFIED and decision-bearing.** Still blocks the write-up.
+- **Next:** run `o1` (twelve runs, ~4.5 h, one overnight), then `o1_select`, then Phase M — C.2/C.3 differential gap first, since the reframe is not final without it.
+
+## 2026-08-20 (later) — the review found three real things, one of which the review itself was wrong about
+
+**Did.** Implemented the Phase O steps, then ran a review over them and worked its
+findings. Three Critical, six Important, five Minor. Fixed twelve, disagreed with one,
+converted one into a documentation obligation rather than a code change.
+
+**Why.** "Implement, test, and review" was the instruction, and a review whose findings you
+read and then don't act on is a review you did for the feeling of having done one.
+
+**Found.**
+
+*The tensor build.* The single most expensive finding, and it turned out fine — but only
+because it was checked. The `o1` stage pins `phase_d5`, on the strength of a source comment
+saying d10 ran there. `sweep.py`'s own `--data-dir` default is `phase_d`, and d10's stage
+tuples pin nothing, so the comment was the only evidence. Two builds, different quality-bin
+edges, and `reference` is log loss over those bins — wrong answer means the guard fires
+after a full night of compute and the sweep returns `guard_failed`. Settled it by
+reproduction: `phase_d5` reproduces d10 baseline seed 0's epoch-0 losses to the digit
+(1.05990 / 1.04681), and `phase_d` can't even run the command — `KeyError('split')`,
+because that build predates the three-class contact split. Every d10 arm used `--split`.
+So the pin was right, and it is now a recorded fact in a `data_dir` ledger column rather
+than a comment.
+
+*The firewall test was theatre.* `test_selector_cannot_see_claim1` grepped the module's
+source text, and the reviewer showed it still passed with `from src.analysis.claim1_eval
+import evaluate` inserted at the top — one clause was already satisfied by the docstring's
+own mention of `claim1_eval`, and the other only matched a spelling nobody writes. Replaced
+it with a behavioural check: import the module in a clean interpreter, look at
+`sys.modules`. It failed immediately — and not on the reviewer's hypothetical, but on a
+real leak *I* had introduced four edits earlier, when I imported `sweep.STAGES` to get the
+expected arm list and dragged `claim1_eval` in transitively. Fixed by declaring the grid in
+`o1_select` itself, with a test that keeps the two copies in step.
+
+*Two spellings of one number.* `knobs()` fell back to `str(LEARNING_RATE)` — `'0.001'` —
+into a column whose 119 rows said `'1e-3'`. Not cosmetic: the column is read as text and
+grouped on. One `canonical_lr`, re-backfilled.
+
+*Where I disagreed.* The reviewer's third Critical was that Phase O tunes on 2024 while
+claim 1 is scored on 2024, so the headline is post-selection. The premise is right and the
+framing isn't: 2024 is the *frozen selection season* and 2025 is the test season, so every
+Phase D ablation already selected on 2024 and Phase O adds no new leak. What it does add is
+an obligation — Phase M's 2024 numbers, computed on a build tuned on 2024, are descriptive
+and must be labelled so. That went into the decision log and the spec rather than into a
+change to Phase O. The reviewer was right, though, that my `r = 0.000` argument was bad:
+seven points give it a ±0.75 interval, so it establishes nothing and I had leaned on it as
+if it did. The licence is the detection-vs-ranking distinction, which never needed it.
+
+**Learned.** A test that asserts on source text is asserting on a proxy, and the proxy and
+the property drift apart silently — the behavioural version caught a live regression on its
+first run, which the text version had been quietly failing to catch. Also: a comment
+explaining which artifact a run used is not provenance. It took one six-minute reproduction
+to convert it into evidence, against a downside of one wasted night.
+
+**Open.**
+- The warmup grid is 719 steps; Ma & Yarats' default is ≈2/(1−β₂) = 2,000 at β₂ = 0.999.
+  This grid is on the short side of the literature default. Logged as a limitation.
+- `data_dir` is blank for `screen`, `d6` and `d8`. Recoverable the same way if any of those
+  numbers is ever read down a column with a d9/d10 one.
+
+**Next.** Run the o1 sweep (~4.5 h, 12 runs at two seeds), then `o1_select`. Then Phase M,
+starting with the C.2/C.3 differential gap, which is the prerequisite for everything else
+in that phase.
