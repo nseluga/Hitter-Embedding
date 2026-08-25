@@ -1,0 +1,17 @@
+warmup: linear over 719 steps to lr 3.00e-03 (first step at lr 4.17e-06)
+warmup: complete after 719 steps
+epoch   0  train 1.07807  val 1.04475  ref 1.04475  lr 3.00e-03  52s (719 steps)
+epoch   1  train 1.01297  val 1.03451  ref 1.03451  lr 3.00e-03  66s (719 steps)
+epoch   2  train 1.00647  val 1.03120  ref 1.03120  lr 3.00e-03  53s (719 steps)
+epoch   3  train 1.00387  val 1.03126  ref 1.03126  lr 3.00e-03  54s (719 steps)
+epoch   4  train 1.00221  val 1.03051  ref 1.03051  lr 3.00e-03  121s (719 steps)
+epoch   5  train 1.00118  val 1.02956  ref 1.02956  lr 3.00e-03  71s (719 steps)
+epoch   6  train 1.00024  val 1.02998  ref 1.02998  lr 3.00e-03  59s (719 steps)
+epoch   7  train 0.99953  val 1.03089  ref 1.03089  lr 9.00e-04  30s (719 steps)
+epoch   8  train 0.99447  val 1.02688  ref 1.02688  lr 9.00e-04  33s (719 steps)
+epoch   9  train 0.99355  val 1.02629  ref 1.02629  lr 9.00e-04  34s (719 steps)
+epoch  10  train 0.99314  val 1.02645  ref 1.02645  lr 9.00e-04  34s (719 steps)
+epoch  11  train 0.99278  val 1.02690  ref 1.02690  lr 2.70e-04  36s (719 steps)
+epoch  12  train 0.99062  val 1.02678  ref 1.02678  lr 2.70e-04  39s (719 steps)
+early stop: 3 epochs without improvement
+best val loss 1.02629 at epoch 9; reference 1.02629; checkpoint results/checkpoints/o1_lr3e3_warm_s0.pt

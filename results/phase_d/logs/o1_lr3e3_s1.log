@@ -1,0 +1,15 @@
+epoch   0  train 1.03800  val 1.03718  ref 1.03718  lr 3.00e-03  32s (719 steps)
+epoch   1  train 1.00940  val 1.03277  ref 1.03277  lr 3.00e-03  30s (719 steps)
+epoch   2  train 1.00563  val 1.03063  ref 1.03063  lr 3.00e-03  36s (719 steps)
+epoch   3  train 1.00353  val 1.02946  ref 1.02946  lr 3.00e-03  37s (719 steps)
+epoch   4  train 1.00208  val 1.03022  ref 1.03022  lr 3.00e-03  29s (719 steps)
+epoch   5  train 1.00123  val 1.03021  ref 1.03021  lr 9.00e-04  32s (719 steps)
+epoch   6  train 0.99651  val 1.02617  ref 1.02617  lr 9.00e-04  30s (719 steps)
+epoch   7  train 0.99568  val 1.02639  ref 1.02639  lr 9.00e-04  41s (719 steps)
+epoch   8  train 0.99533  val 1.02686  ref 1.02686  lr 2.70e-04  39s (719 steps)
+epoch   9  train 0.99342  val 1.02603  ref 1.02603  lr 2.70e-04  39s (719 steps)
+epoch  10  train 0.99310  val 1.02648  ref 1.02648  lr 2.70e-04  69s (719 steps)
+epoch  11  train 0.99299  val 1.02655  ref 1.02655  lr 8.10e-05  40s (719 steps)
+epoch  12  train 0.99227  val 1.02616  ref 1.02616  lr 8.10e-05  55s (719 steps)
+early stop: 3 epochs without improvement
+best val loss 1.02603 at epoch 9; reference 1.02603; checkpoint results/checkpoints/o1_lr3e3_s1.pt

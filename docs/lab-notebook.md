@@ -253,3 +253,49 @@ to convert it into evidence, against a downside of one wasted night.
 **Next.** Run the o1 sweep (~4.5 h, 12 runs at two seeds), then `o1_select`. Then Phase M,
 starting with the C.2/C.3 differential gap, which is the prerequisite for everything else
 in that phase.
+
+## 2026-08-25 — the tuning phase returns a null, and the measurement phase inherits an unchanged build
+
+**Did.** Ran the o1 sweep — the 3×2 learning-rate-by-warmup factorial at two seeds,
+twelve runs, about three hours on `data/processed/phase_d5` — then the pre-registered
+selector. Verdict `incumbent_stands`. Wrote the β₂ and Phase O outcome entries into the
+decision log.
+
+**Why.** Phase O exists to remove one specific reviewer answer: that the learning rate was
+held at 1e-3 for all 119 runs in the ledger and so is evidence for nothing. A null on a
+tuned model is a stronger null than the same null on an untuned one, and that is the only
+thing Phase O was ever buying.
+
+**Found.** The untuned setting was already best. `lr1e3` wins at margin 0.0; the best
+challenger `lr1e3_warm` reaches +0.8 SE against a 2 SE bar, and the other four arms come
+in at −1.5, −2.7, −10.3 and −10.5 SE. The grid brackets the optimum rather than missing
+it. Warmup helped directionally at both higher learning rates and never cleared the bar,
+and `lr1e3_warm`'s own two seeds spread 1.27e-4 — wider than the 8.5e-5 margin they were
+supposed to support, which is the thin basis the rule correctly refused.
+
+That answers O.2 without new computation. The pre-registered prediction was that the
+rarest exposure quintile's embedding norm would fall toward the most-exposed quintile's
+on the tuned build. The tuned build is the D.10 build, `gradient_b`'s five per-seed
+measurements read the `d10_baseline` checkpoints, so the exposure–norm gradient is intact
+by construction: learning rate and warmup are not the lever on it. The plan says a null
+there is reported, not retuned around, so it is reported. It also means the 2026-08-20
+quarantine entry's revisit condition has now fired, pointing at batch size and weight
+decay under the terms that entry already fixed.
+
+One trap worth naming before Phase M touches anything: the `o1` `lr1e3` arm is a fresh
+two-seed re-run, not the D.10 checkpoints. The frozen uncertainty decision is a five-seed
+deep ensemble, so Phase M's build is `d10_baseline_s0..s4` and the two o1 checkpoints are
+a screening artifact that must never become the build.
+
+**Learned.** A pre-registered prediction can be discharged by provenance rather than by a
+run — but only if you check which artifacts the earlier measurement actually read. Here
+the answer turned on `d5_level.py` requiring a per-seed checkpoint *and* a per-seed
+prediction CSV beside it, and only `d10_baseline` having all five of each. Also: a
+promotion rule fixed in code before the first run is what makes a +0.8 SE result readable
+as a null instead of as a near-miss worth one more grid.
+
+**Next.** `/research-review` on Phase O — the sweep, the selector run, and the reading of
+the verdict, none of which the earlier implementation review covered. Then Phase M item 1,
+the C.2/C.3 differential gap, which is the declared prerequisite for the ceiling table.
+Three `unverified` references are still open and one of them, The Book p.157, is
+decision-bearing and blocks the write-up.

@@ -118,3 +118,15 @@ d10,block,1,ok,1062.3,1.02761,1.02761,20,0.001,0,data/processed/phase_d5_noblock
 d10,block,2,ok,615.9,1.02749,1.02749,12,0.001,0,data/processed/phase_d5_noblock,2026-08-14 19:06
 d10,block,3,ok,747.7,1.02742,1.02742,14,0.001,0,data/processed/phase_d5_noblock,2026-08-14 19:19
 d10,block,4,ok,776.6,1.02765,1.02765,13,0.001,0,data/processed/phase_d5_noblock,2026-08-14 19:32
+o1,lr3e4,0,ok,1085.7,1.02743,1.02743,19,0.0003,0,data/processed/phase_d5,2026-08-24 19:41
+o1,lr3e4,1,ok,1542.4,1.02641,1.02641,27,0.0003,0,data/processed/phase_d5,2026-08-24 20:07
+o1,lr1e3,0,ok,1387.9,1.02584,1.02584,17,0.001,0,data/processed/phase_d5,2026-08-24 20:30
+o1,lr1e3,1,ok,990.1,1.02585,1.02585,17,0.001,0,data/processed/phase_d5,2026-08-24 20:46
+o1,lr3e3,0,ok,465.8,1.02623,1.02623,8,0.003,0,data/processed/phase_d5,2026-08-24 20:54
+o1,lr3e3,1,ok,534.1,1.02603,1.02603,9,0.003,0,data/processed/phase_d5,2026-08-24 21:03
+o1,lr3e4_warm,0,ok,794.3,1.02731,1.02731,19,0.0003,719,data/processed/phase_d5,2026-08-24 21:16
+o1,lr3e4_warm,1,ok,1185.1,1.02657,1.02657,27,0.0003,719,data/processed/phase_d5,2026-08-24 21:36
+o1,lr1e3_warm,0,ok,1203.9,1.02567,1.02567,17,0.001,719,data/processed/phase_d5,2026-08-24 21:56
+o1,lr1e3_warm,1,ok,1258.6,1.02585,1.02585,18,0.001,719,data/processed/phase_d5,2026-08-24 22:17
+o1,lr3e3_warm,0,ok,705.8,1.02629,1.02629,9,0.003,719,data/processed/phase_d5,2026-08-24 22:29
+o1,lr3e3_warm,1,ok,653.0,1.02571,1.02571,9,0.003,719,data/processed/phase_d5,2026-08-24 22:40
