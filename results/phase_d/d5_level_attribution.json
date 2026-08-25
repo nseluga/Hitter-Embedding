@@ -105,6 +105,14 @@
         "excludes_zero": true,
         "spearman": 0.6294819818383419
       },
+      "abs_projection": {
+        "mean": 0.15034484395905975,
+        "slope_per_1000_pitches": -0.007386838825196027,
+        "ci_low": -0.008871196945123854,
+        "ci_high": -0.006097380430499465,
+        "excludes_zero": true,
+        "spearman": -0.3730438864950709
+      },
       "by_exposure_quintile": [
         {
           "quintile": 1,
@@ -143,7 +151,7 @@
         }
       ],
       "shrinkage_in_norm": false,
-      "shrinkage_in_woba_direction": true
+      "shrinkage_in_woba_direction": false
     },
     "seed_1": {
       "n_trained_rows": 1762,
@@ -166,6 +174,14 @@
         "ci_high": 0.02030178448364991,
         "excludes_zero": true,
         "spearman": 0.5850111417560905
+      },
+      "abs_projection": {
+        "mean": 0.134978284776442,
+        "slope_per_1000_pitches": -0.006393765840965933,
+        "ci_low": -0.007677123667153174,
+        "ci_high": -0.005260813197488983,
+        "excludes_zero": true,
+        "spearman": -0.3391784812469945
       },
       "by_exposure_quintile": [
         {
@@ -205,7 +221,7 @@
         }
       ],
       "shrinkage_in_norm": false,
-      "shrinkage_in_woba_direction": true
+      "shrinkage_in_woba_direction": false
     },
     "seed_2": {
       "n_trained_rows": 1762,
@@ -228,6 +244,14 @@
         "ci_high": 0.022810348401684475,
         "excludes_zero": true,
         "spearman": 0.6024437323641755
+      },
+      "abs_projection": {
+        "mean": 0.1497848552551331,
+        "slope_per_1000_pitches": -0.0070286984049909495,
+        "ci_low": -0.00844288016658281,
+        "ci_high": -0.005735215143371575,
+        "excludes_zero": true,
+        "spearman": -0.3461269079374785
       },
       "by_exposure_quintile": [
         {
@@ -267,7 +291,7 @@
         }
       ],
       "shrinkage_in_norm": false,
-      "shrinkage_in_woba_direction": true
+      "shrinkage_in_woba_direction": false
     },
     "seed_3": {
       "n_trained_rows": 1762,
@@ -290,6 +314,14 @@
         "ci_high": 0.021185959337051037,
         "excludes_zero": true,
         "spearman": 0.5938363906965926
+      },
+      "abs_projection": {
+        "mean": 0.1406287880110517,
+        "slope_per_1000_pitches": -0.0065251288769868875,
+        "ci_low": -0.007847504466592154,
+        "ci_high": -0.005314581091033229,
+        "excludes_zero": true,
+        "spearman": -0.3483380023045095
       },
       "by_exposure_quintile": [
         {
@@ -329,7 +361,7 @@
         }
       ],
       "shrinkage_in_norm": false,
-      "shrinkage_in_woba_direction": true
+      "shrinkage_in_woba_direction": false
     },
     "seed_4": {
       "n_trained_rows": 1762,
@@ -352,6 +384,14 @@
         "ci_high": 0.01947562522952498,
         "excludes_zero": true,
         "spearman": 0.5862999230141623
+      },
+      "abs_projection": {
+        "mean": 0.12793921997705435,
+        "slope_per_1000_pitches": -0.005015597472774986,
+        "ci_low": -0.006184964063599881,
+        "ci_high": -0.003972035979958833,
+        "excludes_zero": true,
+        "spearman": -0.29749235006019914
       },
       "by_exposure_quintile": [
         {
@@ -391,7 +431,7 @@
         }
       ],
       "shrinkage_in_norm": false,
-      "shrinkage_in_woba_direction": true
+      "shrinkage_in_woba_direction": false
     }
   }
 }

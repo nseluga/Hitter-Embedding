@@ -329,7 +329,8 @@ def gradient_b(embedding, exposure, pred_by_row, pa_by_row, n_boot=2000, seed=0,
            "direction_r_squared": r_squared,
            "median_train_pitches": float(np.median(exposure)),
            "init_norm_reference": float(EMBEDDING_INIT_STD * np.sqrt(embedding.shape[1]))}
-    for name, y in (("norm", norm), ("projection", projection)):
+    for name, y in (("norm", norm), ("projection", projection),
+                    ("abs_projection", np.abs(projection))):
         point = _ols(design, y, ones)
         draws = np.array([_ols(design[pick], y[pick], ones)[1] for pick in
                           (rng.integers(0, len(y), len(y)) for _ in range(n_boot))])
@@ -351,8 +352,12 @@ def gradient_b(embedding, exposure, pred_by_row, pa_by_row, n_boot=2000, seed=0,
     # origin, which is the shrinkage §5 predicts. Negative is anti-shrinkage.
     out["shrinkage_in_norm"] = bool(out["norm"]["excludes_zero"]
                                     and out["norm"]["slope_per_1000_pitches"] > 0)
-    out["shrinkage_in_woba_direction"] = bool(out["projection"]["excludes_zero"]
-                                              and out["projection"]["slope_per_1000_pitches"] > 0)
+    # the wOBA flag reads |projection|, NOT the signed projection. The signed slope is positive
+    # whenever rare rows sit on the negative side of the axis, which is the anti-shrinkage case
+    # -- so the earlier signed test reported shrinkage exactly when there was none. Distance
+    # from zero is the quantity "closer to the origin" was ever about.
+    out["shrinkage_in_woba_direction"] = bool(out["abs_projection"]["excludes_zero"]
+                                              and out["abs_projection"]["slope_per_1000_pitches"] > 0)
     return out
 
 
@@ -414,6 +419,7 @@ def _self_check():
                         n_boot=200)
     assert result["n_trained_rows"] == n_rows - 1, "row 0 or a zero-exposure row got through"
     assert result["shrinkage_in_norm"], result["norm"]
+    assert result["shrinkage_in_woba_direction"], result["abs_projection"]
     assert result["direction_r_squared"] > 0.99, result["direction_r_squared"]
     recovered, _ = woba_direction(embedding[1:], pred[1:], np.full(n_rows - 1, 400.0))
     assert abs(recovered @ truth) > 0.99, recovered
@@ -424,6 +430,7 @@ def _self_check():
     anti = gradient_b(flipped, exposure, pred, np.where(np.isfinite(pred), 400.0, 0.0),
                       n_boot=200)
     assert not anti["shrinkage_in_norm"], anti["norm"]
+    assert not anti["shrinkage_in_woba_direction"], anti["abs_projection"]
     print("self-check passed")
 
 

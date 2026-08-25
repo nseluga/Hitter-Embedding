@@ -1,0 +1,147 @@
+{
+  "arm": "o1_lr1e3_warm",
+  "n_seeds": 2,
+  "note": "n=2, descriptive only, never a promotion criterion",
+  "seeds": {
+    "seed_0": {
+      "n_trained_rows": 1762,
+      "n_scored_rows": 541,
+      "direction_r_squared": 0.9315682332367687,
+      "median_train_pitches": 1244.0,
+      "init_norm_reference": 0.05656854249492381,
+      "norm": {
+        "mean": 0.6723610825896567,
+        "slope_per_1000_pitches": -0.016444314738212815,
+        "ci_low": -0.018368924758784856,
+        "ci_high": -0.014650304084330032,
+        "excludes_zero": true,
+        "spearman": -0.6168980068342446
+      },
+      "projection": {
+        "mean": -0.07847011258658386,
+        "slope_per_1000_pitches": 0.01937924479390891,
+        "ci_low": 0.018215453579267325,
+        "ci_high": 0.020735788700516018,
+        "excludes_zero": true,
+        "spearman": 0.619184114863037
+      },
+      "abs_projection": {
+        "mean": 0.13384520194318517,
+        "slope_per_1000_pitches": -0.0063678385444467,
+        "ci_low": -0.007682828378164674,
+        "ci_high": -0.005234502581359301,
+        "excludes_zero": true,
+        "spearman": -0.3601982148065419
+      },
+      "by_exposure_quintile": [
+        {
+          "quintile": 1,
+          "n": 353,
+          "median_train_pitches": 30.0,
+          "mean_norm": 0.9154567762705601,
+          "mean_projection": -0.19256659344009136
+        },
+        {
+          "quintile": 2,
+          "n": 352,
+          "median_train_pitches": 348.0,
+          "mean_norm": 0.7270740101828429,
+          "mean_projection": -0.18100841726567352
+        },
+        {
+          "quintile": 3,
+          "n": 352,
+          "median_train_pitches": 1244.0,
+          "mean_norm": 0.5947912085924248,
+          "mean_projection": -0.06980762999181638
+        },
+        {
+          "quintile": 4,
+          "n": 352,
+          "median_train_pitches": 3701.0,
+          "mean_norm": 0.5573289146925975,
+          "mean_projection": -0.012523628275083592
+        },
+        {
+          "quintile": 5,
+          "n": 353,
+          "median_train_pitches": 10544.0,
+          "mean_norm": 0.5667638824894581,
+          "mean_projection": 0.06347658610271213
+        }
+      ],
+      "shrinkage_in_norm": false,
+      "shrinkage_in_woba_direction": false
+    },
+    "seed_1": {
+      "n_trained_rows": 1762,
+      "n_scored_rows": 541,
+      "direction_r_squared": 0.9360275821197812,
+      "median_train_pitches": 1244.0,
+      "init_norm_reference": 0.05656854249492381,
+      "norm": {
+        "mean": 0.5889107412856486,
+        "slope_per_1000_pitches": -0.012361501718375204,
+        "ci_low": -0.013956286318103774,
+        "ci_high": -0.010855189085088717,
+        "excludes_zero": true,
+        "spearman": -0.5569826158653063
+      },
+      "projection": {
+        "mean": -0.0699362415523914,
+        "slope_per_1000_pitches": 0.017324915408467884,
+        "ci_low": 0.01627174326576224,
+        "ci_high": 0.018535638749916417,
+        "excludes_zero": true,
+        "spearman": 0.6077575660443048
+      },
+      "abs_projection": {
+        "mean": 0.12126656602164626,
+        "slope_per_1000_pitches": -0.005587293916606198,
+        "ci_low": -0.006779243714524952,
+        "ci_high": -0.0045714167313223725,
+        "excludes_zero": true,
+        "spearman": -0.3432212626553181
+      },
+      "by_exposure_quintile": [
+        {
+          "quintile": 1,
+          "n": 353,
+          "median_train_pitches": 30.0,
+          "mean_norm": 0.766619974018633,
+          "mean_projection": -0.16412326227791088
+        },
+        {
+          "quintile": 2,
+          "n": 352,
+          "median_train_pitches": 348.0,
+          "mean_norm": 0.6445061399307878,
+          "mean_projection": -0.16849351717611782
+        },
+        {
+          "quintile": 3,
+          "n": 352,
+          "median_train_pitches": 1244.0,
+          "mean_norm": 0.5254281038585279,
+          "mean_projection": -0.0637486791806099
+        },
+        {
+          "quintile": 4,
+          "n": 352,
+          "median_train_pitches": 3701.0,
+          "mean_norm": 0.4964334039226497,
+          "mean_projection": -0.009876340257295758
+        },
+        {
+          "quintile": 5,
+          "n": 353,
+          "median_train_pitches": 10544.0,
+          "mean_norm": 0.511281765785052,
+          "mean_projection": 0.05646906191763499
+        }
+      ],
+      "shrinkage_in_norm": false,
+      "shrinkage_in_woba_direction": false
+    }
+  }
+}

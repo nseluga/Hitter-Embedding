@@ -268,8 +268,7 @@ thing Phase O was ever buying.
 
 **Found.** The untuned setting was already best. `lr1e3` wins at margin 0.0; the best
 challenger `lr1e3_warm` reaches +0.8 SE against a 2 SE bar, and the other four arms come
-in at −1.5, −2.7, −10.3 and −10.5 SE. The grid brackets the optimum rather than missing
-it. Warmup helped directionally at both higher learning rates and never cleared the bar,
+in at −1.5, −2.7, −10.3 and −10.5 SE. No arm in the swept 10× range beat the incumbent. Warmup helped directionally at both higher learning rates and never cleared the bar,
 and `lr1e3_warm`'s own two seeds spread 1.27e-4 — wider than the 8.5e-5 margin they were
 supposed to support, which is the thin basis the rule correctly refused.
 
@@ -277,7 +276,7 @@ That answers O.2 without new computation. The pre-registered prediction was that
 rarest exposure quintile's embedding norm would fall toward the most-exposed quintile's
 on the tuned build. The tuned build is the D.10 build, `gradient_b`'s five per-seed
 measurements read the `d10_baseline` checkpoints, so the exposure–norm gradient is intact
-by construction: learning rate and warmup are not the lever on it. The plan says a null
+and O.2 is measured separately rather than argued from provenance. The plan says a null
 there is reported, not retuned around, so it is reported. It also means the 2026-08-20
 quarantine entry's revisit condition has now fired, pointing at batch size and weight
 decay under the terms that entry already fixed.
@@ -287,15 +286,45 @@ two-seed re-run, not the D.10 checkpoints. The frozen uncertainty decision is a 
 deep ensemble, so Phase M's build is `d10_baseline_s0..s4` and the two o1 checkpoints are
 a screening artifact that must never become the build.
 
-**Learned.** A pre-registered prediction can be discharged by provenance rather than by a
-run — but only if you check which artifacts the earlier measurement actually read. Here
-the answer turned on `d5_level.py` requiring a per-seed checkpoint *and* a per-seed
-prediction CSV beside it, and only `d10_baseline` having all five of each. Also: a
-promotion rule fixed in code before the first run is what makes a +0.8 SE result readable
-as a null instead of as a near-miss worth one more grid.
+**Learned.** A promotion rule fixed in code before the first run is what makes a +0.8 SE
+result readable as a null instead of as a near-miss worth one more grid. And a noise floor
+taken from the quietest arm understates run-to-run spread by roughly 4× here, so the SE
+column reads generously — it happens not to matter at these margins.
 
 **Next.** `/research-review` on Phase O — the sweep, the selector run, and the reading of
 the verdict, none of which the earlier implementation review covered. Then Phase M item 1,
 the C.2/C.3 differential gap, which is the declared prerequisite for the ceiling table.
 Three `unverified` references are still open and one of them, The Book p.157, is
 decision-bearing and blocks the write-up.
+
+## 2026-08-25 (later) — warmup rescales the embedding space without touching the exposure gradient
+
+**Did.** Ran O.2 as the spec wrote it: two composition passes over the `o1_lr1e3_warm`
+checkpoints (seeds 0 and 1, ~1.7 h each, concurrent), then `gradient_b` against the
+five-seed `d10_baseline` reference. Corrected `shrinkage_in_woba_direction` in
+`src/analysis/d5_level.py` and re-emitted `d5_level_attribution.json`.
+
+**Why.** The Phase O outcome entry had closed O.2 on the argument that the tuned build is
+the measured build. That is a statement about the file, not about the behaviour, and it
+would license skipping any diagnostic whose inputs had not changed.
+
+**Found.** The pre-registered expectation is contradicted. Seeds are matched pairs —
+`torch.manual_seed` fixes both initialisation and batch order — so the comparison is
+paired, and paired it shows warmup shrinking every quintile by a near-uniform factor
+(0.915 to 0.927 across the five quintiles in seed 0). The q1/q5 norm ratio moves −1.3% and
+−0.04%; the exposure-normalised slope moves −3.8% and −2.2%, away from pooling rather than
+toward it. Global rescaling, not differential shrinkage. Separately, the corrected wOBA
+flag reads `false` in all five d10 seeds at −0.0050 to −0.0074 per 1,000 pitches with the
+interval excluding zero — anti-shrinkage holds along the wOBA axis, not only in norm.
+
+**Learned.** A slope test is a distance test only when the quantity has a fixed sign; on a
+sign-crossing quantity it reports the opposite of what it names. And an unpaired range
+comparison throws away the seed variance that matched seeds were there to remove — the
+paired differences here are 3–8× smaller than the across-seed spread and would have been
+invisible.
+
+**Next.** Phase M item 1, the C.2/C.3 differential gap, which is the prerequisite for the
+ceiling table. Two obligations open: the verification gate on the warmup scheduler
+(`train.py:124-155` is training code with no recorded gate run) and the stray
+`results/checkpoints/o1_warmup_evidence_s0.pt` with no ledger row. Three `unverified`
+references remain, The Book p.157 still decision-bearing.
