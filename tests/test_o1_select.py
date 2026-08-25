@@ -184,7 +184,11 @@ def full_grid(*rows, seeds=2):
     `select` refuses a partial grid on purpose -- `sweep.queue` is config-major, so a night
     that runs short drops whole arms and a mean over the arms that finished is
     indistinguishable from a mean over all six. Every fixture therefore has to supply six
-    arms; the padding ones sit at the incumbent's value so only the arm under test moves."""
+    arms; the padding ones sit at the incumbent's value so only the arm under test moves.
+
+    Fixtures put the incumbent on seeds 7-8, off the noise floor's 0-4. Sharing a seed with
+    the floor puts the guard in its exact-reproduction regime, which is a separate question
+    from the margin these fixtures are about -- the shared-seed tests below cover it."""
     named = {r[1] for r in rows}
     padding = [("o1", arm, i, NEUTRAL)
                for arm in o1_select.EXPECTED_ARMS if arm not in named
@@ -200,7 +204,7 @@ def test_the_pre_registered_grid_matches_the_stage_it_scores():
 
 
 def test_a_short_night_is_refused_rather_than_averaged():
-    rows = ledger(D10 + [("o1", "lr1e3", 0, NEUTRAL), ("o1", "lr1e3", 1, NEUTRAL),
+    rows = ledger(D10 + [("o1", "lr1e3", 7, NEUTRAL), ("o1", "lr1e3", 8, NEUTRAL),
                          ("o1", "lr3e3", 0, 1.02500), ("o1", "lr3e3", 1, 1.02500)])
     result = o1_select.select(rows)
     assert result["verdict"] == "incomplete_grid"
@@ -234,7 +238,7 @@ def test_selector_cannot_see_claim1():
 
 
 def test_incumbent_stands_when_nothing_clears_the_margin():
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02580), ("o1", "lr1e3", 1, 1.02580),
+    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
                          ("o1", "lr3e3", 0, 1.02575), ("o1", "lr3e3", 1, 1.02575)))
     result = o1_select.select(rows)
     assert result["guard"]["passed"]
@@ -245,7 +249,7 @@ def test_incumbent_stands_when_nothing_clears_the_margin():
 
 
 def test_a_clear_winner_is_promoted():
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02580), ("o1", "lr1e3", 1, 1.02580),
+    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
                          ("o1", "lr3e4_warm", 0, 1.02000), ("o1", "lr3e4_warm", 1, 1.02010)))
     result = o1_select.select(rows)
     assert result["winner"] == "lr3e4_warm"
@@ -254,7 +258,7 @@ def test_a_clear_winner_is_promoted():
 
 
 def test_a_worse_arm_is_never_promoted():
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02580), ("o1", "lr1e3", 1, 1.02580),
+    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
                          ("o1", "lr3e3", 0, 1.19000), ("o1", "lr3e3", 1, 1.19000)))
     result = o1_select.select(rows)
     assert result["winner"] == "lr1e3"
@@ -263,7 +267,7 @@ def test_a_worse_arm_is_never_promoted():
 
 def test_guard_fires_when_the_incumbent_drifts_off_its_own_d10_run():
     """A moved tensor build shows up here and nowhere else: every column still lines up."""
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.04000), ("o1", "lr1e3", 1, 1.04000)))
+    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.04000), ("o1", "lr1e3", 8, 1.04000)))
     result = o1_select.select(rows)
     assert not result["guard"]["passed"]
     assert result["verdict"] == "guard_failed"
@@ -278,24 +282,24 @@ def test_missing_incumbent_is_refused_not_defaulted():
 
 def test_noise_floor_needs_more_than_one_seed():
     rows = ledger([("d10", "baseline", 0, 1.02584),
-                   ("o1", "lr1e3", 0, 1.02580), ("o1", "lr1e3", 1, 1.02580)])
+                   ("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580)])
     with pytest.raises(ValueError, match="noise floor"):
         o1_select.select(rows)
 
 
 def test_noise_floor_is_read_from_the_ledger_not_hardcoded():
-    tight = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02580), ("o1", "lr1e3", 1, 1.02580),
+    tight = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
                           ("o1", "lr3e3", 0, 1.02540), ("o1", "lr3e3", 1, 1.02540)))
     wide = ledger([("d10", "baseline", i, v) for i, v in
                    enumerate([1.020, 1.026, 1.031, 1.024, 1.029])] +
-                  full_grid(("o1", "lr1e3", 0, 1.02580), ("o1", "lr1e3", 1, 1.02580),
+                  full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
                             ("o1", "lr3e3", 0, 1.02540), ("o1", "lr3e3", 1, 1.02540)))
     assert o1_select.select(tight)["winner"] == "lr3e3"
     assert o1_select.select(wide)["verdict"] == "incumbent_stands"
 
 
 def test_report_round_trips(tmp_path):
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02580), ("o1", "lr1e3", 1, 1.02580),
+    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
                          ("o1", "lr3e3", 0, 1.02000), ("o1", "lr3e3", 1, 1.02000)))
     result = o1_select.select(rows)
     json_path, csv_path = o1_select.report(result, tmp_path)
@@ -316,7 +320,7 @@ def test_a_two_seed_promotion_is_flagged_for_confirmation():
     """Five challengers, one incumbent, one threshold: the family-wise false-promotion
     rate is several times the per-comparison one, and a two-seed mean is thin. The
     artifact must say so rather than leaving it to the spec."""
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02580), ("o1", "lr1e3", 1, 1.02580),
+    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
                          ("o1", "lr3e3", 0, 1.02000), ("o1", "lr3e3", 1, 1.02000)))
     result = o1_select.select(rows)
     assert result["winner"] == "lr3e3"
@@ -325,7 +329,7 @@ def test_a_two_seed_promotion_is_flagged_for_confirmation():
 
 
 def test_a_five_seed_promotion_needs_no_confirmation():
-    rows = ledger(D10 + full_grid(*[("o1", "lr1e3", i, 1.02580) for i in range(2)],
+    rows = ledger(D10 + full_grid(*[("o1", "lr1e3", i, 1.02580) for i in (7, 8)],
                                   *[("o1", "lr3e3", i, 1.02000) for i in range(5)]))
     result = o1_select.select(rows)
     assert result["requires_confirmation"] is False
@@ -333,8 +337,101 @@ def test_a_five_seed_promotion_needs_no_confirmation():
 
 
 def test_the_incumbent_standing_never_asks_for_confirmation():
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02580), ("o1", "lr1e3", 1, 1.02580),
+    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
                          ("o1", "lr3e3", 0, 1.02579), ("o1", "lr3e3", 1, 1.02579)))
     result = o1_select.select(rows)
     assert result["verdict"] == "incumbent_stands"
     assert result["requires_confirmation"] is False
+
+
+# ------------------------------------------------- the guard, and what it can actually see
+
+def test_an_undeclared_arm_is_refused_rather_than_ranked():
+    """The grid check is symmetric. Missing arms catch a night that ran short; unexpected
+    arms catch an arm appended after the table was read, which is the failure that actually
+    voids a pre-registration. Without this the injected arm wins and `complete` reads true."""
+    rows = ledger(D10 + full_grid(("o1", "lr9e9_undeclared", 0, 1.02000),
+                                  ("o1", "lr9e9_undeclared", 1, 1.02000)))
+    result = o1_select.select(rows)
+    assert result["grid"]["unexpected_arms"] == ["lr9e9_undeclared"]
+    assert result["grid"]["complete"] is False
+    assert result["verdict"] == "incomplete_grid"
+
+
+def test_drift_is_flagged_uninformative_when_the_incumbent_reruns_floor_seeds():
+    """The real o1 case. `o1/lr1e3` seeds 0-1 reproduce `d10/baseline` seeds 0-1 exactly, so
+    the drift is an algebraic function of the floor sample and says nothing about the build.
+    The guard must pass on the REPRODUCTION and say the drift is not evidence."""
+    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02584), ("o1", "lr1e3", 1, 1.02585)))
+    guard = o1_select.select(rows)["guard"]
+    assert guard["shared_seeds"] == [0, 1]
+    assert guard["drift_is_informative"] is False
+    assert guard["basis"] == "exact reproduction on shared seeds"
+    assert guard["reproduces_shared_seeds"] is True
+    assert guard["passed"] is True
+
+
+def test_a_shared_seed_that_does_not_reproduce_fails_the_guard():
+    """The units failure this exists for: the same recipe and seed on a build with different
+    quality-bin edges cannot land on the floor's value. A drift small enough to sit inside
+    the 4 sd tolerance must still fail, which the old tolerance-only guard let through."""
+    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02584 + 1e-5),
+                                  ("o1", "lr1e3", 1, 1.02585)))
+    result = o1_select.select(rows)
+    assert result["guard"]["mismatched_seeds"] == [0]
+    assert result["guard"]["passed"] is False
+    assert result["verdict"] == "guard_failed"
+    # and the tolerance alone would have waved it through
+    assert result["guard"]["drift"] < result["guard"]["tolerance"]
+
+
+def test_without_shared_seeds_the_guard_falls_back_to_the_tolerance():
+    """An incumbent trained on fresh seeds has nothing to reproduce, so drift is all there
+    is -- and it is then genuinely informative."""
+    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02584), ("o1", "lr1e3", 8, 1.02585)))
+    guard = o1_select.select(rows)["guard"]
+    assert guard["shared_seeds"] == []
+    assert guard["drift_is_informative"] is True
+    assert guard["basis"] == "drift within tolerance"
+    assert guard["passed"] is True
+
+
+# ------------------------------------------- the ml-engineer gates, on the warm path
+
+def _warm_run(steps=400, warmup_steps=50, seed=3):
+    """One overfit-a-single-batch run with the warmup schedule actually in the loop.
+
+    A scheduler cannot change tensor shapes, the loss at init, the split boundary, or the
+    decode -- those gates are properties of the model and the build, and D.4 discharged
+    them. What a scheduler CAN break is the two gates below: a wrong scale can stop the
+    run learning at all, and a scheduler carrying state can make two same-seed runs
+    diverge. So those two are re-run here and the other five are not."""
+    from src.model.v1 import HitterEmbeddingV1, factorized_loss
+    from tests.test_model_v1 import make_batch, N_CONTEXT, N_HITTERS
+
+    torch.manual_seed(seed)
+    model = HitterEmbeddingV1(N_HITTERS, N_CONTEXT, dropout=0.0)
+    hitter, context, labels = make_batch(64, seed=seed)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+    warmup = train.LinearWarmup(optimizer, steps=warmup_steps, base_lr=1e-2)
+
+    losses = []
+    for _ in range(steps):
+        outputs = model(hitter, context, labels["ev"], labels["la"])
+        loss, _ = factorized_loss(outputs, labels)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        warmup.step()
+        optimizer.step()
+        losses.append(loss.item())
+    return losses
+
+
+def test_the_warm_path_still_overfits_one_batch():
+    losses = _warm_run()
+    assert losses[-1] < losses[0] * 0.05, \
+        f"loss only fell from {losses[0]:.1f} to {losses[-1]:.1f} with warmup in the loop"
+
+
+def test_two_warm_runs_at_the_same_seed_are_bit_identical():
+    assert _warm_run() == _warm_run()

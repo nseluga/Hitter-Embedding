@@ -14,6 +14,15 @@
     "d10_baseline_mean": 1.0258,
     "drift": 4.4999999999850715e-05,
     "tolerance": 0.00041665333311997286,
+    "drift_is_informative": false,
+    "basis": "exact reproduction on shared seeds",
+    "shared_seeds": [
+      0,
+      1
+    ],
+    "independent_of_noise_floor": false,
+    "reproduces_shared_seeds": true,
+    "mismatched_seeds": [],
     "passed": true
   },
   "arms": {
@@ -107,6 +116,7 @@
     ],
     "missing_arms": [],
     "underpowered_arms": [],
+    "unexpected_arms": [],
     "min_seeds_per_arm": 2,
     "complete": true
   },

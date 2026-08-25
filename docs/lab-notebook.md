@@ -328,3 +328,43 @@ ceiling table. Two obligations open: the verification gate on the warmup schedul
 (`train.py:124-155` is training code with no recorded gate run) and the stray
 `results/checkpoints/o1_warmup_evidence_s0.pt` with no ledger row. Three `unverified`
 references remain, The Book p.157 still decision-bearing.
+
+---
+
+## 2026-08-25 (close of Phase O) — phase review, and the four safeguards it tested
+
+**Did.** Ran the phase-boundary `/research-review` on Phase O: the o1 sweep, the selector,
+the O.2 diagnostic, and the 2026-08-25 entries in both documents. Then fixed what the
+review found. `o1_select` now verifies the build by exact same-seed reproduction rather
+than by drift, and refuses an arm that is in the ledger but not pre-registered. Four tests
+cover both guard regimes and the undeclared-arm path. Two ml-engineer gates were re-run on
+the warm path. The corrected promotion rule was pre-registered for Phase M rather than
+retrofitted onto Phase O. The winner's curse was logged as a limitation.
+
+**Why.** The review's verdict was **7/10** — the conclusion is right and robust, but three
+of the four safeguards protecting it did not do what the specification says they do. A
+`incumbent_stands` that survives only because its guards were loose is not the same result
+as one that survives with them tight.
+
+**Found.** The build guard's input was a subset of its own reference set: the incumbent's
+two seeds *are* two of the noise floor's five, so the drift it measured was an algebraic
+function of the floor sample. Under exact reproduction the build verifies properly —
+1.02584 and 1.02585, `best_epoch` 17, identical on both seeds. The promotion test was
+weaker than the specification claims on four counts, all anti-conservative. The selection
+metric equals `best_val_loss` on every row, so it is a minimum over the split it is scored
+on, with draws varying 2.6× by arm. The verdict is unchanged under every one of these.
+Citation fidelity was clean on both fetchable references.
+
+**Learned.** A guard that reads its own output cannot fail, and it will report a
+comfortable number while doing so. The check is whether the guard's input is independent
+of its reference — and here it was not, which no amount of tightening the tolerance would
+have shown. Separately: when every defect in a rule is anti-conservative and the result is
+a null, the defects did not produce the result, and the fix belongs in the next phase
+rather than in a re-run of this one.
+
+**Next.** Phase M item 1, the C.2/C.3 differential gap. Surviving weaknesses carried in:
+the winner's curse (logged, defended on draw balance for the decisive comparison); the
+warmup grid never reaching the ≈2,000-step literature default; and n = 2 on the O.2
+diagnostic. Still open: the stray `results/checkpoints/o1_warmup_evidence_s0.pt` with no
+ledger row, three `unverified` references with The Book p.157 decision-bearing, and the 41
+older entries carrying no `Reference:` field at all.

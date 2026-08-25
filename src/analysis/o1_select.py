@@ -88,6 +88,42 @@ def references(rows, stage, config):
             if r["reference"] not in ("", None)]
 
 
+def references_by_seed(rows, stage, config):
+    """`reference` keyed by seed -- the drift guard needs seed identity, not just values."""
+    return {int(r["seed"]): float(r["reference"]) for r in rows
+            if r["stage"] == stage and r["config"] == config
+            and r["reference"] not in ("", None)}
+
+
+def build_check(rows, stage=STAGE):
+    """
+    Is the stage's incumbent scored in the same UNITS as the noise-floor arm?
+
+    `reference` is log loss over quality bins, and `phase_d` and `phase_d5` carry different
+    bin edges, so a run on the wrong build lands on a different scale while every ledger
+    column still lines up. That is the one failure this check exists for.
+
+    Two regimes, because the incumbent re-runs the noise-floor recipe and may therefore
+    REPRODUCE it rather than merely resemble it:
+
+    - shared seeds -> require EXACT equality on them. Two runs on different builds cannot
+      agree to the ledger's precision, so this is a decisive units test.
+    - no shared seeds -> fall back to the drift tolerance, which is all that is available.
+
+    The distinction is reported, not hidden: a drift computed against a floor sample that
+    CONTAINS the incumbent's own runs is an algebraic identity, and reporting it as a passed
+    check overstates what was verified.
+    """
+    incumbent = references_by_seed(rows, stage, INCUMBENT)
+    floor = references_by_seed(rows, NOISE_FLOOR_STAGE, NOISE_FLOOR_CONFIG)
+    shared = sorted(set(incumbent) & set(floor))
+    mismatched = [seed for seed in shared if incumbent[seed] != floor[seed]]
+    return {"shared_seeds": shared,
+            "independent_of_noise_floor": not shared,
+            "reproduces_shared_seeds": bool(shared) and not mismatched,
+            "mismatched_seeds": mismatched}
+
+
 def noise_floor(rows):
     """Across-seed sd of `reference` for the d10 baseline -- the smallest difference that
     is not seed noise. Computed from the ledger, never hardcoded, so a re-run moves it."""
@@ -106,6 +142,10 @@ def select(rows, stage=STAGE):
         raise ValueError(f"no completed {stage} runs in the ledger -- run the sweep first")
     expected = sorted(EXPECTED_ARMS) if stage == STAGE else sorted(configs)
     missing_arms = [name for name in expected if name not in configs]
+    # Symmetric on purpose. Checking only for MISSING arms stops a night that ran short;
+    # it does nothing about an arm added to the ledger after the table was seen, which is
+    # the failure that actually breaks a pre-registration.
+    unexpected_arms = [name for name in configs if name not in expected]
     floor_sd, floor_mean, floor_n = noise_floor(rows)
 
     arms = {}
@@ -133,7 +173,11 @@ def select(rows, stage=STAGE):
 
     incumbent_mean = arms[INCUMBENT]["reference_mean"]
     drift = abs(incumbent_mean - floor_mean)
-    guard_ok = drift <= INCUMBENT_TOLERANCE_SDS * floor_sd
+    build = build_check(rows, stage)
+    # Exact reproduction on a shared seed is strictly stronger than the drift tolerance, so it
+    # supersedes it where available. Where it is not available the tolerance is all there is.
+    guard_ok = (build["reproduces_shared_seeds"] if build["shared_seeds"]
+                else drift <= INCUMBENT_TOLERANCE_SDS * floor_sd)
 
     # The threshold is a difference of two means, so it is scaled by the standard error of
     # THAT difference, not by a single run's sd. With n seeds per arm and the d10 baseline
@@ -177,6 +221,10 @@ def select(rows, stage=STAGE):
             "d10_baseline_mean": floor_mean,
             "drift": drift,
             "tolerance": INCUMBENT_TOLERANCE_SDS * floor_sd,
+            "drift_is_informative": build["independent_of_noise_floor"],
+            "basis": ("exact reproduction on shared seeds"
+                      if build["shared_seeds"] else "drift within tolerance"),
+            **build,
             "passed": guard_ok,
         },
         "arms": arms,
@@ -184,14 +232,15 @@ def select(rows, stage=STAGE):
             "expected_arms": expected,
             "missing_arms": missing_arms,
             "underpowered_arms": underpowered,
+            "unexpected_arms": unexpected_arms,
             "min_seeds_per_arm": MIN_SEEDS_PER_ARM,
-            "complete": not missing_arms and not underpowered,
+            "complete": not missing_arms and not underpowered and not unexpected_arms,
         },
         "winner": winner,
         "n_challengers_tested": len(arms) - 1,
         "requires_confirmation": requires_confirmation,
         "confirmation_seeds": CONFIRMATION_SEEDS,
-        "verdict": ("incomplete_grid" if missing_arms or underpowered else
+        "verdict": ("incomplete_grid" if missing_arms or underpowered or unexpected_arms else
                     "guard_failed" if not guard_ok else
                     "incumbent_stands" if winner == INCUMBENT else
                     "tuned_pending_confirmation" if requires_confirmation else "tuned"),
