@@ -939,3 +939,41 @@ Append-only. Format fixed by `~/os/knowledge/frameworks/research-standards.md`
 - **Rationale:** The two conventions answer different questions and differ by about 2×, which is large enough to change what "not enough exposure" means. Against a 2024 median of 86 PA vs LHP, every route says the differential is unmeasurable at realistic exposures under either convention — the threshold is 5× the observed median at its most favourable and 25× at its least.
 - **Reference:** `results/phase_m/m0_routes.json` `stabilization`; `src/analysis/m_report.py` `stabilization_table`; `results/phase_c/c2_prior_parameters.csv` `n_star_split_implied`.
 - **Revisit if:** a claim is made about how much exposure would be needed in practice, which needs the both-sides convention and the joint growth assumption stated explicitly.
+
+## 2026-08-31 — Batch size and weight decay stay quarantined; the knob arm does not run
+- **Decision:** Phase O is not reopened, and the §8 knob arm is not run at Phase M. The two knobs stay frozen at 8,192 and 1e-2 for the remainder of the project.
+- **Alternatives:** Run the arm at Phase M under the conditional admission in plan §3. Spend a third overnight session on Phase O against the two-session cap.
+- **Rationale:** The knobs are one setting, and the shrinkage they control is the ratio of decay applied every step to a gradient received only when a hitter is sampled — 24:1 at the tenth exposure percentile. Tuning them implements C.2's shrinkage inside the network and then scores the result against C.2. Plan §3 admits the arm only with strength fixed before any claim-1 number is read, and M.1 and M.3 have now read claim 1; D.5's gradient (b) independently shows decay overwhelmed rather than binding, so the expected gain is near zero either way.
+- **Reference:** plan §2.2 and §3 (Phase O); D.5 gradient (b); `results/phase_m/m1_fraction_of_ceiling.csv`, `results/phase_m/m3_level_ceiling.json`.
+- **Revisit if:** a later phase needs the arm against a target that claim 1 does not score, where the pre-registration condition is not already spent.
+
+## 2026-08-31 — Phase O and Phase M are reviewed before the 2025 refit
+- **Decision:** `/research-review` runs on Phase O and on Phase M first. The 2015–2024 refit and the 2025 claim-1 table follow the review, not the other way round.
+- **Alternatives:** Refit first and review the whole arc in one pass, saving a review cycle against the Oct 1 abstract date.
+- **Rationale:** 2025 is sealed and can be read once, so a defect found after the refit cannot be corrected without spending the season a second time. Neither phase has been reviewed — Phase O's sweep and selector run were never covered, and Phase M is new — and both carry the write-up.
+- **Revisit if:** both reviews return no findings, after which later phases can review at the write-up boundary instead of at each phase close.
+
+## 2026-08-31 — Ceiling fractions are reported on RMSE and on rank, each against its own denominator
+- **Decision:** Phase M reports the fraction of ceiling twice: PA-weighted RMSE against the `claim1_eval` noise floor, and rank correlation against the Monte Carlo Spearman ceiling. The analytic Pearson bound stays as the reported closed form but no longer divides a rank numerator.
+- **Alternatives:** Keep rank only (rejected: manifest rule 2 defines claim 1 as RMSE and rank, and rank-only was never argued). Keep the analytic denominator (rejected: it is exact for Pearson, and the simulated Spearman ceiling is 0.30931 against its 0.29645).
+- **Rationale:** The differential claim is a prediction claim, so error is the primary metric and ordering the secondary; `noise_floor` and `deconvolve` already compute the RMSE bound and the Phase M spec already derives τ² from them. Dividing a Spearman numerator by a Pearson denominator overstates the fraction by about 4%.
+- **Revisit if:** the paper's claim narrows to relative valuation, where ordering is the estimand and RMSE is secondary.
+
+## 2026-08-31 — The differential tables carry every Phase C opponent and an interval in every cell
+- **Decision:** C.3-full is refit and scored on the M.1 frame, M.2 gains C.2 and C.3-full columns, and every achieved value in M.1 and M.2 carries a paired hitter-level bootstrap interval. One table replaces `m1_differential_scores.csv` and `m2_stratum_ceiling.csv`.
+- **Alternatives:** Let §10 fallback rule 1 stand (rejected: the rule covers baselines unreachable without retraining, and `src/analysis/c_report.py:364` is a supported path). Report the stratum table without an opponent (rejected: frozen rule 1 grades the low stratum against baselines, not against a ceiling alone).
+- **Rationale:** A bare model number beside a ceiling is the defect M.1 was built to fix at the pooled level, and M.2 carries it at the stratum level where the thesis is graded. C.3-full beats the model on the level side, so its absence from the only differential table reads as curation. The pooled fraction's interval is wide enough that a point estimate misstates the result.
+- **Revisit if:** the C.3-full refit cannot reproduce its committed Phase C parameters, in which case its absence is a capability limit and rule 1 applies as written.
+
+## 2026-08-31 — Warmup is measured at the literature default before the 2025 refit
+- **Decision:** One arm runs at lr 1e-3, warmup 2,000 steps, seeds 0–4, judged on `reference` under the k=2 promotion rule. The 2026-08-25 rejection of a wider warmup grid is reopened.
+- **Alternatives:** Close the limitation in prose (rejected: the grid was `{0, 719}` and 719 was one epoch, never a value chosen against β₂). Run two seeds under the existing arm size (rejected: the existing two-seed spread of 1.27e-4 already exceeds the margin it measures).
+- **Rationale:** 719 steps is 0.7 of the second-moment memory length, so full learning rate arrives before the AdamW denominator has converged; the default is two memory lengths. O.2's null rules warmup out as the lever on the exposure gradient, which is a different question from whether the build is undertrained — the question Phase O scores. Selection is on `reference` and `o1_select` does not import `claim1_eval`, so the pre-registered procedure is intact.
+- **Reference:** Ma & Yarats (2021), arXiv:1910.04209 (AAAI) — linear warmup over 2/(1−β₂) iterations, 2,000 at β₂ = 0.999.
+- **Revisit if:** the arm clears 2 SE, which promotes it and requires the Phase M measurement items to rerun on the promoted build.
+
+## 2026-08-31 — The 2024 eval population is unchanged and the PA floor is reported as a sensitivity
+- **Decision:** The M.6 intersection stays the primary population and `min_eval_pa` stays at 10. `min_eval_pa_sensitivity` runs at 5, 10, and 25 and is reported where the fractions are reported.
+- **Alternatives:** Score the differential on the F.5 population (rejected: its 72 extra hitters lack enough PA against one hand for a split to be defined, not merely noisy). Lower the floor to reach the part-time tail (rejected: below ten PA the observed value is nearly all sampling noise and enters the estimate at near-zero weight).
+- **Rationale:** M.3 already reports both populations and they agree to 0.2%, so the choice is immaterial where it is available at all. The floor removes 32 hitters whose mean wOBA is far below the retained, and every other filter cuts the same direction, so the exclusion is stated as a measured sensitivity rather than left as a default.
+- **Revisit if:** the sensitivity moves a reported fraction by more than its bootstrap interval.
