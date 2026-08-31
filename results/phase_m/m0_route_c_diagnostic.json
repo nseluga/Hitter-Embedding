@@ -1,0 +1,117 @@
+{
+  "post_selection_descriptive": "post-selection descriptive: computed on 2024 after the pre-registered platoon gate ran and failed (docs/research-manifest.md, 2026-08-20). Not a test of a hypothesis.",
+  "bounded": "one-day hard cap per spec \u00a7M.0; audit + one simulation, no iteration",
+  "audit": {
+    "implementation": "src/analysis/e_platoon_ceiling.py::split_half_reliability",
+    "checks": {
+      "split_definition": "game_pk parity \u2014 halves are disjoint GAMES, so no plate appearance appears in both halves and within-game correlation cannot leak across the split. Deterministic, no seed. CORRECT.",
+      "pairing": "halves are pivoted per batter and joined on the batter index, so the correlation is across hitters with one row each. CORRECT.",
+      "no_shared_pa": "a PA belongs to exactly one game_pk and therefore exactly one half; the pivot sums disjoint sets. CORRECT.",
+      "spearman_brown_input": "applied to the raw half-length correlation, not to an already-stepped-up value. CORRECT.",
+      "exposure_floor": "min_half_pa=10 per side per half, applied to both halves. CORRECT, and it is the reason the split-half n (185 LHB) is below the frame's.",
+      "pooled_centring": "the pooled row centres each stand's differential before correlating, so the between-stand main effect cannot inflate it. CORRECT and necessary \u2014 E.5's 0.146 is a within-stand number."
+    },
+    "finding": "no bug found. One caveat, not a bug: Spearman-Brown is applied to a NEGATIVE half correlation, and the step-up formula 2r/(1+r) has no reliability interpretation there \u2014 it magnifies \u22120.155 to \u22120.366. The magnitude of the negative number is therefore an artifact of stepping up an out-of-domain input; the SIGN is the finding, and the raw half correlation \u22120.155 is the quantity the simulation locates.",
+    "bug_found": false
+  },
+  "observed": {
+    "L": -0.1547666881467723,
+    "R": 0.05362249360523725,
+    "pooled": -0.036345355034375075
+  },
+  "n_hitters_by_stand": {
+    "L": 185,
+    "R": 268
+  },
+  "median_half_denom": {
+    "L_vs_LHP": 50.0,
+    "L_vs_RHP": 136.0
+  },
+  "simulations": {
+    "tau2_zero": {
+      "L": {
+        "planted_tau2": 0.0,
+        "n_draws": 2000,
+        "n_hitters": 185,
+        "mean": -0.01817319817998231,
+        "p2_5": -0.3720199527616818,
+        "p97_5": 0.2585723898291618,
+        "located": {
+          "value": -0.1547666881467723,
+          "percentile": 18.25,
+          "inside_95": true
+        }
+      },
+      "R": {
+        "planted_tau2": 0.0,
+        "n_draws": 2000,
+        "n_hitters": 268,
+        "mean": -0.011728314358101998,
+        "p2_5": -0.30455696402356314,
+        "p97_5": 0.2172233571979741,
+        "located": {
+          "value": 0.05362249360523725,
+          "percentile": 66.9,
+          "inside_95": true
+        }
+      }
+    },
+    "tau2_b_prime": {
+      "L": {
+        "planted_tau2": 0.0003929668596653433,
+        "n_draws": 2000,
+        "n_hitters": 185,
+        "mean": 0.07126375547159447,
+        "p2_5": -0.23193935693040926,
+        "p97_5": 0.3234126009722009,
+        "located": {
+          "value": -0.1547666881467723,
+          "percentile": 6.4,
+          "inside_95": true
+        }
+      },
+      "R": {
+        "planted_tau2": 0.0003929668596653433,
+        "n_draws": 2000,
+        "n_hitters": 268,
+        "mean": 0.07397659667151928,
+        "p2_5": -0.18717173496099443,
+        "p97_5": 0.2828557862028432,
+        "located": {
+          "value": 0.05362249360523725,
+          "percentile": 40.400000000000006,
+          "inside_95": true
+        }
+      }
+    }
+  },
+  "located": {
+    "L": {
+      "tau2_zero": {
+        "value": -0.1547666881467723,
+        "percentile": 18.25,
+        "inside_95": true
+      },
+      "tau2_b_prime": {
+        "value": -0.1547666881467723,
+        "percentile": 6.4,
+        "inside_95": true
+      }
+    },
+    "R": {
+      "tau2_zero": {
+        "value": 0.05362249360523725,
+        "percentile": 66.9,
+        "inside_95": true
+      },
+      "tau2_b_prime": {
+        "value": 0.05362249360523725,
+        "percentile": 40.400000000000006,
+        "inside_95": true
+      }
+    }
+  },
+  "verdict": "uninformative_inside_both_nulls",
+  "reading": "Route C's LHB value sits inside BOTH simulated nulls, so it discriminates nothing: the split-half estimator at these half-length exposures has too much sampling variance to separate tau2=0 from tau2=B'. The alarming -0.366 in E.15 is Spearman-Brown magnifying an ordinary null draw (the raw half correlation is at the 18th percentile of the tau2=0 null). Route C is retired as evidence in either direction, which is the bounded outcome the spec allows. It was never an estimator.",
+  "fallback_rule_2_fires": false
+}

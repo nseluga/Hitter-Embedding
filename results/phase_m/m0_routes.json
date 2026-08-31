@@ -1,0 +1,180 @@
+{
+  "step": "M.0",
+  "post_selection_descriptive": "post-selection descriptive: computed on 2024 after the pre-registered platoon gate ran and failed (docs/research-manifest.md, 2026-08-20). Not a test of a hypothesis.",
+  "fallback_rules_fired": [
+    "1 \u2014 C.3-full omitted from M.1; C.3-full has no persisted fitted artifact anywhere in `results/`; `c3_gbm.predict` calls `c3_gbm.fit` internally, so producing side-specific predictions requires RETRAINING the GBM on the 341MB labeled pitch table. The spec's condition ('from existing fitted artifacts without retraining or new feature code') is therefore met and rule 1 fires: the differential table reports C.2 only."
+  ],
+  "route_rule": {
+    "primary": "B_prime",
+    "always_reported": [
+      "A"
+    ],
+    "provenance_only": [
+      "B"
+    ],
+    "never_primary": [
+      "C"
+    ],
+    "rationale": "Route A's fragility is structural \u2014 a near-total cancellation where a 3% noise-model error swings tau2 by ~100% \u2014 and that was known before any number was read.",
+    "frozen": "docs/phase-m-spec.md \u00a7M.0, decision log 2026-08-30"
+  },
+  "population": {
+    "n_hitters": 545,
+    "basis": "M.6 intersection"
+  },
+  "observed_within_stand_var": 0.004195629093186848,
+  "variance_decomposition": {
+    "total": 0.00470881178875325,
+    "between_stand": 0.0005131826955664018,
+    "within_stand": 0.004195629093186848
+  },
+  "mean_sampling_var_weighted": 0.004078477121970155,
+  "mean_sampling_var_unweighted": 0.007822805975054518,
+  "routes": {
+    "A": {
+      "tau2": 0.00011715197121669324,
+      "mean_sampling_var": 0.004078477121970155,
+      "reliability": 0.027922385085691365,
+      "ceiling_rank_corr": 0.16709992545088512,
+      "degenerate": false,
+      "sampling_scale": 1.0,
+      "observed_within_stand_var": 0.004195629093186848,
+      "achieved_rank_corr": 0.14626474805407283,
+      "fraction_of_ceiling": 0.8753130658760451
+    },
+    "B": {
+      "tau2": 0.0005903354341684647,
+      "mean_sampling_var": 0.004078477121970155,
+      "reliability": 0.12644230777530005,
+      "ceiling_rank_corr": 0.35558727167222964,
+      "degenerate": false,
+      "achieved_rank_corr": 0.14626474805407283,
+      "fraction_of_ceiling": 0.41133291235715425
+    },
+    "B_prime": {
+      "tau2": 0.0003929668596653433,
+      "mean_sampling_var": 0.004078477121970155,
+      "reliability": 0.0878836593456796,
+      "ceiling_rank_corr": 0.2964517824970523,
+      "degenerate": false,
+      "achieved_rank_corr": 0.14626474805407283,
+      "fraction_of_ceiling": 0.4933846132482849
+    }
+  },
+  "fragility_band": {
+    "scales": [
+      1.0,
+      0.97,
+      1.03
+    ],
+    "tau2": [
+      0.00011715197121669324,
+      0.00023950628487579787,
+      -5.202342442411391e-06
+    ],
+    "ceiling_rank_corr": [
+      0.16709992545088512,
+      0.2389240748294751,
+      NaN
+    ],
+    "ceiling_range": [
+      0.16709992545088512,
+      0.2389240748294751
+    ],
+    "any_degenerate": true
+  },
+  "monte_carlo_rank_ceiling": {
+    "tau2": 0.0003929668596653433,
+    "mean_sampling_var": 0.004078477121970155,
+    "reliability": 0.0878836593456796,
+    "ceiling_rank_corr": 0.2964517824970523,
+    "degenerate": false,
+    "mc_pearson_mean": 0.2978032632236223,
+    "mc_pearson_sd": 0.03772612126141024,
+    "mc_spearman_mean": 0.3093063192544132,
+    "mc_spearman_sd": 0.041991688341098496,
+    "n_draws": 300
+  },
+  "b_to_b_prime_diagnostic": {
+    "tau2_B": 0.0005903354341684647,
+    "tau2_B_prime": 0.0003929668596653433,
+    "relative_drop": 0.33433292850043983,
+    "share_of_B_to_A_gap_closed": 0.41710792949507175,
+    "reading": "a large drop toward A means selection into the 2024 eval population explains the gap; no material drop means the remaining A/B' gap is window or estimator",
+    "verdict": "selection explains part of the gap; the remainder is window or estimator",
+    "conditioning_label": "Route B' restricts PAST seasons to hitters who reached the 2024 eval population, which conditions on survival to 2024. That is the correct population for a claim about 2024 eval hitters, and it is not a general-population tau2."
+  },
+  "tau2_by_batter_type": {
+    "B": {
+      "L": 0.0007322758887773689,
+      "R": 0.0004917731167240981,
+      "S": 0.000588220547130464
+    },
+    "B_prime": {
+      "L": 0.0006539707973317681,
+      "R": 0.00021172781101364154,
+      "S": 0.00031332946929461857
+    }
+  },
+  "stabilization": {
+    "per_pa_noise_var_vs_LHP": 0.25584280703562073,
+    "per_pa_noise_var_both_sides": 0.5177039663138799,
+    "by_route": {
+      "A": {
+        "tau2": 0.00011715197121669324,
+        "pa_star_weak_side": 2183.854051950985,
+        "pa_star_both_sides": 4419.080284669689
+      },
+      "B": {
+        "tau2": 0.0005903354341684647,
+        "pa_star_weak_side": 433.3854826044722,
+        "pa_star_both_sides": 876.9657661548098
+      },
+      "B_prime": {
+        "tau2": 0.0003929668596653433,
+        "pa_star_weak_side": 651.0544101696016,
+        "pa_star_both_sides": 1317.4239852051765
+      }
+    },
+    "observed_exposure": {
+      "median_denom_L": 86.0,
+      "median_denom_R": 223.0,
+      "median_denom_L_by_stand": {
+        "L": 67.0,
+        "R": 94.0
+      }
+    },
+    "handoff_figures_checked": {
+      "claimed_B_about_430": 430,
+      "claimed_A_over_2000": 2000,
+      "convention": "pa_star_weak_side"
+    }
+  },
+  "achieved_rank_corr_e5": 0.14626474805407283,
+  "route_c": {
+    "verdict": "uninformative_inside_both_nulls",
+    "reading": "Route C's LHB value sits inside BOTH simulated nulls, so it discriminates nothing: the split-half estimator at these half-length exposures has too much sampling variance to separate tau2=0 from tau2=B'. The alarming -0.366 in E.15 is Spearman-Brown magnifying an ordinary null draw (the raw half correlation is at the 18th percentile of the tau2=0 null). Route C is retired as evidence in either direction, which is the bounded outcome the spec allows. It was never an estimator.",
+    "artifact": "results/phase_m/m0_route_c_diagnostic.json"
+  },
+  "field_provenance": {
+    "route_b_field": "tau2_split_derived (results/phase_c/c2_prior_parameters.csv)",
+    "accessor": "c2_bivariate_eb.implied_split_constant -> tau2_split",
+    "identity": "tau2_L + tau2_R - 2*rho*sqrt(tau2_L*tau2_R)",
+    "note": "E.15's Route B read this column via e_platoon_ceiling.load_c2_components['tau2_split']; for a DIFFERENTIAL the derived split variance IS the within-stand tau2, so the spec's parenthetical describes the same quantity."
+  },
+  "reproduction": {
+    "route_b_committed": 0.00059034,
+    "route_b_recomputed": 0.0005903354341684647,
+    "route_b_reproduces": true,
+    "fitting_window_spec_says": "nine-season, 2016-2024",
+    "fitting_window_code_uses": "2021-2023 (c1_trailing.TRAILING_SEASONS = 3)",
+    "window_note": "the spec's window PROSE is wrong; the committed VALUE reproduces exactly on the code's three-season window, so \u00a710 rule 4 does not fire. B and B' differ only in population, which is what the B->B' diagnostic requires."
+  },
+  "c3_full_availability": {
+    "emitted": false,
+    "fallback_rule": "\u00a710 rule 1",
+    "reason": "C.3-full has no persisted fitted artifact anywhere in `results/`; `c3_gbm.predict` calls `c3_gbm.fit` internally, so producing side-specific predictions requires RETRAINING the GBM on the 341MB labeled pitch table. The spec's condition ('from existing fitted artifacts without retraining or new feature code') is therefore met and rule 1 fires: the differential table reports C.2 only.",
+    "not_a_capability_limit": "the refit is an existing, supported code path (src/analysis/c_report.py:364) needing no new feature code. The omission is a scope boundary the spec pre-set, not something C.3 cannot do.",
+    "never": "no differential head was improvised, per the spec's explicit prohibition."
+  }
+}

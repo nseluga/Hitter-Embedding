@@ -1,0 +1,5 @@
+model,route,tau2,ceiling_rank_corr,achieved_rank_corr,fraction_of_ceiling,route_role,population,post_selection_descriptive
+phase_d_model,B_prime,0.0003929668596653433,0.2964517824970523,0.14626474805407283,0.4933846132482849,primary (pre-registered),M.6 intersection,True
+phase_d_model,A,0.00011715197121669324,0.16709992545088512,0.14626474805407283,0.8753130658760451,"sensitivity, carries the fragility band",M.6 intersection,True
+c2_bivariate,B_prime,0.0003929668596653433,0.2964517824970523,0.14582642711091456,0.4919060559616118,primary (pre-registered),M.6 intersection,True
+c2_bivariate,A,0.00011715197121669324,0.16709992545088512,0.14582642711091456,0.8726899591213559,"sensitivity, carries the fragility band",M.6 intersection,True

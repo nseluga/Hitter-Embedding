@@ -1,0 +1,3 @@
+model,n_hitters,rank_corr_within_stand_pooled,rank_corr_L,rank_corr_R,pred_variance,population,post_selection_descriptive
+phase_d_model,545,0.14626474805407283,0.22570916212303577,0.039417885242445196,0.0005674880018011178,M.6 intersection,True
+c2_bivariate,545,0.14582642711091456,0.19227848129067493,0.08483804652844207,0.000694368899857309,M.6 intersection,True

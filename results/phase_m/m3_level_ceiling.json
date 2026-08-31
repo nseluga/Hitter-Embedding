@@ -1,0 +1,143 @@
+{
+  "post_selection_descriptive": "post-selection descriptive: computed on 2024 after the pre-registered platoon gate ran and failed (docs/research-manifest.md, 2026-08-20). Not a test of a hypothesis.",
+  "primary_population": "M.6 intersection",
+  "intersection": {
+    "n_hitters": 545,
+    "observed_between_hitter_variance": 0.0016816993016209667,
+    "E_var_noise": 0.0007556990189828914,
+    "true_talent_variance": 0.0009260002826380753,
+    "true_talent_sd": 0.03043025275343725,
+    "reliability": 0.5506336844794527,
+    "ceiling_rank_corr": 0.7420469557106563,
+    "degenerate": false,
+    "achieved_rank_corr_weighted": 0.48489638671483637,
+    "fraction_of_ceiling": 0.6534578209413344,
+    "post_selection_descriptive": true
+  },
+  "committed_f5_population": {
+    "f5_committed_617": {
+      "n_hitters": 617,
+      "observed_between_hitter_variance": 0.001816371029620449,
+      "E_var_noise": 0.0008197678076759383,
+      "true_talent_variance": 0.000996603221944511,
+      "true_talent_sd": 0.0315690231389017,
+      "reliability": 0.5486782192032441,
+      "ceiling_rank_corr": 0.7407281682258642,
+      "degenerate": false,
+      "achieved_rank_corr_weighted": 0.4861136137337625,
+      "fraction_of_ceiling": 0.6562645172493776,
+      "post_selection_descriptive": true
+    }
+  },
+  "cross_check_c2_composition": {
+    "route": "C.2 variance composition on the M.6 population (level-side Route B')",
+    "n_hitters": 473,
+    "true_talent_variance": 0.0007132608654266474,
+    "true_talent_sd": 0.02670694414242572,
+    "formula": "w_L^2 tau2_L + w_R^2 tau2_R + 2 w_L w_R rho tau_L tau_R",
+    "weights": "F.5 prior side-specific exposure, normalized within batter"
+  },
+  "cross_check_split_half": {
+    "route": "split-half on game_pk parity, pooled wOBA",
+    "n_hitters": 498,
+    "min_half_pa": 25,
+    "median_half_denom": 167.0,
+    "half_split_spearman": 0.2943139750766224,
+    "reliability_spearman_brown": 0.45477987682115417,
+    "ceiling_rank_corr": 0.6743736922665016
+  },
+  "term_provenance": {
+    "E_var_noise": "f5/claim1_eval noise_floor squared (noise_floor is an RMSE)",
+    "observed_between_hitter_variance": "no_info rung pa_weighted_rmse squared",
+    "true_talent_variance": "observed minus noise; equals the no_info rung's model_rmse squared, which claim1_eval.deconvolve had already computed"
+  },
+  "by_stand_fractions_descriptive": {
+    "L": 0.5690628371928935,
+    "R": 0.12158155336698968,
+    "caveat": "reported descriptively only. The asymmetry's supporting statistic is broken (E.15's LHB split-half reliability is negative) and the L-vs-R difference was never tested."
+  },
+  "coverage": {
+    "phase_d_coverage": {
+      "eval_season": 2024,
+      "actual_groups": 545,
+      "dropped_below_min_eval_pa": 0,
+      "min_eval_pa": 10,
+      "dropped_no_prediction": 0,
+      "scored_groups": 545,
+      "by_stratum": {
+        "low": {
+          "scored": 123,
+          "dropped": 0,
+          "share_dropped": 0.0,
+          "mean_woba_scored": 0.2776752081910957,
+          "mean_woba_dropped": NaN
+        },
+        "medium": {
+          "scored": 94,
+          "dropped": 0,
+          "share_dropped": 0.0,
+          "mean_woba_scored": 0.2871747576491834,
+          "mean_woba_dropped": NaN
+        },
+        "high": {
+          "scored": 328,
+          "dropped": 0,
+          "share_dropped": 0.0,
+          "mean_woba_scored": 0.30528964749579035,
+          "mean_woba_dropped": NaN
+        }
+      }
+    },
+    "no_info_league_average_coverage": {
+      "eval_season": 2024,
+      "actual_groups": 545,
+      "dropped_below_min_eval_pa": 0,
+      "min_eval_pa": 10,
+      "dropped_no_prediction": 0,
+      "scored_groups": 545,
+      "by_stratum": {
+        "low": {
+          "scored": 123,
+          "dropped": 0,
+          "share_dropped": 0.0,
+          "mean_woba_scored": 0.2776752081910957,
+          "mean_woba_dropped": NaN
+        },
+        "medium": {
+          "scored": 94,
+          "dropped": 0,
+          "share_dropped": 0.0,
+          "mean_woba_scored": 0.2871747576491834,
+          "mean_woba_dropped": NaN
+        },
+        "high": {
+          "scored": 328,
+          "dropped": 0,
+          "share_dropped": 0.0,
+          "mean_woba_scored": 0.30528964749579035,
+          "mean_woba_dropped": NaN
+        }
+      }
+    }
+  },
+  "precision_clause": {
+    "rule": "a stratum whose 95% bootstrap CI on the ceiling includes zero cannot carry the illustration; it moves to the stratum with the narrowest CI relative to its point estimate",
+    "frozen": "docs/phase-m-spec.md \u00a7M.2, from the 2026-08-20 revisit condition",
+    "ci_includes_zero": {
+      "low": false,
+      "medium": false,
+      "high": false
+    },
+    "relative_ci_width": {
+      "low": 0.12618554077739538,
+      "medium": 0.12130501819239217,
+      "high": 0.10789479719411234
+    },
+    "illustration_stratum": "low",
+    "default_stratum": "low",
+    "default_stratum_usable": true,
+    "moved": false,
+    "triggered": false,
+    "note": "'low' is the stratum the thesis is graded on, so a move away from it is reported as a limitation on the illustration, not as a change of subject."
+  }
+}
