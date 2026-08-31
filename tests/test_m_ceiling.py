@@ -268,3 +268,113 @@ def test_split_half_null_at_zero_tau2_straddles_zero(sampling_profile):
     assert abs(simulated["mean"]) < 0.05, simulated
     located = m_ceiling.locate_in_simulation(-0.366, simulated)
     assert 0.0 <= located["percentile"] <= 100.0
+
+
+# ---------------------------------------------------------------- paired bootstrap (Pass A1)
+
+@pytest.fixture(scope="module")
+def m1_frame():
+    """The real M.1 frame with every opponent's differential attached."""
+    from src.analysis import m_report
+    pa_df = pd.read_parquet(REPO_ROOT / "data/processed/eval_targets_pa.parquet")
+    e5_frame = pd.read_csv(REPO_ROOT / "results/phase_e/e5_platoon_frame.csv")
+    model = pd.read_csv(REPO_ROOT / "results/phase_d/d5_predictions_d10_baseline.csv")
+    model = model[model["season"] == 2024]
+    population, _ = m_report.m6_population(pa_df, e5_frame, model, 2024)
+    frame, _ = m_report.intersection_frame(e5_frame, pa_df, population, 2024)
+    return m_report.attach_differentials(
+        frame, m_report.c2_differential(pa_df, 2024),
+        m_report.c3_full_differential(
+            pa_df, REPO_ROOT / "results/phase_m/m1_c3_full_predictions.csv",
+            REPO_ROOT / "data/processed/pitch_events.parquet", 2024))
+
+
+def test_the_fast_within_stand_statistic_equals_e5s_own_implementation(m1_frame):
+    """
+    TRANSLATION FIDELITY, blocking. `within_stand_rank_correlation` is a numpy rewrite of
+    `e_eval.platoon_decomposition`'s residualisation, made because the bootstrap calls it
+    thousands of times. If the rewrite drifts, every interval in M.1 and M.2 is an interval
+    around a different statistic than the point estimate beside it.
+    """
+    from src.analysis import e_platoon_ceiling as e15
+    reference, _ = e15.recompute_e5_rank_correlation(m1_frame)
+    fast = m_ceiling.within_stand_rank_correlation(
+        m1_frame["delta_obs"], m1_frame["delta_pred"], m1_frame["weight"], m1_frame["stand"])
+    assert fast == pytest.approx(reference, abs=1e-13)
+
+
+def test_within_stand_residual_removes_each_stands_weighted_mean(m1_frame):
+    residual = m_ceiling.within_stand_residual(
+        m1_frame["delta_obs"], m1_frame["weight"], m1_frame["stand"])
+    for side in m1_frame["stand"].unique():
+        mask = (m1_frame["stand"] == side).to_numpy()
+        assert np.average(residual[mask],
+                          weights=m1_frame["weight"].to_numpy()[mask]) == pytest.approx(0.0,
+                                                                                        abs=1e-15)
+
+
+def test_the_bootstrap_point_estimate_is_the_full_sample_statistic(m1_frame):
+    """The `point` column must be computed on the DATA, not as the mean of the draws — a
+    bootstrap mean is biased for a correlation and would not match the headline."""
+    columns = ["delta_pred", "delta_c2", "delta_c3full"]
+    _, table = m_ceiling.paired_rank_bootstrap(m1_frame, columns, n_boot=100, seed=0)
+    for _, row in table.iterrows():
+        direct = m_ceiling.within_stand_rank_correlation(
+            m1_frame["delta_obs"], m1_frame[row["column"]], m1_frame["weight"],
+            m1_frame["stand"])
+        assert row["point"] == pytest.approx(direct, abs=1e-15)
+        assert row["ci_low"] < row["point"] < row["ci_high"]
+
+
+def test_the_bootstrap_is_deterministic_under_a_seed(m1_frame):
+    columns = ["delta_pred", "delta_c2"]
+    first, _ = m_ceiling.paired_rank_bootstrap(m1_frame, columns, n_boot=50, seed=3)
+    second, _ = m_ceiling.paired_rank_bootstrap(m1_frame, columns, n_boot=50, seed=3)
+    assert np.array_equal(first, second, equal_nan=True)
+
+
+def test_the_bootstrap_refuses_a_frame_with_repeated_hitters(m1_frame):
+    """The resampling unit is the HITTER. On a frame with two rows per hitter, row
+    resampling would break the cluster and shrink every interval."""
+    doubled = pd.concat([m1_frame, m1_frame], ignore_index=True)
+    with pytest.raises(AssertionError, match="repeated batters"):
+        m_ceiling.paired_rank_bootstrap(doubled, ["delta_pred"], n_boot=5)
+
+
+def test_a_model_paired_against_itself_has_an_exactly_zero_difference(m1_frame):
+    """The paired design's defining property: shared target noise cancels, so a model
+    against a copy of itself must give a degenerate interval at zero, not a wide one."""
+    frame = m1_frame.assign(delta_copy=m1_frame["delta_pred"])
+    columns = ["delta_pred", "delta_copy"]
+    draws, table = m_ceiling.paired_rank_bootstrap(frame, columns, n_boot=100, seed=1)
+    contrast = m_ceiling.paired_contrast(draws, columns, "delta_pred", "delta_copy",
+                                         table.iloc[0]["point"], table.iloc[1]["point"])
+    assert contrast["difference"] == 0.0
+    assert contrast["ci_low"] == 0.0 and contrast["ci_high"] == 0.0
+
+
+def test_the_paired_interval_is_tighter_than_the_marginals_it_sits_between(m1_frame):
+    """If it were not, the pairing bought nothing and the two models could just as well
+    have been bootstrapped separately."""
+    columns = ["delta_pred", "delta_c2"]
+    draws, table = m_ceiling.paired_rank_bootstrap(m1_frame, columns, n_boot=400, seed=0)
+    contrast = m_ceiling.paired_contrast(draws, columns, "delta_pred", "delta_c2",
+                                         table.iloc[0]["point"], table.iloc[1]["point"])
+    paired_width = contrast["ci_high"] - contrast["ci_low"]
+    marginal_width = ((table.iloc[0]["ci_high"] - table.iloc[0]["ci_low"])
+                      + (table.iloc[1]["ci_high"] - table.iloc[1]["ci_low"]))
+    assert paired_width < marginal_width
+
+
+def test_the_paired_contrast_sign_favours_the_first_named_model(m1_frame):
+    """Same convention as `claim1_eval.paired_rank_difference`: positive favours A, because
+    a higher rank correlation is better."""
+    columns = ["delta_pred", "delta_c3full"]
+    draws, table = m_ceiling.paired_rank_bootstrap(m1_frame, columns, n_boot=200, seed=0)
+    forward = m_ceiling.paired_contrast(draws, columns, "delta_pred", "delta_c3full",
+                                        table.iloc[0]["point"], table.iloc[1]["point"])
+    backward = m_ceiling.paired_contrast(draws, columns, "delta_c3full", "delta_pred",
+                                         table.iloc[1]["point"], table.iloc[0]["point"])
+    assert forward["difference"] == pytest.approx(-backward["difference"], abs=1e-15)
+    assert forward["favours_a_share"] + backward["favours_a_share"] == pytest.approx(1.0,
+                                                                                     abs=0.02)

@@ -400,24 +400,95 @@ def route_c_diagnostic(frame, pa_df, tau2_b_prime, committed_split_half,
 
 # ------------------------------------------------------------------ M.1
 
-def m1_differential(frame, pa_df, routes, eval_season=EVAL_SEASON):
-    """
-    M.1: put an opponent in the ceiling table. E.5 carried only the model's differential.
+# The differential columns scored in M.1 and M.2, in report order. `delta_pred` is the
+# phase_d model's, already on the E.5 frame; the other two are attached from committed
+# side-specific projections and differenced. Every one of them is SCORING an existing
+# forecast — no differential head is fitted anywhere in Phase M.
+DIFFERENTIAL_MODELS = (
+    ("phase_d_model", "delta_pred"),
+    ("c2_bivariate", "delta_c2"),
+    ("c3_gbm_full", "delta_c3full"),
+)
+REFERENCE_MODEL = "phase_d_model"
 
-    `delta_c2` is C.2's own `predict()` side-specific wOBA differenced — scoring an already
-    committed projection, not new modeling. C.3-full is governed by §10 fallback rule 1;
-    see `c3_full_availability`.
+
+def c3_full_differential(pa_df, cache_path, pitch_events, eval_season=EVAL_SEASON, seed=0):
     """
-    predictions = c2.predict(pa_df, eval_season)
+    C.3-full's side-specific projections, from cache or from the supported refit path.
+
+    Pass A1 discharges §10 fallback rule 1. The rule fired at Phase M because
+    `c3_gbm.predict` fits inside the call and no fitted C.3 artifact was persisted, so a
+    differential needed a retrain. The retrain is the loop at `c_report.py:364` and takes
+    seconds, so this function runs it once and PERSISTS the predictions — after which the
+    condition rule 1 tested ("no side-specific predictions without retraining") is false
+    for every later pass.
+
+    Returns a batter-indexed Series of predicted wOBA(vs L) − wOBA(vs R).
+    """
+    cache_path = Path(cache_path)
+    if cache_path.exists():
+        predictions = pd.read_csv(cache_path)
+    else:
+        # imported here: c3_gbm pulls lightgbm, and every other Phase M path runs without it
+        from src.analysis import c3_gbm as c3
+        from src.analysis.c_report import PITCH_COLUMNS
+        process_seasons = c3.season_process(
+            pd.read_parquet(pitch_events, columns=PITCH_COLUMNS))
+        predictions = c3.predict(pa_df, process_seasons, eval_season,
+                                 feature_set="full", seed=seed)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        predictions.to_csv(cache_path, index=False)
+    predictions = predictions[predictions["season"] == eval_season]
     wide = predictions.pivot_table(index="batter", columns="p_throws", values="pred_woba")
-    assert {"L", "R"}.issubset(wide.columns), "C.2 did not emit both sides"
-    scored = frame.copy()
-    scored["delta_c2"] = (wide["L"] - wide["R"]).reindex(scored["batter"]).to_numpy()
-    assert scored["delta_c2"].notna().all(), "a hitter in the intersection has no C.2 forecast"
+    assert {"L", "R"}.issubset(wide.columns), "C.3-full did not emit both sides"
+    # a hitter C.3-full forecast against only one hand has no differential at all; dropping
+    # him here keeps the absence explicit, and `attach_differentials` asserts that nobody in
+    # the M.1 population lands in that set
+    return (wide["L"] - wide["R"]).dropna()
 
+
+def c2_differential(pa_df, eval_season=EVAL_SEASON):
+    """C.2's predicted wOBA(vs L) − wOBA(vs R), batter-indexed. Scoring a committed
+    forecast, not fitting a differential head."""
+    wide = c2.predict(pa_df, eval_season).pivot_table(
+        index="batter", columns="p_throws", values="pred_woba")
+    assert {"L", "R"}.issubset(wide.columns), "C.2 did not emit both sides"
+    return wide["L"] - wide["R"]
+
+
+def attach_differentials(frame, c2_delta, c3_full_delta):
+    """Put every opponent's differential on the M.1 frame, one column each."""
+    scored = frame.copy()
+    scored["delta_c2"] = c2_delta.reindex(scored["batter"]).to_numpy()
+    scored["delta_c3full"] = c3_full_delta.reindex(scored["batter"]).to_numpy()
+    for _, column in DIFFERENTIAL_MODELS:
+        assert scored[column].notna().all(), \
+            f"a hitter in the intersection has no {column} forecast"
+    return scored
+
+
+def m1_differential(scored, routes, n_boot=2000, seed=0):
+    """
+    M.1: put every Phase C opponent in the ceiling table, each achieved value with an
+    interval. E.5 carried only the model's differential and no interval at all.
+
+    Both gaps are the 2026-08-31 review's findings. A bare 49.3% fraction of ceiling was
+    quoted against an A-to-B′ bracket narrower than the fraction's own sampling error, and
+    a table with no opponent cannot answer the question frozen rule 1 asks.
+
+    One shared bootstrap draw matrix serves the marginal intervals, the fractions (the
+    ceiling is held FIXED — τ² is not refit per replicate, so the interval is the sampling
+    error of the numerator alone, and the artifact says so) and the paired contrasts
+    against `REFERENCE_MODEL`.
+    """
+    names = [name for name, _ in DIFFERENTIAL_MODELS]
+    columns = [column for _, column in DIFFERENTIAL_MODELS]
     weight = scored["weight"].to_numpy(dtype="float64")
+    draws, boot = m_ceiling.paired_rank_bootstrap(scored, columns, n_boot=n_boot, seed=seed)
+    boot = boot.set_index("column")
+
     rows = []
-    for name, column in (("phase_d_model", "delta_pred"), ("c2_bivariate", "delta_c2")):
+    for name, column in DIFFERENTIAL_MODELS:
         by_stand = {}
         for stand in ("L", "R"):
             part = scored[scored["stand"] == stand]
@@ -429,48 +500,76 @@ def m1_differential(frame, pa_df, routes, eval_season=EVAL_SEASON):
         # within-stand rank correlation, which is spec §9 gate 3c.
         pooled, _ = e15.recompute_e5_rank_correlation(
             scored.assign(delta_pred=scored[column]))
+        assert abs(pooled - boot.loc[column, "point"]) < 1e-12, \
+            f"{column}: the bootstrap's fast statistic disagrees with E.5's own"
+        contrast = (None if name == REFERENCE_MODEL else m_ceiling.paired_contrast(
+            draws, columns, column, dict(DIFFERENTIAL_MODELS)[REFERENCE_MODEL],
+            pooled, boot.loc[dict(DIFFERENTIAL_MODELS)[REFERENCE_MODEL], "point"]))
         rows.append({
             "model": name, "n_hitters": int(len(scored)),
             "rank_corr_within_stand_pooled": pooled,
+            "rank_corr_ci_low": boot.loc[column, "ci_low"],
+            "rank_corr_ci_high": boot.loc[column, "ci_high"],
             "rank_corr_L": by_stand["L"], "rank_corr_R": by_stand["R"],
             "pred_variance": float(m_ceiling.weighted_variance(scored[column], weight)),
+            "paired_diff_vs_reference": contrast["difference"] if contrast else 0.0,
+            "paired_diff_ci_low": contrast["ci_low"] if contrast else np.nan,
+            "paired_diff_ci_high": contrast["ci_high"] if contrast else np.nan,
+            "paired_share_favouring_this_model": (contrast["favours_a_share"] if contrast
+                                                  else np.nan),
+            "reference_model": REFERENCE_MODEL,
+            "n_boot": int(n_boot),
             "population": "M.6 intersection",
             "post_selection_descriptive": True,
         })
     scores = pd.DataFrame(rows)
 
     fractions = []
-    for _, row in scores.iterrows():
+    for index, (name, column) in enumerate(DIFFERENTIAL_MODELS):
+        achieved = scores.loc[index, "rank_corr_within_stand_pooled"]
         for route in ("B_prime", "A"):
             ceiling = routes[route]["ceiling_rank_corr"]
+            usable = ceiling > 0
             fractions.append({
-                "model": row["model"], "route": route,
+                "model": name, "route": route,
                 "tau2": routes[route]["tau2"],
                 "ceiling_rank_corr": ceiling,
-                "achieved_rank_corr": row["rank_corr_within_stand_pooled"],
-                "fraction_of_ceiling": (row["rank_corr_within_stand_pooled"] / ceiling
-                                        if ceiling > 0 else float("nan")),
+                "achieved_rank_corr": achieved,
+                "achieved_ci_low": scores.loc[index, "rank_corr_ci_low"],
+                "achieved_ci_high": scores.loc[index, "rank_corr_ci_high"],
+                "fraction_of_ceiling": achieved / ceiling if usable else float("nan"),
+                "fraction_ci_low": (scores.loc[index, "rank_corr_ci_low"] / ceiling
+                                    if usable else float("nan")),
+                "fraction_ci_high": (scores.loc[index, "rank_corr_ci_high"] / ceiling
+                                     if usable else float("nan")),
+                "interval_note": ("hitter-level paired bootstrap on the NUMERATOR only; "
+                                  "the ceiling is held fixed, so this understates total "
+                                  "uncertainty by the width of the route disagreement"),
                 "route_role": ("primary (pre-registered)" if route == "B_prime"
                                else "sensitivity, carries the fragility band"),
                 "population": "M.6 intersection",
                 "post_selection_descriptive": True,
             })
-    return scores, pd.DataFrame(fractions), scored
+    return scores, pd.DataFrame(fractions), draws, columns
 
 
 C3_FULL_AVAILABILITY = {
-    "emitted": False,
-    "fallback_rule": "§10 rule 1",
-    "reason": ("C.3-full has no persisted fitted artifact anywhere in `results/`; "
-               "`c3_gbm.predict` calls `c3_gbm.fit` internally, so producing side-specific "
-               "predictions requires RETRAINING the GBM on the 341MB labeled pitch table. "
-               "The spec's condition ('from existing fitted artifacts without retraining or "
-               "new feature code') is therefore met and rule 1 fires: the differential table "
-               "reports C.2 only."),
-    "not_a_capability_limit": ("the refit is an existing, supported code path "
-                               "(src/analysis/c_report.py:364) needing no new feature code. "
-                               "The omission is a scope boundary the spec pre-set, not "
-                               "something C.3 cannot do."),
+    "emitted": True,
+    "fallback_rule": "§10 rule 1 — FIRED at Phase M (2026-08-30), DISCHARGED in Pass A1",
+    "why_it_fired": ("C.3-full had no persisted fitted artifact anywhere in `results/`, and "
+                     "`c3_gbm.predict` calls `c3_gbm.fit` internally, so side-specific "
+                     "predictions required retraining the GBM on the 341MB labeled pitch "
+                     "table — the condition rule 1 names."),
+    "why_it_is_discharged": ("the retrain is the supported path at `src/analysis/c_report.py:364` "
+                             "and costs 7 seconds, not the session it was scoped as. Pass A1 ran "
+                             "it once and persisted the output to "
+                             "`results/phase_m/m1_c3_full_predictions.csv`, so the rule's "
+                             "condition is false for every later pass."),
+    "reproduction": ("the refit reproduces the committed Phase C `c3_gbm_full` claim-1 row to "
+                     "1.0e-9 on RMSE and 5.6e-17 on rank correlation in every stratum, so the "
+                     "2026-08-31 revisit condition (absence becomes a capability limit if the "
+                     "refit cannot reproduce Phase C) does not fire."),
+    "predictions": "results/phase_m/m1_c3_full_predictions.csv",
     "never": "no differential head was improvised, per the spec's explicit prohibition.",
 }
 
@@ -517,10 +616,40 @@ def m2_stratum(frame, routes, params_b_prime, n_boot=2000, seed=0):
         # showed is mostly the between-stand main effect -- is not the comparable
         # quantity and produces fractions above 1. Both are emitted; the fraction uses
         # the within-stand one.
+        #
+        # Pass A1: every opponent is scored here, not just the model, and every achieved
+        # value carries a hitter-level paired bootstrap interval. Frozen rule 1 grades the
+        # thesis in the LOW stratum against baselines, so a stratum table with a ceiling
+        # and no opponent cannot answer the question the rule asks.
         achieved_raw = float(claim1_eval.weighted_rank_correlation(
             part["delta_obs"], part["delta_pred"], weight))
         achieved = (float(e15.recompute_e5_rank_correlation(part)[0])
                     if part["stand"].nunique() > 1 else achieved_raw)
+        columns = [column for _, column in DIFFERENTIAL_MODELS]
+        reference_column = dict(DIFFERENTIAL_MODELS)[REFERENCE_MODEL]
+        model_draws, model_boot = m_ceiling.paired_rank_bootstrap(
+            part, columns, n_boot=n_boot, seed=seed)
+        model_boot = model_boot.set_index("column")
+        assert abs(model_boot.loc[reference_column, "point"] - achieved) < 1e-12, \
+            f"{stratum}: the bootstrap statistic disagrees with E.5's own residualisation"
+        achieved_columns = {}
+        for name, column in DIFFERENTIAL_MODELS:
+            point = float(model_boot.loc[column, "point"])
+            achieved_columns[f"achieved_{name}"] = point
+            achieved_columns[f"achieved_{name}_ci_low"] = float(model_boot.loc[column, "ci_low"])
+            achieved_columns[f"achieved_{name}_ci_high"] = float(model_boot.loc[column, "ci_high"])
+            achieved_columns[f"fraction_of_ceiling_b_prime_{name}"] = (
+                point / b_prime["ceiling_rank_corr"] if b_prime["ceiling_rank_corr"] > 0
+                else np.nan)
+            if name == REFERENCE_MODEL:
+                continue
+            contrast = m_ceiling.paired_contrast(
+                model_draws, columns, column, reference_column, point,
+                float(model_boot.loc[reference_column, "point"]))
+            achieved_columns[f"paired_diff_{name}_minus_reference"] = contrast["difference"]
+            achieved_columns[f"paired_diff_{name}_ci_low"] = contrast["ci_low"]
+            achieved_columns[f"paired_diff_{name}_ci_high"] = contrast["ci_high"]
+            achieved_columns[f"paired_share_favouring_{name}"] = contrast["favours_a_share"]
 
         # bootstrap resamples HITTERS inside the stratum; tau2 stays fixed under B' because
         # it is not refit, so the interval reflects the sampling-variance profile and the
@@ -562,7 +691,7 @@ def m2_stratum(frame, routes, params_b_prime, n_boot=2000, seed=0):
             "route_a_ci_note": ("the Route A interval is CONDITIONAL on the draw being "
                                 "non-degenerate; the share of draws with tau2 <= 0 is the "
                                 "column beside it, and no draw is clipped to zero"),
-            "route_a_fragility_ceiling_range": band["ceiling_range"],
+            "route_a_fragility_ceiling_range_finite_only": band["ceiling_range_finite_only"],
             "achieved_rank_corr_within_stand": achieved,
             "achieved_rank_corr_raw": achieved_raw,
             "raw_note": ("the raw column includes the between-stand main effect and is NOT "
@@ -570,11 +699,100 @@ def m2_stratum(frame, routes, params_b_prime, n_boot=2000, seed=0):
                          "between the two is visible"),
             "fraction_of_ceiling_b_prime": (achieved / b_prime["ceiling_rank_corr"]
                                             if b_prime["ceiling_rank_corr"] > 0 else np.nan),
+            **achieved_columns,
+            "n_boot": int(n_boot),
+            "reference_model": REFERENCE_MODEL,
+            "achieved_interval_note": ("hitter-level paired bootstrap inside the stratum; the "
+                                       "ceiling columns have their own interval and the two are "
+                                       "not combined"),
             "post_selection_descriptive": True,
         })
 
     table = pd.DataFrame(rows)
     return table, precision_clause(table)
+
+
+# ------------------------------------------------------------------ min_eval_pa sensitivity
+
+MIN_EVAL_PA_FLOORS = (5, 10, 25)
+
+
+def min_eval_pa_sensitivity(pa_df, model_predictions, c2_delta, c3_full_delta,
+                            floors=MIN_EVAL_PA_FLOORS, eval_season=EVAL_SEASON, n_boot=2000,
+                            seed=0):
+    """
+    Rebuild the whole M.0/M.1 chain at each PA floor and report what moves.
+
+    The 2026-08-31 decision keeps the reported population at the committed floor
+    (`claim1_eval.MIN_EVAL_PA` = 10) and reports the floor as a SENSITIVITY. So this
+    function changes nothing upstream: it re-derives a parallel population per floor,
+    refits B' on that population, and re-scores, leaving the headline untouched.
+
+    `claim1_eval.MIN_EVAL_PA_SENSITIVITY` is deliberately NOT reused. That tuple is Phase
+    C's, its committed artifact is `results/phase_c/c_min_eval_pa_sensitivity.csv`, and
+    editing it would silently move a committed Phase C result. Phase M's floors are its own.
+
+    A lower floor admits hitters whose differential is measured on very few PA against one
+    hand, which raises the mean sampling variance and therefore LOWERS the B' ceiling while
+    also adding noise to the achieved correlation. Both move the same way, so the fraction
+    of ceiling is the quantity worth reading here, not either term alone.
+    """
+    from src.analysis import e_eval
+
+    by_batter, by_league = e15.per_pa_variance_tables(pa_df, eval_season)
+    weights = pooling_weights(pa_df, eval_season)
+    pooled_predictions = pool_predictions(model_predictions, weights, eval_season)
+    pooled_pa = pa_df.copy()
+    pooled_pa["p_throws"] = POOLED_HAND
+
+    rows = []
+    for floor in floors:
+        e5_floor, _ = e_eval.platoon_frame(pa_df, model_predictions, eval_season,
+                                           min_eval_pa=floor)
+        f5_floor, _ = claim1_eval.build_eval_frame(pooled_pa, pooled_predictions, eval_season,
+                                                   min_eval_pa=floor)
+        keep = set(e5_floor["batter"]) & set(f5_floor["batter"])
+        frame = e5_floor[e5_floor["batter"].isin(keep)].reset_index(drop=True)
+        frame = e15.attach_sampling_variance(frame, by_batter, by_league)
+        frame["delta_c2"] = c2_delta.reindex(frame["batter"]).to_numpy()
+        frame["delta_c3full"] = c3_full_delta.reindex(frame["batter"]).to_numpy()
+        # a floor below the committed one admits hitters no Phase C opponent forecast covers
+        covered = frame["delta_c2"].notna() & frame["delta_c3full"].notna()
+
+        restricted_pa = pa_df[pa_df["batter"].isin(keep)]
+        params = c2.fit(restricted_pa, eval_season)
+        weight = frame["weight"].to_numpy(dtype="float64")
+        sampling = frame["sampling_var"].to_numpy(dtype="float64")
+        mean_sampling = float(np.average(sampling, weights=weight))
+        tau2, _ = pooled_tau2(frame, params)
+        b_prime = m_ceiling.ceiling_from_variances(tau2, mean_sampling)
+
+        scored = frame[covered].reset_index(drop=True)
+        columns = [column for _, column in DIFFERENTIAL_MODELS]
+        _, boot = m_ceiling.paired_rank_bootstrap(scored, columns, n_boot=n_boot, seed=seed)
+        boot = boot.set_index("column")
+        ceiling = b_prime["ceiling_rank_corr"]
+        for name, column in DIFFERENTIAL_MODELS:
+            point = float(boot.loc[column, "point"])
+            rows.append({
+                "min_eval_pa": int(floor),
+                "is_committed_floor": floor == claim1_eval.MIN_EVAL_PA,
+                "model": name,
+                "n_hitters_population": int(len(frame)),
+                "n_hitters_scored": int(len(scored)),
+                "n_hitters_without_phase_c_forecast": int((~covered).sum()),
+                "mean_sampling_var": mean_sampling,
+                "tau2_b_prime": tau2,
+                "ceiling_b_prime": ceiling,
+                "achieved_rank_corr": point,
+                "achieved_ci_low": float(boot.loc[column, "ci_low"]),
+                "achieved_ci_high": float(boot.loc[column, "ci_high"]),
+                "fraction_of_ceiling_b_prime": point / ceiling if ceiling > 0 else np.nan,
+                "n_boot": int(n_boot),
+                "role": "sensitivity — the reported population is unchanged (2026-08-31)",
+                "post_selection_descriptive": True,
+            })
+    return pd.DataFrame(rows)
 
 
 def precision_clause(table):
@@ -854,6 +1072,9 @@ def main():
     parser.add_argument("--f5-scores", default="results/phase_f/f5_pooled_scores.csv")
     parser.add_argument("--e15-json", default="results/phase_e/e15_ceiling.json")
     parser.add_argument("--n-boot", type=int, default=2000)
+    parser.add_argument("--pitch-events", default="data/processed/pitch_events.parquet")
+    parser.add_argument("--c3-full-cache",
+                        default="results/phase_m/m1_c3_full_predictions.csv")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     args = parser.parse_args()
 
@@ -897,7 +1118,9 @@ def main():
                      "Route A demoted to 'reported, unvalidated-noise-model caveat'")
     if routes["routes"]["B_prime"]["degenerate"]:
         fired.append("3 — B' degenerate: headline falls back to the B-vs-A bracket")
-    fired.append("1 — C.3-full omitted from M.1; " + C3_FULL_AVAILABILITY["reason"])
+    # §10 rule 1 fired at Phase M and is DISCHARGED in Pass A1: C.3-full is refit and scored
+    # in M.1 and M.2 below, so the rule is recorded as discharged rather than as firing.
+    assert C3_FULL_AVAILABILITY["emitted"], "rule 1 must fire again if C.3-full is not emitted"
     route_b_reproduces = abs(routes["routes"]["B"]["tau2"] - COMMITTED["route_b_tau2"]) < 5e-8
     if not route_b_reproduces:
         fired.append("4 — committed Route B failed to reproduce; current code's value adopted")
@@ -942,25 +1165,38 @@ def main():
         print(f"  {name:8s} tau2 {row['tau2']:.8f}  ceiling "
               f"{row['ceiling_rank_corr']:.4f}  fraction {row['fraction_of_ceiling']:.3f}"
               f"{'  DEGENERATE' if row['degenerate'] else ''}")
-    print(f"  fragility band (A, x0.97/x1.03): {routes['fragility_band']['ceiling_range']}")
+    print(f"  fragility band (A, x0.97/x1.03): {routes['fragility_band']['ceiling_range_finite_only']}")
     print(f"  Route C: {route_c['verdict']}")
 
     # ---------------- M.1
     print("\nM.1 differential scores")
-    m1_scores, m1_fractions, scored_frame = m1_differential(frame, pa_df, routes["routes"],
-                                                            args.eval_season)
+    c2_delta = c2_differential(pa_df, args.eval_season)
+    c3_full_delta = c3_full_differential(pa_df, args.c3_full_cache, args.pitch_events,
+                                         args.eval_season)
+    frame = attach_differentials(frame, c2_delta, c3_full_delta)
+    m1_scores, m1_fractions, _, _ = m1_differential(frame, routes["routes"],
+                                                    n_boot=args.n_boot)
     m1_scores.to_csv(out_dir / "m1_differential_scores.csv", index=False)
     m1_fractions.to_csv(out_dir / "m1_fraction_of_ceiling.csv", index=False)
     print(m1_scores[["model", "n_hitters", "rank_corr_within_stand_pooled",
-                     "rank_corr_L", "rank_corr_R"]].round(4).to_string(index=False))
+                     "rank_corr_ci_low", "rank_corr_ci_high",
+                     "paired_diff_vs_reference"]].round(4).to_string(index=False))
+
+    # ---------------- M.1 sensitivity: the PA floor
+    print("\nM.1 sensitivity — min_eval_pa")
+    sensitivity = min_eval_pa_sensitivity(pa_df, model_predictions, c2_delta, c3_full_delta,
+                                          eval_season=args.eval_season, n_boot=args.n_boot)
+    sensitivity.to_csv(out_dir / "m1_min_eval_pa_sensitivity.csv", index=False)
+    print(sensitivity[["min_eval_pa", "model", "n_hitters_scored", "ceiling_b_prime",
+                       "achieved_rank_corr",
+                       "fraction_of_ceiling_b_prime"]].round(4).to_string(index=False))
 
     # ---------------- M.2
     print("\nM.2 per-stratum ceiling")
     m2_table, clause = m2_stratum(frame, routes["routes"], params_b_prime, n_boot=args.n_boot)
     m2_table.to_csv(out_dir / "m2_stratum_ceiling.csv", index=False)
-    print(m2_table[["stratum", "n_hitters", "ceiling_b_prime", "ceiling_b_prime_ci_low",
-                    "ceiling_b_prime_ci_high", "achieved_rank_corr_within_stand",
-                    "achieved_rank_corr_raw",
+    print(m2_table[["stratum", "n_hitters", "ceiling_b_prime",
+                    "achieved_phase_d_model", "achieved_c2_bivariate", "achieved_c3_gbm_full",
                     "fraction_of_ceiling_b_prime"]].round(4).to_string(index=False))
     print(f"  precision clause -> illustration stratum: {clause['illustration_stratum']}")
 

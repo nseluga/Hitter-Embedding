@@ -116,7 +116,7 @@ def fragility_band(observed_within_stand_var, mean_sampling_var, scales=FRAGILIT
         "scales": [row["sampling_scale"] for row in rows],
         "tau2": [row["tau2"] for row in rows],
         "ceiling_rank_corr": ceilings,
-        "ceiling_range": [min(finite), max(finite)] if finite else [float("nan")] * 2,
+        "ceiling_range_finite_only": [min(finite), max(finite)] if finite else [float("nan")] * 2,
         "any_degenerate": any(row["degenerate"] for row in rows),
     }
 
@@ -274,4 +274,117 @@ def locate_in_simulation(value, simulation):
         "value": float(value),
         "percentile": float((draws < value).mean() * 100.0),
         "inside_95": bool(simulation["p2_5"] <= value <= simulation["p97_5"]),
+    }
+
+
+# ------------------------------------------------------------------ paired bootstrap
+#
+# Added Pass A1. The review of 2026-08-31 found that no achieved correlation in Phase M
+# carried an interval, so a 49.3% fraction of ceiling was quoted as a point estimate while
+# its own sampling error was wider than the A-to-B' bracket it sat inside.
+#
+# The unit resampled is the HITTER. On the M.1 differential frame a hitter contributes
+# exactly one row -- both of his sides are already collapsed into delta_obs -- so row
+# resampling IS cluster resampling here, unlike `claim1_eval.batter_clusters`, which
+# exists because a claim-1 eval frame carries two rows per hitter. `paired_rank_bootstrap`
+# asserts the one-row-per-hitter property rather than assuming it.
+#
+# Every model is scored on the SAME resampled hitters, so the shared target noise cancels
+# in a difference and the paired interval is far tighter than the difference of two
+# marginal intervals would suggest.
+
+
+def within_stand_residual(values, weight, stand):
+    """Subtract the weighted mean inside each stand — E.5's residualisation, in numpy."""
+    values = np.asarray(values, dtype="float64")
+    weight = np.asarray(weight, dtype="float64")
+    stand = np.asarray(stand)
+    out = values.copy()
+    for side in np.unique(stand):
+        mask = stand == side
+        out[mask] = values[mask] - np.average(values[mask], weights=weight[mask])
+    return out
+
+
+def within_stand_rank_correlation(delta_obs, delta_pred, weight, stand):
+    """
+    E.5's within-stand weighted Spearman, as a pure array function.
+
+    `e_eval.platoon_decomposition` is the reference implementation and stays the one the
+    committed artifacts are produced by. This is the same arithmetic without the pandas
+    frame rebuild, because the bootstrap calls it thousands of times. `tests/test_m_ceiling`
+    asserts the two agree to floating point on the real frame — a translation check, not a
+    second estimator.
+    """
+    weight = np.asarray(weight, dtype="float64")
+    return float(claim1_eval.weighted_rank_correlation(
+        within_stand_residual(delta_obs, weight, stand),
+        within_stand_residual(delta_pred, weight, stand),
+        weight))
+
+
+def paired_rank_bootstrap(frame, columns, n_boot=2000, seed=0, ci=(2.5, 97.5)):
+    """
+    Resample hitters once per replicate and score EVERY model on that resample.
+
+    frame: one row per hitter, with `delta_obs`, `weight`, `stand`, and each column in
+    `columns`. Returns (draws, table): `draws` is (n_boot, len(columns)) so the caller can
+    form any paired contrast from the same replicates, and `table` carries the point
+    estimate and percentile interval per column.
+
+    A replicate drawing a single stand is kept: the residualisation degenerates to centring
+    and the statistic is still defined. A replicate yielding fewer than three distinct
+    predictions gives NaN and is dropped, with `n_draws` reporting the survivors so a
+    mostly-degenerate column cannot show a spuriously tight interval.
+    """
+    assert frame["batter"].is_unique, \
+        "paired_rank_bootstrap resamples ROWS as hitters; this frame has repeated batters"
+    obs = frame["delta_obs"].to_numpy(dtype="float64")
+    weight = frame["weight"].to_numpy(dtype="float64")
+    stand = frame["stand"].to_numpy()
+    predictions = {name: frame[name].to_numpy(dtype="float64") for name in columns}
+    n = len(frame)
+    rng = np.random.default_rng(seed)
+
+    draws = np.empty((int(n_boot), len(columns)), dtype="float64")
+    for b in range(int(n_boot)):
+        pick = rng.integers(0, n, n)
+        for j, name in enumerate(columns):
+            draws[b, j] = within_stand_rank_correlation(
+                obs[pick], predictions[name][pick], weight[pick], stand[pick])
+
+    rows = []
+    for j, name in enumerate(columns):
+        column = draws[:, j]
+        finite = column[np.isfinite(column)]
+        assert len(finite) > n_boot // 2, f"{name}: most bootstrap replicates degenerated"
+        rows.append({
+            "column": name,
+            "n_hitters": int(n),
+            "n_draws": int(len(finite)),
+            "point": within_stand_rank_correlation(obs, predictions[name], weight, stand),
+            "ci_low": float(np.percentile(finite, ci[0])),
+            "ci_high": float(np.percentile(finite, ci[1])),
+        })
+    return draws, pd.DataFrame(rows)
+
+
+def paired_contrast(draws, columns, a, b, point_a, point_b, ci=(2.5, 97.5)):
+    """
+    One paired difference from an existing `paired_rank_bootstrap` draw matrix.
+
+    Sign convention follows `claim1_eval.paired_rank_difference`: positive favours A,
+    because a higher rank correlation is better. `favours_a_share` is the share of
+    replicates in which A ranks better — the same meaning it carries there.
+    """
+    index = {name: j for j, name in enumerate(columns)}
+    difference = draws[:, index[a]] - draws[:, index[b]]
+    difference = difference[np.isfinite(difference)]
+    return {
+        "contrast": f"{a} minus {b}",
+        "difference": float(point_a - point_b),
+        "ci_low": float(np.percentile(difference, ci[0])),
+        "ci_high": float(np.percentile(difference, ci[1])),
+        "favours_a_share": float(np.mean(difference > 0)),
+        "n_draws": int(len(difference)),
     }

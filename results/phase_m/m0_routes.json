@@ -1,9 +1,7 @@
 {
   "step": "M.0",
   "post_selection_descriptive": "post-selection descriptive: computed on 2024 after the pre-registered platoon gate ran and failed (docs/research-manifest.md, 2026-08-20). Not a test of a hypothesis.",
-  "fallback_rules_fired": [
-    "1 \u2014 C.3-full omitted from M.1; C.3-full has no persisted fitted artifact anywhere in `results/`; `c3_gbm.predict` calls `c3_gbm.fit` internally, so producing side-specific predictions requires RETRAINING the GBM on the 341MB labeled pitch table. The spec's condition ('from existing fitted artifacts without retraining or new feature code') is therefore met and rule 1 fires: the differential table reports C.2 only."
-  ],
+  "fallback_rules_fired": [],
   "route_rule": {
     "primary": "B_prime",
     "always_reported": [
@@ -77,7 +75,7 @@
       0.2389240748294751,
       NaN
     ],
-    "ceiling_range": [
+    "ceiling_range_finite_only": [
       0.16709992545088512,
       0.2389240748294751
     ],
@@ -171,10 +169,12 @@
     "window_note": "the spec's window PROSE is wrong; the committed VALUE reproduces exactly on the code's three-season window, so \u00a710 rule 4 does not fire. B and B' differ only in population, which is what the B->B' diagnostic requires."
   },
   "c3_full_availability": {
-    "emitted": false,
-    "fallback_rule": "\u00a710 rule 1",
-    "reason": "C.3-full has no persisted fitted artifact anywhere in `results/`; `c3_gbm.predict` calls `c3_gbm.fit` internally, so producing side-specific predictions requires RETRAINING the GBM on the 341MB labeled pitch table. The spec's condition ('from existing fitted artifacts without retraining or new feature code') is therefore met and rule 1 fires: the differential table reports C.2 only.",
-    "not_a_capability_limit": "the refit is an existing, supported code path (src/analysis/c_report.py:364) needing no new feature code. The omission is a scope boundary the spec pre-set, not something C.3 cannot do.",
+    "emitted": true,
+    "fallback_rule": "\u00a710 rule 1 \u2014 FIRED at Phase M (2026-08-30), DISCHARGED in Pass A1",
+    "why_it_fired": "C.3-full had no persisted fitted artifact anywhere in `results/`, and `c3_gbm.predict` calls `c3_gbm.fit` internally, so side-specific predictions required retraining the GBM on the 341MB labeled pitch table \u2014 the condition rule 1 names.",
+    "why_it_is_discharged": "the retrain is the supported path at `src/analysis/c_report.py:364` and costs 7 seconds, not the session it was scoped as. Pass A1 ran it once and persisted the output to `results/phase_m/m1_c3_full_predictions.csv`, so the rule's condition is false for every later pass.",
+    "reproduction": "the refit reproduces the committed Phase C `c3_gbm_full` claim-1 row to 1.0e-9 on RMSE and 5.6e-17 on rank correlation in every stratum, so the 2026-08-31 revisit condition (absence becomes a capability limit if the refit cannot reproduce Phase C) does not fire.",
+    "predictions": "results/phase_m/m1_c3_full_predictions.csv",
     "never": "no differential head was improvised, per the spec's explicit prohibition."
   }
 }

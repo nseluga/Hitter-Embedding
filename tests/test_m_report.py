@@ -61,6 +61,26 @@ def intersection(pa_df, e5_frame, population):
     return m_report.intersection_frame(e5_frame, pa_df, population[0], EVAL_SEASON)
 
 
+@pytest.fixture(scope="module")
+def c2_delta(pa_df):
+    return m_report.c2_differential(pa_df, EVAL_SEASON)
+
+
+@pytest.fixture(scope="module")
+def c3_full_delta(pa_df):
+    """Reads the committed Pass A1 cache. If it is missing the refit runs, which is the
+    point: the artifact is reproducible, not a hand-placed file."""
+    return m_report.c3_full_differential(
+        pa_df, REPO / "results/phase_m/m1_c3_full_predictions.csv",
+        REPO / "data/processed/pitch_events.parquet", EVAL_SEASON)
+
+
+@pytest.fixture(scope="module")
+def scored_frame(intersection, c2_delta, c3_full_delta):
+    frame, _ = intersection
+    return m_report.attach_differentials(frame, c2_delta, c3_full_delta)
+
+
 # ---------------------------------------------------------------- §9.3a
 
 def test_unrestricted_c2_refit_reproduces_the_committed_route_b_tau2(pa_df):
@@ -129,18 +149,85 @@ def test_m1_reproduces_e5s_committed_within_stand_rank_correlation(intersection)
     assert achieved == pytest.approx(COMMITTED_E5_WITHIN_STAND_RANK_CORR, abs=1e-12)
 
 
-def test_m1_scores_the_model_and_c2_on_identical_rows(pa_df, intersection):
-    frame, _ = intersection
+def test_m1_scores_every_opponent_on_identical_rows(scored_frame):
     routes = {"A": {"tau2": 1e-4, "ceiling_rank_corr": 0.1},
               "B_prime": {"tau2": 4e-4, "ceiling_rank_corr": 0.3}}
-    scores, fractions, scored = m_report.m1_differential(frame, pa_df, routes, EVAL_SEASON)
-    assert set(scores["model"]) == {"phase_d_model", "c2_bivariate"}
-    assert scores["n_hitters"].nunique() == 1, "the two rungs were scored on different rows"
-    assert scored["delta_c2"].notna().all()
+    scores, fractions, draws, columns = m_report.m1_differential(scored_frame, routes,
+                                                                 n_boot=200)
+    assert set(scores["model"]) == {"phase_d_model", "c2_bivariate", "c3_gbm_full"}
+    assert scores["n_hitters"].nunique() == 1, "the rungs were scored on different rows"
     model_row = scores[scores["model"] == "phase_d_model"].iloc[0]
     assert model_row["rank_corr_within_stand_pooled"] == pytest.approx(
         COMMITTED_E5_WITHIN_STAND_RANK_CORR, abs=1e-12)
-    assert len(fractions) == 4, "every rung must be reported under both B' and A"
+    assert len(fractions) == 6, "every rung must be reported under both B' and A"
+    assert draws.shape == (200, 3)
+    assert columns == ["delta_pred", "delta_c2", "delta_c3full"]
+
+
+def test_m1_every_achieved_value_carries_an_interval_that_brackets_it(scored_frame):
+    """The review of 2026-08-31: a point estimate with no interval is what this pass
+    exists to stop shipping."""
+    routes = {"A": {"tau2": 1e-4, "ceiling_rank_corr": 0.1},
+              "B_prime": {"tau2": 4e-4, "ceiling_rank_corr": 0.3}}
+    scores, fractions, _, _ = m_report.m1_differential(scored_frame, routes, n_boot=200)
+    for _, row in scores.iterrows():
+        assert row["rank_corr_ci_low"] < row["rank_corr_within_stand_pooled"] \
+            < row["rank_corr_ci_high"], row["model"]
+    assert fractions[["fraction_ci_low", "fraction_ci_high"]].notna().all().all()
+
+
+def test_the_reference_model_has_a_zero_paired_difference_with_itself(scored_frame):
+    routes = {"A": {"tau2": 1e-4, "ceiling_rank_corr": 0.1},
+              "B_prime": {"tau2": 4e-4, "ceiling_rank_corr": 0.3}}
+    scores, _, _, _ = m_report.m1_differential(scored_frame, routes, n_boot=100)
+    reference = scores[scores["model"] == m_report.REFERENCE_MODEL].iloc[0]
+    assert reference["paired_diff_vs_reference"] == 0.0
+    assert np.isnan(reference["paired_share_favouring_this_model"])
+
+
+def test_c3_full_reproduces_its_committed_phase_c_claim1_row(pa_df, c3_full_delta):
+    """
+    The 2026-08-31 revisit condition on the differential-table decision: absence of
+    C.3-full becomes a capability limit only if the refit cannot reproduce its committed
+    Phase C parameters. It reproduces, so the condition does not fire.
+    """
+    cached = pd.read_csv(REPO / "results/phase_m/m1_c3_full_predictions.csv")
+    cached = cached[cached["season"] == EVAL_SEASON]
+    committed = pd.read_csv(REPO / "results/phase_c/c_claim1_scores.csv")
+    committed = committed[committed["model"] == "c3_gbm_full"]
+    assert len(committed), "Phase C has no committed c3_gbm_full row to reproduce"
+    rescored, _ = claim1_eval.evaluate(pa_df, cached, EVAL_SEASON)
+    for _, row in committed.iterrows():
+        mine = rescored[rescored["stratum"] == row["stratum"]]
+        if not len(mine):
+            continue
+        assert float(mine.iloc[0]["pa_weighted_rmse"]) == pytest.approx(
+            float(row["pa_weighted_rmse"]), abs=1e-6), row["stratum"]
+        assert float(mine.iloc[0]["rank_corr_weighted"]) == pytest.approx(
+            float(row["rank_corr_weighted"]), abs=1e-9), row["stratum"]
+    assert c3_full_delta.notna().all() and len(c3_full_delta) > 500
+
+
+def test_the_pa_floor_sensitivity_leaves_the_reported_population_alone(pa_df,
+                                                                      model_predictions,
+                                                                      c2_delta,
+                                                                      c3_full_delta,
+                                                                      intersection):
+    """Item 2 of Pass A1. The floor is a SENSITIVITY: the committed floor's row must still
+    describe the same population M.1 reports on."""
+    frame, _ = intersection
+    table = m_report.min_eval_pa_sensitivity(pa_df, model_predictions, c2_delta,
+                                             c3_full_delta, floors=(5, 10, 25),
+                                             n_boot=100)
+    assert set(table["min_eval_pa"]) == {5, 10, 25}
+    committed = table[table["is_committed_floor"]]
+    assert len(committed), "no row is marked as the committed floor"
+    assert committed["n_hitters_population"].iloc[0] == len(frame)
+    assert claim1_eval.MIN_EVAL_PA_SENSITIVITY == (10, 25, 50), \
+        "Phase C's own floor tuple was edited; its committed artifact would move"
+    # a lower floor admits worse-measured hitters, so sampling variance rises monotonically
+    by_floor = table.drop_duplicates("min_eval_pa").set_index("min_eval_pa")
+    assert by_floor.loc[5, "mean_sampling_var"] > by_floor.loc[25, "mean_sampling_var"]
 
 
 # ---------------------------------------------------------------- population
@@ -205,7 +292,7 @@ def test_the_fragility_band_is_wide_enough_to_matter(intersection):
     observed = e15.between_within_stand(frame["delta_obs"], weight, frame["stand"])
     band = m_ceiling.fragility_band(observed["within_stand"],
                                     float(np.average(sampling, weights=weight)))
-    low, high = band["ceiling_range"]
+    low, high = band["ceiling_range_finite_only"]
     assert high / low > 1.2, "the fragility band collapsed; the route rule's premise changed"
 
 
@@ -248,12 +335,14 @@ def test_the_precision_clause_stays_on_low_when_low_is_usable():
         "the fixture must have a narrower medium, or it does not test the tie-break"
 
 
-def test_c3_full_omission_is_recorded_as_a_fired_fallback_not_a_silent_gap():
+def test_c3_full_is_now_emitted_and_rule_1_is_recorded_as_discharged():
+    """Pass A1 discharges §10 fallback rule 1. If C.3-full ever stops being emitted the
+    rule fires again, and this test is what makes that a failure rather than a silence."""
     record = m_report.C3_FULL_AVAILABILITY
-    assert record["emitted"] is False
-    assert "§10 rule 1" == record["fallback_rule"]
-    assert "retrain" in record["reason"].lower()
-    assert record["not_a_capability_limit"]
+    assert record["emitted"] is True
+    assert "DISCHARGED" in record["fallback_rule"]
+    assert record["predictions"].endswith("m1_c3_full_predictions.csv")
+    assert (REPO / record["predictions"]).exists()
 
 
 def test_the_route_rule_names_b_prime_primary_and_never_promotes_route_c():

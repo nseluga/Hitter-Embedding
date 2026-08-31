@@ -68,9 +68,7 @@
     "level_ceiling": 0.7420469557106563,
     "level_fraction": 0.6534578209413344
   },
-  "fallback_rules_fired": [
-    "1 \u2014 C.3-full omitted from M.1; C.3-full has no persisted fitted artifact anywhere in `results/`; `c3_gbm.predict` calls `c3_gbm.fit` internally, so producing side-specific predictions requires RETRAINING the GBM on the 341MB labeled pitch table. The spec's condition ('from existing fitted artifacts without retraining or new feature code') is therefore met and rule 1 fires: the differential table reports C.2 only."
-  ],
+  "fallback_rules_fired": [],
   "m4_coverage": {
     "nominal": 0.95,
     "interval": "seed_plus_target_noise (the fair test \u2014 seed spread convolved with the target's own sampling noise)",
@@ -104,8 +102,10 @@
   "artifacts": [
     "m0_route_c_diagnostic.json",
     "m0_routes.json",
+    "m1_c3_full_predictions.csv",
     "m1_differential_scores.csv",
     "m1_fraction_of_ceiling.csv",
+    "m1_min_eval_pa_sensitivity.csv",
     "m2_stratum_ceiling.csv",
     "m3_level_ceiling.json",
     "m4_coverage_labels.csv",
