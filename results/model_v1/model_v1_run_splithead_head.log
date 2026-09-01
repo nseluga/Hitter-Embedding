@@ -1,4 +1,4 @@
-arm: d9_baseline seeds: [0, 1, 2, 3, 4]
+arm: splithead_baseline seeds: [0, 1, 2, 3, 4]
 rows: 1279
 pred_woba mean: 0.3149
 pred_woba sd: 0.0325
@@ -13,4 +13,4 @@ rate_bip_00: 0.1017
 rate_bip_points_00: 0.0388
 bip joined to a PA outcome: 989910 of 989910 (100.0%)
 contact split from: trained_head
-wrote results/phase_d/d5_predictions_d9_baseline_head.csv
+wrote results/model_v1/model_v1_predictions_splithead_baseline_head.csv

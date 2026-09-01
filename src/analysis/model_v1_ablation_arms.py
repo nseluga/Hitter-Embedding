@@ -1,15 +1,15 @@
 """
 Step 5 of the D.5 remediation: claim-1 for every ablation arm (D5-R16).
 
-Frozen rule #2 says architecture decisions are made on claim-1. Zero of the eight `d9` arms had
-a claim-1 number; every verdict came from held-out per-pitch log loss, which `d5_report.py`'s own
+Frozen rule #2 says architecture decisions are made on claim-1. Zero of the eight `splithead` arms had
+a claim-1 number; every verdict came from held-out per-pitch log loss, which `model_v1_ablation_report.py`'s own
 docstring says "says which model predicts PITCHES better and nothing at all about whether it
 projects HITTERS better than empirical Bayes". This module closes that.
 
 Three things it deliberately does NOT do.
 
 It does not compare `reference` columns. That column is log loss over the quality bins, and the
-D5-R17 rebuild moved the bins, so a `d9` and a `d10` reference are in different units -- and
+D5-R17 rebuild moved the bins, so a `splithead` and a `rebuild` reference are in different units -- and
 `nospray` factorizes the output space differently again, so its 0.814994 is incomparable to
 baseline's by construction rather than by accident. claim-1 has no such problem: it is
 PA-weighted RMSE on wOBA, the same quantity whatever the model factorizes into.
@@ -53,7 +53,7 @@ def load_arm_frames(out_dir, stage, arms, pa_df, eval_season):
     """
     frames, missing = {}, []
     for arm in arms:
-        path = Path(out_dir) / f"d5_predictions_{stage}_{arm}.csv"
+        path = Path(out_dir) / f"model_v1_predictions_{stage}_{arm}.csv"
         if not path.exists():
             missing.append(arm)
             continue
@@ -72,7 +72,7 @@ def seed_spread(out_dir, stage, arm, pa_df, eval_season, seeds=(0, 1, 2, 3, 4)):
     """
     rows = []
     for seed in seeds:
-        path = Path(out_dir) / f"d5_predictions_{stage}_{arm}_s{seed}.csv"
+        path = Path(out_dir) / f"model_v1_predictions_{stage}_{arm}_s{seed}.csv"
         if not path.exists():
             continue
         frame, _ = ce.build_eval_frame(pa_df, pd.read_csv(path), eval_season)
@@ -154,7 +154,7 @@ def rank_arms(frames, comparisons, stratum=DECISIVE_STRATUM):
 
 def main():
     parser = argparse.ArgumentParser(description="D.5 step 5: claim-1 for every ablation arm.")
-    parser.add_argument("--stage", default="d10")
+    parser.add_argument("--stage", default="rebuild")
     parser.add_argument("--arms", nargs="+",
                         default=["baseline", "dim16", "dim64", "bilinear", "meanweight",
                                  "invfreq", "nospray", "block"])
@@ -162,7 +162,7 @@ def main():
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
     parser.add_argument("--n-boot", type=int, default=2000)
-    parser.add_argument("--out-dir", default="results/phase_d")
+    parser.add_argument("--out-dir", default="results/model_v1")
     args = parser.parse_args()
 
     ce.assert_not_test_season(args.eval_season, final_run=args.final_run)
@@ -175,17 +175,17 @@ def main():
     assert BASELINE in frames, "baseline has no predictions, so nothing can be compared"
 
     comparisons = compare_arms(frames, n_boot=args.n_boot)
-    comparisons.to_csv(out_dir / f"d5_arms_paired_{args.stage}.csv", index=False)
+    comparisons.to_csv(out_dir / f"model_v1_arms_paired_{args.stage}.csv", index=False)
 
     table = rank_arms(frames, comparisons)
-    table.to_csv(out_dir / f"d5_arms_{args.stage}.csv", index=False)
+    table.to_csv(out_dir / f"model_v1_arms_{args.stage}.csv", index=False)
     print(f"\nclaim-1 by arm, decisive stratum '{DECISIVE_STRATUM}' (pre-registered). "
           f"NEGATIVE rmse_difference favours the arm.")
     print(table.to_string(index=False, float_format="%.5f"))
 
     per_seed, spread = seed_spread(out_dir, args.stage, BASELINE, pa_df, args.eval_season)
     if spread is not None:
-        per_seed.to_csv(out_dir / f"d5_arms_baseline_per_seed_{args.stage}.csv", index=False)
+        per_seed.to_csv(out_dir / f"model_v1_arms_baseline_per_seed_{args.stage}.csv", index=False)
         print(f"\nbaseline seed spread -- CONTEXT, never the test. Every other arm's interval "
               f"assumes its seed noise resembles this.")
         print(spread.to_string(index=False, float_format="%.5f"))
@@ -204,11 +204,11 @@ def main():
         "reference_column_incomparable": "sweep_log.csv `reference` is log loss over the quality "
                                          "bins, which the D5-R17 rebuild moved and which nospray "
                                          "factorizes differently; it is not comparable across "
-                                         "arms or against d9",
+                                         "arms or against splithead",
         "any_arm_beats_baseline": bool(table.get("beats_baseline", pd.Series(dtype=bool)).any()),
     }
-    (out_dir / f"d5_arms_verdict_{args.stage}.json").write_text(json.dumps(verdict, indent=2))
-    print(f"\nwrote {out_dir / f'd5_arms_verdict_{args.stage}.json'}")
+    (out_dir / f"model_v1_arms_verdict_{args.stage}.json").write_text(json.dumps(verdict, indent=2))
+    print(f"\nwrote {out_dir / f'model_v1_arms_verdict_{args.stage}.json'}")
     return 0
 
 

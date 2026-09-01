@@ -1,5 +1,5 @@
-stage d10: 40 runs pending, 79 already done
-deadline 14:40; touch results/phase_d/STOP to stop after the current run
+stage rebuild: 40 runs pending, 79 already done
+deadline 14:40; touch results/model_v1/STOP to stop after the current run
 [18:40] baseline seed 0 ...
     ok in 53.8 min, ref 1.02584
 [19:34] baseline seed 1 ...
@@ -29,8 +29,8 @@ deadline 14:40; touch results/phase_d/STOP to stop after the current run
 [09:21] dim64 seed 3 ...
     ok in 91.9 min, ref 1.02583
 [10:53] dim64 seed 4 ...
-stage d10: 26 runs pending, 93 already done
-deadline 22:37; touch results/phase_d/STOP to stop after the current run
+stage rebuild: 26 runs pending, 93 already done
+deadline 22:37; touch results/model_v1/STOP to stop after the current run
 [21:07] dim64 seed 4 ...
     ok in 7.2 min, ref 1.02597
 [21:14] bilinear seed 0 ...
@@ -41,8 +41,8 @@ deadline 22:37; touch results/phase_d/STOP to stop after the current run
     ok in 543.9 min, ref 1.02609
 -516 min left, next run needs ~16; stopping here
 done for now; 22 runs still pending — rerun the same command
-stage d10: 22 runs pending, 97 already done
-deadline 11:34; touch results/phase_d/STOP to stop after the current run
+stage rebuild: 22 runs pending, 97 already done
+deadline 11:34; touch results/model_v1/STOP to stop after the current run
 [11:34] bilinear seed 3 ...
     ok in 11.4 min, ref 1.02597
 [11:46] bilinear seed 4 ...

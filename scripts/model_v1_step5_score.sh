@@ -1,5 +1,5 @@
 #!/bin/bash
-# Step 5 -- claim-1 for every d10 arm. Thirteen composition runs: eight ensembles (the
+# Step 5 -- claim-1 for every rebuild arm. Thirteen composition runs: eight ensembles (the
 # comparable, shippable number) plus five per-seed baseline runs (the claim-1 noise floor).
 #
 # Why a script and not thirteen commands. One `predict` pass over ~1,074 hitters measured
@@ -26,10 +26,10 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 DATA_DIR=${DATA_DIR:-data/processed/phase_d5}
-OUT_DIR=${OUT_DIR:-results/phase_d}
-STAGE=${STAGE:-d10}
+OUT_DIR=${OUT_DIR:-results/model_v1}
+STAGE=${STAGE:-rebuild}
 JOBS=${JOBS:-3}
-LEDGER=${LEDGER:-results/phase_d/sweep_log.csv}
+LEDGER=${LEDGER:-results/model_v1/sweep_log.csv}
 SEEDS_REQUIRED=${SEEDS_REQUIRED:-5}
 THREADS=${THREADS:-2}
 ARMS=${ARMS:-"baseline dim16 dim64 bilinear meanweight invfreq nospray block"}
@@ -65,7 +65,7 @@ wait_for_arm() {  # wait_for_arm <arm>
 
 run() {  # run <label> <arm> <data-dir> <extra...>
   local label=$1 arm=$2 data=$3; shift 3
-  if [ -f "$OUT_DIR/d5_diagnostics_${label}.json" ]; then
+  if [ -f "$OUT_DIR/model_v1_diagnostics_${label}.json" ]; then
     echo "skip $label (already finished)"; return 0
   fi
   wait_for_arm "$arm" || return 0
@@ -104,5 +104,5 @@ xargs -P "$JOBS" -I{} bash -c \
 
 echo "--- queue drained; runs without a diagnostics JSON did not finish ---"
 for arm in $ARMS; do
-  [ -f "$OUT_DIR/d5_diagnostics_${STAGE}_${arm}.json" ] || echo "missing: ${STAGE}_${arm}"
+  [ -f "$OUT_DIR/model_v1_diagnostics_${STAGE}_${arm}.json" ] || echo "missing: ${STAGE}_${arm}"
 done

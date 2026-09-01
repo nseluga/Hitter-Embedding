@@ -20,4 +20,4 @@ epoch  18  train 1.00135  val 1.02719  ref 1.02719  lr 2.70e-05  32s (719 steps)
 epoch  19  train 1.00095  val 1.02708  ref 1.02708  lr 2.70e-05  91s (719 steps)
 epoch  20  train 1.00091  val 1.02697  ref 1.02697  lr 8.10e-06  84s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.02694 at epoch 17; reference 1.02694; checkpoint results/checkpoints/d9_dim64_s0.pt
+best val loss 1.02694 at epoch 17; reference 1.02694; checkpoint results/checkpoints/splithead_dim64_s0.pt

@@ -5,7 +5,7 @@ Phase E.13 — why is modelled E[wOBA | ball in play] 0.37864 against 0.36353 ob
 E.3 put 74.5% of the +0.013876 wOBA level bias in the VALUE channel, and the balls-in-play
 term carries all of it: `value_modelled.bip` 0.37864234 against `value_observed.bip`
 0.36352638, a gap of +0.01511. That modelled number is recovered as a RESIDUAL inside
-`e_eval.level_closure` -- it is whatever the wOBA level implies once bb/hbp/k are paid their
+`model_evaluation_eval.level_closure` -- it is whatever the wOBA level implies once bb/hbp/k are paid their
 fixed weights -- so it absorbs every error the four absorbing rates cannot express. This
 module asks which of two seams in the composition owns it. HARD CAP AT TWO checks: whatever
 they leave is written down as unexplained, not pursued.
@@ -48,7 +48,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.analysis import claim1_eval, e_eval
+from src.analysis import claim1_eval, model_evaluation_eval
 from src.data import eval_targets
 from src.data.model_dataset import MASKED
 from src.model import query_tables as qt
@@ -58,7 +58,7 @@ E3_VALUE_MODELLED_BIP = 0.37864233821410337
 E3_VALUE_OBSERVED_BIP = 0.3635263829493724
 
 # the two train-season league constants the composition applies to 2024
-# (results/phase_d/d5_diagnostics_d10_baseline.json)
+# (results/model_v1/model_v1_diagnostics_rebuild_baseline.json)
 TRAIN_MEASURED_SHARE = 0.9231315908347482
 TRAIN_UNMEASURED_POINTS = 0.1414959852073254
 
@@ -145,15 +145,15 @@ def matched_groups(predictions, pa_df, manifest, eval_season):
     """
     The (batter, season, p_throws) groups that survive E.3's join, with their denominators.
 
-    Replicated from `e_eval.level_closure` rather than approximated: Check A has to be read
+    Replicated from `model_evaluation_eval.level_closure` rather than approximated: Check A has to be read
     against a number computed on that exact population, and any hitter present on one side
     and absent on the other would move the comparison by more than the effect being measured.
     """
-    trained = e_eval.trained_batters(manifest)
+    trained = model_evaluation_eval.trained_batters(manifest)
     actual = eval_targets.aggregate(eval_targets.drop_pitcher_batters(pa_df),
                                     by=tuple(claim1_eval.KEY))
     actual = actual[actual["season"] == eval_season]
-    observed = e_eval.per_group_absorbing(pa_df, [eval_season])
+    observed = model_evaluation_eval.per_group_absorbing(pa_df, [eval_season])
 
     frame = (predictions.merge(actual[claim1_eval.KEY + ["woba", "denominator"]],
                                on=claim1_eval.KEY, how="inner")
@@ -267,17 +267,17 @@ def fit_two_v_tables(frame, bins, pa_df, manifest, eval_season):
 def main():
     parser = argparse.ArgumentParser(
         description="Phase E.13 — who owns the balls-in-play value gap.")
-    parser.add_argument("--arm", default="d10_baseline")
+    parser.add_argument("--arm", default="rebuild_baseline")
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
     parser.add_argument("--predictions", default=None)
-    # the D.10 build, not `phase_d`: the two differ in quality bin edges and only this one
+    # the D.10 build, not `model_v1`: the two differ in quality bin edges and only this one
     # reproduces the measured-share constant the D.10 predictions were composed with
     parser.add_argument("--data-dir", default="data/processed/phase_d5")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
-    parser.add_argument("--e-report", default="results/phase_e/e_report.json")
-    parser.add_argument("--out-dir", default="results/phase_e")
+    parser.add_argument("--e-report", default="results/model_evaluation/model_evaluation_report.json")
+    parser.add_argument("--out-dir", default="results/model_evaluation")
     args = parser.parse_args()
 
     claim1_eval.assert_not_test_season(args.eval_season, final_run=args.final_run)
@@ -294,12 +294,12 @@ def main():
         assert len(array) == len(frame), f"{name}.npy is {len(array)} rows against {len(frame)}"
     pa_df = pd.read_parquet(args.eval_targets)
     predictions = pd.read_csv(args.predictions
-                              or f"results/phase_d/d5_predictions_{args.arm}.csv")
+                              or f"results/model_v1/model_v1_predictions_{args.arm}.csv")
     weights = eval_targets.load_weights()[str(args.eval_season)]
 
     # the gap comes from the E.3 artefact on disk, not from a constant retyped here -- but the
     # constants are asserted against it so a re-run of E.3 that moves them cannot go unnoticed
-    e3 = json.loads(Path(args.e_report).read_text())["e3_level_closure"]
+    e3 = json.loads(Path(args.model_evaluation_report).read_text())["e3_level_closure"]
     for label, on_disk, quoted in (("modelled", e3["value_modelled"]["bip"], E3_VALUE_MODELLED_BIP),
                                    ("observed", e3["value_observed"]["bip"], E3_VALUE_OBSERVED_BIP)):
         assert abs(on_disk - quoted) < 1e-9, \
@@ -337,7 +337,7 @@ def main():
                          "train_mass": float(mass["train"][ev, la].sum()),
                          "obs_mass": float(mass["obs"][ev, la].sum()),
                          "conditional_contribution": float(contribution[ev, la].sum())})
-    pd.DataFrame(rows).to_csv(out_dir / "e13_bip_value_by_bin.csv", index=False)
+    pd.DataFrame(rows).to_csv(out_dir / "bip_value_bip_value_by_bin.csv", index=False)
 
     explained = attribution["total"] + drift["conditional_drift"]
     residual = gap - explained
@@ -350,7 +350,7 @@ def main():
             "value_modelled_bip": e3["value_modelled"]["bip"],
             "value_observed_bip": e3["value_observed"]["bip"],
             "gap": gap,
-            "note": "value_modelled.bip is a RESIDUAL in e_eval.level_closure, so it absorbs "
+            "note": "value_modelled.bip is a RESIDUAL in model_evaluation_eval.level_closure, so it absorbs "
                     "every error not expressible in the bb/hbp/k rates",
             "n_groups": e3["n_groups"], "n_pa": e3["n_pa"],
         },
@@ -426,7 +426,7 @@ def main():
             "not orthogonalised, so the residual carries any interaction between them.",
         ],
     }
-    path = out_dir / "e13_bip_value.json"
+    path = out_dir / "bip_value_bip_value.json"
     path.write_text(json.dumps(report, indent=2, default=float))
     print(f"wrote {path}")
 

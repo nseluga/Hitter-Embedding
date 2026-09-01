@@ -16,4 +16,4 @@ epoch  14  train 1.04997  val 1.07675  ref 1.07675  lr 3.00e-04  38s (719 steps)
 epoch  15  train 1.04968  val 1.07603  ref 1.07603  lr 9.00e-05  38s (719 steps)
 epoch  16  train 1.04838  val 1.07620  ref 1.07620  lr 9.00e-05  34s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.07580 at epoch 13; reference 1.07580; checkpoint results/checkpoints/d8_dim64_s4.pt
+best val loss 1.07580 at epoch 13; reference 1.07580; checkpoint results/checkpoints/presplit_dim64_s4.pt

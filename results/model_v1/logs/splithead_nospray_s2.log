@@ -15,4 +15,4 @@ epoch  13  train 0.79910  val 0.81535  ref 0.81535  lr 9.00e-05  39s (719 steps)
 epoch  14  train 0.79902  val 0.81560  ref 0.81560  lr 2.70e-05  40s (719 steps)
 epoch  15  train 0.79866  val 0.81522  ref 0.81522  lr 2.70e-05  40s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 0.81511 at epoch 12; reference 0.81511; checkpoint results/checkpoints/d9_nospray_s2.pt
+best val loss 0.81511 at epoch 12; reference 0.81511; checkpoint results/checkpoints/splithead_nospray_s2.pt

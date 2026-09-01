@@ -1,4 +1,4 @@
-2026/08/03 23:22:16 INFO mlflow.tracking.fluent: Experiment with name 'phase_d' does not exist. Creating a new experiment.
+2026/08/03 23:22:16 INFO mlflow.tracking.fluent: Experiment with name 'model_v1' does not exist. Creating a new experiment.
 epoch   0  train 1.12557  val 1.09852  lr 1.00e-03  39s (719 steps)
 epoch   1  train 1.07955  val 1.08703  lr 1.00e-03  42s (719 steps)
 epoch   2  train 1.07008  val 1.08309  lr 1.00e-03  41s (719 steps)

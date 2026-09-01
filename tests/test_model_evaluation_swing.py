@@ -1,5 +1,5 @@
 """
-E.6's data-free arithmetic (src/analysis/e_swing.py).
+E.6's data-free arithmetic (src/analysis/model_evaluation_swing.py).
 
 Two things in this module can be wrong while the CSV still looks like a calibration table:
 the per-cell grouping can pool rows it should have split (a pooled mean is always a plausible
@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 import torch
 
-from src.analysis import e_swing
+from src.analysis import model_evaluation_swing
 
 
 def _pitches(swing, p_swing, balls, strikes):
@@ -28,7 +28,7 @@ def test_calibration_gap_and_relative_gap_are_closed_form():
     """One cell, four pitches: observed 0.5, predicted 0.6, so gap +0.1 and relative +0.2."""
     frame = _pitches(swing=[1, 1, 0, 0], p_swing=[0.7, 0.7, 0.5, 0.5],
                      balls=0, strikes=0)
-    out = e_swing.calibration_table(frame, ("balls", "strikes"), "count")
+    out = model_evaluation_swing.calibration_table(frame, ("balls", "strikes"), "count")
     assert len(out) == 1
     row = out.iloc[0]
     assert row["n_pitches"] == 4
@@ -48,12 +48,12 @@ def test_calibration_splits_cells_rather_than_pooling_them():
         _pitches(swing=[1, 0], p_swing=[1.0, 0.4], balls=0, strikes=0),   # obs .5 pred .7
         _pitches(swing=[1, 0], p_swing=[0.6, 0.0], balls=3, strikes=0),   # obs .5 pred .3
     ], ignore_index=True)
-    out = e_swing.calibration_table(frame, ("balls", "strikes"), "count").set_index("balls")
+    out = model_evaluation_swing.calibration_table(frame, ("balls", "strikes"), "count").set_index("balls")
     assert len(out) == 2
     assert out.loc[0, "gap"] == pytest.approx(0.2)        # 0.7 - 0.5
     assert out.loc[3, "gap"] == pytest.approx(-0.2)       # 0.3 - 0.5
     assert out.loc[0, "n_pitches"] == 2 and out.loc[3, "n_pitches"] == 2
-    pooled = e_swing.calibration_table(frame.assign(all="all"), ("all",), "overall")
+    pooled = model_evaluation_swing.calibration_table(frame.assign(all="all"), ("all",), "overall")
     assert pooled.iloc[0]["gap"] == pytest.approx(0.0), "the fixture's cells must cancel pooled"
 
 
@@ -66,7 +66,7 @@ def test_calibration_cells_are_unweighted_within_the_cell():
         _pitches(swing=[1] * 8, p_swing=[0.5] * 8, balls=0, strikes=0),
         _pitches(swing=[0, 0], p_swing=[0.1, 0.3], balls=1, strikes=0),
     ], ignore_index=True)
-    out = e_swing.calibration_table(frame, ("balls", "strikes"), "count").set_index("balls")
+    out = model_evaluation_swing.calibration_table(frame, ("balls", "strikes"), "count").set_index("balls")
     assert out.loc[0, "observed"] == pytest.approx(1.0)
     assert out.loc[0, "predicted"] == pytest.approx(0.5)
     assert out.loc[0, "relative_gap"] == pytest.approx(-0.5)   # (0.5 - 1.0) / 1.0
@@ -107,7 +107,7 @@ def test_ensemble_averages_probabilities_not_logits():
     hitter = np.zeros(5, dtype="int64")
     context = np.zeros((5, 3), dtype="float32")
     models = [_ConstantSwing(0.0), _ConstantSwing(np.log(3.0))]
-    p = e_swing.ensemble_swing(models, hitter, context)
+    p = model_evaluation_swing.ensemble_swing(models, hitter, context)
     assert p.shape == (5,)
     assert np.allclose(p, 0.625)
     assert not np.allclose(p, 0.6339745962155614), "logits were averaged instead of probabilities"
@@ -118,7 +118,7 @@ def test_ensemble_batching_does_not_change_the_answer():
     hitter = np.arange(7, dtype="int64")
     context = np.zeros((7, 2), dtype="float32")
     models = [_ConstantSwing(0.0), _ConstantSwing(np.log(3.0))]
-    whole = e_swing.ensemble_swing(models, hitter, context, batch=64)
-    chunked = e_swing.ensemble_swing(models, hitter, context, batch=3)
+    whole = model_evaluation_swing.ensemble_swing(models, hitter, context, batch=64)
+    chunked = model_evaluation_swing.ensemble_swing(models, hitter, context, batch=3)
     assert np.array_equal(whole, chunked)
     assert np.allclose(whole, 0.625)   # same two constants as above

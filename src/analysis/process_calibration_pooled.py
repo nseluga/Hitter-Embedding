@@ -39,10 +39,10 @@ import numpy as np
 import pandas as pd
 
 from src.analysis import claim1_eval, provenance
-from src.analysis.c1_trailing import predict as c1_predict
-from src.analysis.c_report import NO_INFO_BUCKETS
+from src.analysis.baseline_ladder_trailing import predict as trailing_predict
+from src.analysis.baseline_ladder_report import NO_INFO_BUCKETS
 
-DEFAULT_OUT_DIR = "results/phase_f"
+DEFAULT_OUT_DIR = "results/process_calibration"
 POOLED_HAND = "B"
 
 
@@ -76,14 +76,14 @@ def pool_predictions(predictions, weights, eval_season):
 def main():
     parser = argparse.ArgumentParser(
         description="Phase F.5 -- claim-1 metric with handedness pooled away.")
-    parser.add_argument("--arm", default="d10_baseline")
+    parser.add_argument("--arm", default="rebuild_baseline")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
     parser.add_argument("--data-dir", default=provenance.CANONICAL_DATA_DIR)
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--model-predictions",
-                        default="results/phase_d/d5_predictions_d10_baseline.csv")
+                        default="results/model_v1/model_v1_predictions_rebuild_baseline.csv")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     args = parser.parse_args()
 
@@ -97,10 +97,10 @@ def main():
     model_predictions = pd.read_csv(args.model_predictions)
     model_predictions = model_predictions[model_predictions["season"] == args.eval_season]
     rungs = {
-        "phase_d": model_predictions,
-        "c1_raw": c1_predict(pa_df, args.eval_season, variant="raw"),
-        "c1_bucketed": c1_predict(pa_df, args.eval_season, variant="bucketed"),
-        "no_info_league_average": c1_predict(pa_df, args.eval_season, variant="bucketed",
+        "model_v1": model_predictions,
+        "trailing_raw": trailing_predict(pa_df, args.eval_season, variant="raw"),
+        "trailing_bucketed": trailing_predict(pa_df, args.eval_season, variant="bucketed"),
+        "no_info_league_average": trailing_predict(pa_df, args.eval_season, variant="bucketed",
                                              buckets=NO_INFO_BUCKETS),
     }
 
@@ -121,7 +121,7 @@ def main():
     table["skill_vs_no_info"] = [
         claim1_eval.skill_score(row["pa_weighted_rmse"], reference_rmse.get(row["stratum"]))
         for _, row in table.iterrows()]
-    table.to_csv(out_dir / "f5_pooled_scores.csv", index=False)
+    table.to_csv(out_dir / "pooled_scores.csv", index=False)
 
     summary = {
         "provenance": provenance.stamp(args.data_dir, arm=args.arm, seeds=args.seeds,
@@ -129,8 +129,8 @@ def main():
         "pooled_hand_label": POOLED_HAND,
         "pooling_weight": "prior side-specific denominator PA, normalized within batter",
         "rungs_pooled": sorted(rungs),
-        "rungs_omitted": ["c2_bivariate", "c2_book_rho_reference", "c3_gbm_outcome",
-                          "c3_gbm_full"],
+        "rungs_omitted": ["eb_bivariate", "eb_book_rho_reference", "gbm_outcome",
+                          "gbm_full"],
         "omission_reason": ("C.2 needs its fitted prior parameters and C.3 needs a GBM "
                             "refit; both gate opponents are therefore absent and this "
                             "table is not a gate"),
@@ -139,12 +139,12 @@ def main():
                            "comparable to the side-specific strata elsewhere"),
         "coverage": coverage,
     }
-    (out_dir / "f5_pooled_summary.json").write_text(json.dumps(summary, indent=2, default=float))
+    (out_dir / "pooled_summary.json").write_text(json.dumps(summary, indent=2, default=float))
 
     print("-- claim-1 metric, handedness pooled --")
     print(table[["model", "stratum", "n_hitters", "pa_weighted_rmse", "noise_floor",
                  "rank_corr_weighted", "skill_vs_no_info"]].round(5).to_string(index=False))
-    print(f"\nwrote {out_dir / 'f5_pooled_scores.csv'}")
+    print(f"\nwrote {out_dir / 'pooled_scores.csv'}")
 
 
 if __name__ == "__main__":

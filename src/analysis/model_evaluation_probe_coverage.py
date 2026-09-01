@@ -94,12 +94,12 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from scipy import stats
 
-from src.analysis import c2_bivariate_eb, claim1_eval
-from src.analysis.c1_trailing import TRAILING_SEASONS, trailing_window
+from src.analysis import baseline_ladder_bivariate_eb, claim1_eval
+from src.analysis.baseline_ladder_trailing import TRAILING_SEASONS, trailing_window
 from src.data.eval_targets import drop_pitcher_batters
 
-DEFAULT_OUT_DIR = "results/phase_e"
-DEFAULT_ARM = "d10_baseline"
+DEFAULT_OUT_DIR = "results/model_evaluation"
+DEFAULT_ARM = "rebuild_baseline"
 SEEDS = (0, 1, 2, 3, 4)
 
 # Two-sided normal quantiles for the nominal levels §12.4 names. Stated explicitly
@@ -144,19 +144,19 @@ def batter_stands(pa_df, eval_season, n_seasons=TRAILING_SEASONS):
     """
     Which side of the plate each hitter bats from, as C.2 types them: L / R / S.
 
-    Same routine C.2 itself uses (`c2_bivariate_eb.batter_types`, minority-share rule),
+    Same routine C.2 itself uses (`eb_bivariate_eb.batter_types`, minority-share rule),
     read off the trailing window so the probe groups hitters exactly the way the target
     it decodes was grouped. Hitters with no trailing-window PA (debuts) are typed off the
-    eval season, which is the same static-roster-attribute exception `c2.predict`
+    eval season, which is the same static-roster-attribute exception `eb.predict`
     documents — handedness is never an outcome.
     """
     hitters_only = drop_pitcher_batters(pa_df)
     window = trailing_window(hitters_only, eval_season, n_seasons)
     window = window[window["in_denominator"]]
-    types = c2_bivariate_eb.batter_types(window)
+    types = eb_bivariate_eb.batter_types(window)
 
     active = hitters_only[hitters_only["season"] == eval_season]
-    debut = c2_bivariate_eb.batter_types(active[active["in_denominator"]])
+    debut = eb_bivariate_eb.batter_types(active[active["in_denominator"]])
     debut = debut.rename(columns={"batter_type": "debut_type"})
     merged = debut.merge(types, on="batter", how="outer")
     merged["batter_type"] = merged["batter_type"].fillna(merged["debut_type"])
@@ -166,22 +166,22 @@ def batter_stands(pa_df, eval_season, n_seasons=TRAILING_SEASONS):
 
 # ------------------------------------------------------------------ E.14 part 1: probe
 
-def c2_posterior_split(pa_df, eval_season):
+def eb_posterior_split(pa_df, eval_season):
     """
     The decode TARGET: each hitter's C.2 empirical-Bayes posterior mean platoon split,
     defined as posterior E[wOBA | vs LHP] - posterior E[wOBA | vs RHP].
 
-    Source: `src/analysis/c2_bivariate_eb.py::predict(pa_df, eval_season)`, column
+    Source: `src/analysis/eb_bivariate_eb.py::predict(pa_df, eval_season)`, column
     `pred_woba`, pivoted on `p_throws`. That function is C.2's own scorer — the same call
-    whose output `results/phase_c/c_claim1_scores.csv` grades as `c2_bivariate`. Its
-    hyper-parameters are the ones recorded in `results/phase_c/c2_prior_parameters.csv`
+    whose output `results/baseline_ladder/baseline_ladder_claim1_scores.csv` grades as `eb_bivariate`. Its
+    hyper-parameters are the ones recorded in `results/baseline_ladder/eb_prior_parameters.csv`
     (rho 0.652 LHB / 0.719 RHB, `tau2_split_derived` 0.00073228 L / 0.00049177 R); the
     per-hitter posterior itself has no committed file, so it is recomputed here from the
     frozen PA table rather than approximated.
 
     Returns one row per batter with `true_split`.
     """
-    predictions = c2_bivariate_eb.predict(pa_df, eval_season)
+    predictions = eb_bivariate_eb.predict(pa_df, eval_season)
     assert set(predictions["p_throws"]) <= {"L", "R"}, "unexpected pitcher hand in C.2 output"
     wide = predictions.pivot(index="batter", columns="p_throws", values="pred_woba")
     # a hitter projected against only one hand has no split to decode
@@ -205,7 +205,7 @@ def probe_frame(pa_df, manifest, eval_season):
     assert 0 not in set(vocabulary.values()), \
         "row 0 is reserved for cold start and must not appear in the vocabulary"
 
-    target = c2_posterior_split(pa_df, eval_season)
+    target = eb_posterior_split(pa_df, eval_season)
     target = target.merge(batter_stands(pa_df, eval_season), on="batter", how="left")
     assert target["batter_type"].notna().all(), "stand lookup lost a hitter"
 
@@ -215,7 +215,7 @@ def probe_frame(pa_df, manifest, eval_season):
     trained["row"] = trained["row"].astype(int)
     assert (trained["row"] > 0).all(), "a trained hitter mapped to the reserved row"
     assert not trained["batter"].duplicated().any(), "duplicate batter in the probe frame"
-    return trained.reset_index(drop=True), {"hitters_with_a_c2_split": int(n_all),
+    return trained.reset_index(drop=True), {"hitters_with_a_eb_split": int(n_all),
                                             "cold_start_excluded": int(n_all - len(trained)),
                                             "hitters_probed": int(len(trained))}
 
@@ -358,13 +358,13 @@ def run_probe(pa_df, manifest, embeddings, eval_season, n_boot=N_BOOT, seed=0):
 
     return {
         "target": {
-            "source_module": "src/analysis/c2_bivariate_eb.py::predict",
+            "source_module": "src/analysis/eb_bivariate_eb.py::predict",
             "column": "pred_woba, pivoted on p_throws, split = L - R",
             "quantity": "C.2 empirical-Bayes POSTERIOR MEAN split (not the raw observed split)",
-            "hyper_parameters_committed_at": "results/phase_c/c2_prior_parameters.csv",
+            "hyper_parameters_committed_at": "results/baseline_ladder/eb_prior_parameters.csv",
         },
         "features": {
-            "source": "results/checkpoints/d10_baseline_s{0..4}.pt, key model.embedding.weight",
+            "source": "results/checkpoints/rebuild_baseline_s{0..4}.pt, key model.embedding.weight",
             "vocabulary": "data/processed/phase_d5/manifest.json::vocabulary",
             "seed_handling": "per-seed decode, correlations averaged; raw embeddings NEVER averaged",
             "embedding_dim": int(next(iter(embeddings.values())).shape[1]),
@@ -583,7 +583,7 @@ def main():
     manifest = json.loads((Path(args.data_dir) / "manifest.json").read_text())
     pa_df = pd.read_parquet(args.eval_targets)
     seed_predictions = {
-        seed: pd.read_csv(f"results/phase_d/d5_predictions_{args.arm}_s{seed}.csv")
+        seed: pd.read_csv(f"results/model_v1/model_v1_predictions_{args.arm}_s{seed}.csv")
         for seed in SEEDS
     }
     embeddings = load_seed_embeddings(args.checkpoint_dir, args.arm)
@@ -595,13 +595,13 @@ def main():
     print("E.14 part 2 — ensemble interval coverage")
     frame, eval_coverage = ensemble_frame(pa_df, seed_predictions, manifest, args.eval_season)
     table, verdict = run_coverage(frame)
-    table.to_csv(out_dir / "e14_coverage.csv", index=False)
+    table.to_csv(out_dir / "coverage.csv", index=False)
 
     coverage_report = {
         "arm": args.arm,
         "eval_season": args.eval_season,
         "sources": {
-            "per_seed_predictions": [f"results/phase_d/d5_predictions_{args.arm}_s{s}.csv"
+            "per_seed_predictions": [f"results/model_v1/model_v1_predictions_{args.arm}_s{s}.csv"
                                      for s in SEEDS],
             "prediction_column": "pred_woba",
             "eval_targets": args.eval_targets,
@@ -622,11 +622,11 @@ def main():
         "mean_target_noise_sd": float(np.sqrt(frame["noise_var"]).mean()),
         "reliability": table.to_dict(orient="records"),
         "expectation": verdict,
-        "not_e4": ("E.4 measured the SLOPE of observed on predicted (0.529 low / 0.664 medium / "
+        "not_calibration": ("E.4 measured the SLOPE of observed on predicted (0.529 low / 0.664 medium / "
                    "0.998 high / 0.841 pooled). This step measures INTERVAL HONESTY. They are "
                    "different properties and can pass or fail independently."),
     }
-    (out_dir / "e14_coverage.json").write_text(json.dumps(coverage_report, indent=2, default=float))
+    (out_dir / "coverage.json").write_text(json.dumps(coverage_report, indent=2, default=float))
 
     probe_report = {
         "arm": args.arm,
@@ -636,13 +636,13 @@ def main():
         "probe": probe,
         "assumptions": ASSUMPTIONS,
     }
-    (out_dir / "e14_probe.json").write_text(json.dumps(probe_report, indent=2, default=float))
+    (out_dir / "coverage_probe.json").write_text(json.dumps(probe_report, indent=2, default=float))
 
     coverage_report["assumptions"] = ASSUMPTIONS
-    (out_dir / "e14_coverage.json").write_text(json.dumps(coverage_report, indent=2, default=float))
+    (out_dir / "coverage.json").write_text(json.dumps(coverage_report, indent=2, default=float))
 
-    print(f"wrote {out_dir / 'e14_probe.json'}, {out_dir / 'e14_coverage.json'}, "
-          f"{out_dir / 'e14_coverage.csv'}")
+    print(f"wrote {out_dir / 'coverage_probe.json'}, {out_dir / 'coverage.json'}, "
+          f"{out_dir / 'coverage.csv'}")
 
 
 if __name__ == "__main__":

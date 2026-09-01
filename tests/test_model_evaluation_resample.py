@@ -1,5 +1,5 @@
 """
-E.7's draw audit (src/analysis/e_resample.py).
+E.7's draw audit (src/analysis/model_evaluation_resample.py).
 
 The module's whole output is a difference of three means that all live in [0, 1], so every
 failure mode here returns a publishable number: a mis-normalised pitcher weight, an `exact`
@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.analysis import e_resample
+from src.analysis import model_evaluation_resample
 from src.model import query, query_tables as qt
 
 # grid bins the fixture's two locations land in: plate_x -1.0 -> floor((-1.0+2.5)/0.1) = 15,
@@ -74,7 +74,7 @@ def test_take_means_is_the_plain_row_mean_of_the_surface():
     tables = _tables(frame)
     rows = np.concatenate([np.flatnonzero(frame["pitcher"].to_numpy() == 100)[:4],
                            np.flatnonzero(frame["pitcher"].to_numpy() == 200)[:4]])
-    out = e_resample._take_means(tables, frame, rows, None)
+    out = model_evaluation_resample._take_means(tables, frame, rows, None)
     assert out["ball"] == pytest.approx(0.60)             # (0.80 + 0.40) / 2
     assert out["called_strike"] == pytest.approx(0.35)    # (0.15 + 0.55) / 2
     assert out["hbp"] == pytest.approx(0.05)
@@ -84,7 +84,7 @@ def test_take_means_is_the_plain_row_mean_of_the_surface():
 def test_take_means_of_an_empty_selection_is_nan_not_zero():
     """An empty cell has no rate; reporting 0.0 would drag a weighted mean toward zero."""
     frame = _frame()
-    out = e_resample._take_means(_tables(frame), frame, np.array([], dtype="int64"), None)
+    out = model_evaluation_resample._take_means(_tables(frame), frame, np.array([], dtype="int64"), None)
     assert set(out) == {"ball", "called_strike", "hbp", "in_zone"}
     assert all(np.isnan(value) for value in out.values())
 
@@ -98,7 +98,7 @@ def test_take_means_renormalises_after_a_count_offset():
     rows = np.flatnonzero(frame["pitcher"].to_numpy() == 100)[:3]
     offsets = np.ones((4, 3, 3), dtype="float64")
     offsets[..., 0] = 2.0
-    out = e_resample._take_means(_tables(frame), frame, rows, offsets)
+    out = model_evaluation_resample._take_means(_tables(frame), frame, rows, offsets)
     assert out["ball"] == pytest.approx(1.60 / 1.80)
     assert out["ball"] + out["called_strike"] + out["hbp"] == pytest.approx(1.0)
 
@@ -113,7 +113,7 @@ def test_audit_weights_the_pool_and_leaves_league_unweighted():
     league is the raw row mean over the train window, 6 rows each: (0.80 + 0.40)/2 = 0.60.
     """
     frame = _frame()
-    table = e_resample.resampler_audit(_tables(frame), frame, seed=0)
+    table = model_evaluation_resample.resampler_audit(_tables(frame), frame, seed=0)
     assert len(table) == 2 * len(query.COUNT_STATES)      # one hand x two stands x 12 counts
     assert np.allclose(table["sampled_ball"], 0.70)
     assert np.allclose(table["exact_ball"], 0.70)
@@ -125,7 +125,7 @@ def test_audit_weights_the_pool_and_leaves_league_unweighted():
 def test_audit_in_zone_share_follows_the_same_two_weightings():
     """Pitcher 100 is always in the zone and 200 never is, so in_zone IS the weight itself."""
     frame = _frame()
-    table = e_resample.resampler_audit(_tables(frame, weights=(0.9, 0.1)), frame, seed=0)
+    table = model_evaluation_resample.resampler_audit(_tables(frame, weights=(0.9, 0.1)), frame, seed=0)
     assert np.allclose(table["sampled_in_zone"], 0.9)
     assert np.allclose(table["exact_in_zone"], 0.9)
     assert np.allclose(table["league_in_zone"], 0.5)      # 6 in-zone rows against 6 out
@@ -140,7 +140,7 @@ def test_audit_counts_the_backoff_levels_it_actually_used():
     and nothing at any wider level.
     """
     frame = _frame(rows_per_cell=query.DEFAULT_N_PITCHES)
-    table = e_resample.resampler_audit(_tables(frame), frame, seed=0)
+    table = model_evaluation_resample.resampler_audit(_tables(frame), frame, seed=0)
     assert (table["backoff_exact"] == 2 * len(query.COUNT_STATES)).all()
     assert (table[["backoff_strikes", "backoff_stand", "backoff_empty"]] == 0).all().all()
     assert (table["n_pitchers"] == 2).all()

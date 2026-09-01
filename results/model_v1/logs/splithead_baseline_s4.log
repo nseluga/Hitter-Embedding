@@ -16,4 +16,4 @@ epoch  14  train 1.00405  val 1.02645  ref 1.02645  lr 9.00e-05  52s (719 steps)
 epoch  15  train 1.00390  val 1.02644  ref 1.02644  lr 2.70e-05  45s (719 steps)
 epoch  16  train 1.00356  val 1.02658  ref 1.02658  lr 2.70e-05  48s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.02642 at epoch 13; reference 1.02642; checkpoint results/checkpoints/d9_baseline_s4.pt
+best val loss 1.02642 at epoch 13; reference 1.02642; checkpoint results/checkpoints/splithead_baseline_s4.pt

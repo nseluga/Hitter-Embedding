@@ -1,6 +1,6 @@
 {
-  "rmse_gate_vs_c3_full": false,
+  "rmse_gate_vs_gbm_full": false,
   "ordering_gate_vs_both": false,
   "eval_season": 2024,
-  "label": "phase_d_retrained_leaguesplit"
+  "label": "model_v1_retrained_leaguesplit"
 }

@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.analysis import b1_report as b1
+from src.analysis import feature_screening_report as feature_screening
 from src.data import labels
 
 
@@ -54,7 +54,7 @@ def test_reconstruction_recovers_what_the_label_nulled():
     labelled = labels.add_contact_quality_labels(frame)
     assert labelled["spray"].notna().sum() == 2, "fixture must contain nulled artifacts"
 
-    out = b1.unclipped_spray(frame)
+    out = feature_screening.unclipped_spray(frame)
     assert len(out) == 4
     assert (out["spray_raw"].abs() > labels.SPRAY_ABS_MAX).sum() == 2
 
@@ -71,7 +71,7 @@ def test_reconstruction_matches_labels_where_both_are_defined():
     frame = bbip_frame([(10, 100), (-10, 100), (25, 80), (-25, 80), (60, -1), (-60, -1)],
                        stands=["L", "L", "R", "R", "L", "R"])
     labelled = labels.add_contact_quality_labels(frame)
-    out = b1.unclipped_spray(frame)
+    out = feature_screening.unclipped_spray(frame)
 
     keep = labelled["spray"].notna()
     assert keep.sum() == 4
@@ -87,7 +87,7 @@ def test_reconstruction_is_in_play_only():
     """
     frame = bbip_frame([(60, -1), (-60, -1), (10, 100), (-10, 100)])
     frame.loc[[2, 3], "description"] = "foul"
-    out = b1.unclipped_spray(frame)
+    out = feature_screening.unclipped_spray(frame)
     assert len(out) == 2
     assert (out["spray_raw"].abs() > labels.SPRAY_ABS_MAX).all()
 
@@ -100,7 +100,7 @@ def test_check_refuses_to_run_when_it_cannot_detect_anything():
     """
     frame = bbip_frame([(10, 100), (-10, 100), (25, 80)])
     with pytest.raises(AssertionError, match="no-op again"):
-        b1.unclipped_spray(frame)
+        feature_screening.unclipped_spray(frame)
 
 
 def test_clip_limit_is_read_from_labels_not_hardcoded():
@@ -110,7 +110,7 @@ def test_clip_limit_is_read_from_labels_not_hardcoded():
     produced the original failure.
     """
     frame = bbip_frame([(10, 100), (-10, 100), (60, -1), (-60, -1)])
-    out = b1.unclipped_spray(frame)
+    out = feature_screening.unclipped_spray(frame)
     beyond = out["spray_raw"].abs() > labels.SPRAY_ABS_MAX
     assert beyond.sum() == 2
     assert labels.SPRAY_ABS_MAX == 90.0  # if this moves, the artifacts above need rechecking

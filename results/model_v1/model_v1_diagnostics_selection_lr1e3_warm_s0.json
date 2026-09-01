@@ -846,7 +846,7 @@
       "bip": 0.02
     }
   },
-  "arm": "o1_lr1e3_warm",
+  "arm": "selection_lr1e3_warm",
   "seeds": [
     0
   ],

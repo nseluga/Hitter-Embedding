@@ -2,7 +2,7 @@
 -- gradient test (a): excess ~ prior PA + C.2 posterior --
            intercept: +0.207516 [+0.021644, +0.323856] EXCLUDES ZERO
     prior_pa_per_100: +0.000929 [-0.000101, +0.001760] contains zero
-            c2_prior: -0.637631 [-1.011704, -0.035284] EXCLUDES ZERO
+            eb_prior: -0.637631 [-1.011704, -0.035284] EXCLUDES ZERO
   univariate exposure coefficient: +0.000339
   exposure survives the talent control: False
 
@@ -11,4 +11,4 @@
   slope per 100 prior PA: +0.00003979 [+0.00001114, +0.00007595]
   interacts multiplicatively: True
 
-wrote results/phase_d/d5_level_attribution.json
+wrote results/model_v1/model_v1_level_attribution.json

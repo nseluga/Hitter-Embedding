@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.analysis import d0_checks
+from src.analysis import model_v1_frame_checks
 
 
 def synthetic_pitches(n=4000, seed=0):
@@ -43,19 +43,19 @@ def test_r2_is_one_when_predictors_determine_the_target():
     rng = np.random.default_rng(1)
     predictors = np.hstack([rng.normal(size=(500, 3)), np.ones((500, 1))])
     target = predictors @ np.array([1.5, -2.0, 0.25, 4.0])
-    assert d0_checks._r2(predictors, target) == pytest.approx(1.0, abs=1e-10)
+    assert model_v1_frame_checks._r2(predictors, target) == pytest.approx(1.0, abs=1e-10)
 
 
 def test_r2_is_near_zero_on_an_unexplainable_target():
     rng = np.random.default_rng(2)
     predictors = np.hstack([rng.normal(size=(5000, 3)), np.ones((5000, 1))])
     target = rng.normal(size=5000)
-    assert d0_checks._r2(predictors, target) < 0.01
+    assert model_v1_frame_checks._r2(predictors, target) < 0.01
 
 
 def test_exact_linear_feature_is_marked_redundant_and_noise_is_not():
     frame = synthetic_pitches()
-    result = d0_checks.redundancy_r2(frame, train_seasons=[2015, 2020, 2023],
+    result = model_v1_frame_checks.redundancy_r2(frame, train_seasons=[2015, 2020, 2023],
                                      sample_n=len(frame)).set_index("feature")
     assert result.loc["effective_speed", "verdict"] == "redundant"
     assert result.loc["effective_speed", "r2"] == pytest.approx(1.0, abs=1e-8)
@@ -67,7 +67,7 @@ def test_exact_linear_feature_is_marked_redundant_and_noise_is_not():
 
 def test_conditioning_on_an_extra_predictor_removes_it_as_a_target():
     frame = synthetic_pitches()
-    result = d0_checks.redundancy_r2(frame, train_seasons=[2015, 2020, 2023],
+    result = model_v1_frame_checks.redundancy_r2(frame, train_seasons=[2015, 2020, 2023],
                                      extra_predictors=["release_extension"],
                                      sample_n=len(frame))
     assert "release_extension" not in set(result["feature"])
@@ -80,7 +80,7 @@ def test_redundancy_uses_only_train_seasons():
     contaminant = frame.head(1000).copy()
     contaminant["season"] = 2024
     contaminant["effective_speed"] = np.random.default_rng(3).normal(size=len(contaminant))
-    result = d0_checks.redundancy_r2(pd.concat([frame, contaminant]),
+    result = model_v1_frame_checks.redundancy_r2(pd.concat([frame, contaminant]),
                                      train_seasons=[2015, 2020, 2023],
                                      sample_n=len(frame) + len(contaminant))
     r2 = result.set_index("feature").loc["effective_speed", "r2"]

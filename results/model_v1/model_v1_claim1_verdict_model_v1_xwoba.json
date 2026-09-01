@@ -1,25 +1,25 @@
 {
   "decisive_stratum": "low",
-  "rmse_gate_vs_c3_full": false,
+  "rmse_gate_vs_gbm_full": false,
   "ordering_gate_vs_both": false,
   "by_stratum": {
     "all": {
-      "rmse_gate_vs_c3_full": false,
+      "rmse_gate_vs_gbm_full": false,
       "ordering_gate_vs_both": false,
       "n_comparisons": 2
     },
     "high": {
-      "rmse_gate_vs_c3_full": false,
+      "rmse_gate_vs_gbm_full": false,
       "ordering_gate_vs_both": false,
       "n_comparisons": 2
     },
     "low": {
-      "rmse_gate_vs_c3_full": false,
+      "rmse_gate_vs_gbm_full": false,
       "ordering_gate_vs_both": false,
       "n_comparisons": 2
     },
     "medium": {
-      "rmse_gate_vs_c3_full": false,
+      "rmse_gate_vs_gbm_full": false,
       "ordering_gate_vs_both": false,
       "n_comparisons": 2
     }
@@ -48,5 +48,5 @@
     }
   },
   "eval_season": 2024,
-  "label": "phase_d_xwoba"
+  "label": "model_v1_xwoba"
 }

@@ -86,7 +86,7 @@ known at projection time, never an outcome. `predict` asserts and reports this.
 import numpy as np
 import pandas as pd
 
-from src.analysis.c1_trailing import TRAILING_SEASONS, trailing_window
+from src.analysis.baseline_ladder_trailing import TRAILING_SEASONS, trailing_window
 from src.analysis.stabilization import hitter_stats, variance_components
 from src.data.eval_targets import drop_pitcher_batters
 

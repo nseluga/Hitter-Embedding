@@ -13,7 +13,7 @@ scores no new season, and touches no architecture, loss, or pipeline code, so th
 CLAUDE.md ML verification gate's training-run items do not apply (spec §10).
 
 E.6 (swing-head calibration on real pitches) needs checkpoints and a forward pass and
-lives in `e_swing.py`.
+lives in `model_evaluation_swing.py`.
 """
 
 import argparse
@@ -27,8 +27,8 @@ from src.analysis import claim1_eval
 from src.data import eval_targets
 from src.model import query
 
-DEFAULT_OUT_DIR = "results/phase_e"
-DEFAULT_ARM = "d10_baseline"
+DEFAULT_OUT_DIR = "results/model_evaluation"
+DEFAULT_ARM = "rebuild_baseline"
 
 
 # ---------------------------------------------------------------- shared helpers
@@ -308,7 +308,7 @@ def calibration(eval_frame, n_bins=10):
     overall and per exposure stratum, plus a decile reliability table.
 
     Unscored is not a hedge. The scorer IS the model here, so a knob tuned to move this
-    number would be tuned on the metric it is meant to validate (phase-d5-spec.md §9).
+    number would be tuned on the metric it is meant to validate (phase-model_v1-spec.md §9).
     A slope below 1 means the predicted spread is too narrow for the realized spread; it is
     reported, and nothing is adjusted to fix it.
     """
@@ -535,7 +535,7 @@ def main():
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
     parser.add_argument("--predictions", default=None,
-                        help="defaults to results/phase_d/d5_predictions_<arm>.csv")
+                        help="defaults to results/model_v1/model_v1_predictions_<arm>.csv")
     parser.add_argument("--data-dir", default="data/processed/phase_d")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
@@ -547,7 +547,7 @@ def main():
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = args.predictions or f"results/phase_d/d5_predictions_{args.arm}.csv"
+    path = args.predictions or f"results/model_v1/model_v1_predictions_{args.arm}.csv"
     predictions = pd.read_csv(path)
     pa_df = pd.read_parquet(args.eval_targets)
     # the manifest alone -- nothing here needs the 7.3M-row tensors, and loading them
@@ -558,8 +558,8 @@ def main():
 
     print("E.1 — matched-population fidelity control")
     table, verdict = matched_population(predictions, pa_df, manifest, args.eval_season)
-    table.to_csv(out_dir / "e1_matched_population.csv", index=False)
-    report["e1_matched_population"] = verdict
+    table.to_csv(out_dir / "matched_population_matched_population.csv", index=False)
+    report["matched_population_matched_population"] = verdict
 
     print("E.2 — contamination test")
     report["e2_contamination"] = {key: contamination(predictions, pa_df, manifest,
@@ -573,27 +573,27 @@ def main():
     print("E.4 — calibration")
     eval_frame, coverage = claim1_eval.build_eval_frame(pa_df, predictions, args.eval_season)
     calib, reliability = calibration(eval_frame)
-    calib.to_csv(out_dir / "e4_calibration.csv", index=False)
-    reliability.to_csv(out_dir / "e4_reliability.csv", index=False)
-    report["e4_calibration"] = {"coverage": coverage,
+    calib.to_csv(out_dir / "calibration.csv", index=False)
+    reliability.to_csv(out_dir / "calibration_reliability.csv", index=False)
+    report["calibration"] = {"coverage": coverage,
                                 "by_stratum": calib.to_dict(orient="records")}
 
     print("E.5 — platoon differential against Route A")
     frame, route_a = platoon_frame(pa_df, predictions, args.eval_season)
-    frame.to_csv(out_dir / "e5_platoon_frame.csv", index=False)
+    frame.to_csv(out_dir / "platoon_frame.csv", index=False)
     scores = pd.concat([score_platoon(frame, "delta_pred"),
                         score_platoon(frame, "delta_route_a")], ignore_index=True)
-    scores.to_csv(out_dir / "e5_platoon_scores.csv", index=False)
+    scores.to_csv(out_dir / "platoon_scores.csv", index=False)
     paired = paired_platoon_difference(frame, n_boot=args.n_boot, seed=args.seed)
-    paired.to_csv(out_dir / "e5_platoon_paired.csv", index=False)
-    report["e5_platoon"] = {"route_a_by_stand": route_a,
+    paired.to_csv(out_dir / "platoon_paired.csv", index=False)
+    report["platoon"] = {"route_a_by_stand": route_a,
                             "decomposition": platoon_decomposition(frame),
                             "n_hitters": int(len(frame)),
                             "scores": scores.to_dict(orient="records"),
                             "paired": paired.to_dict(orient="records")}
 
-    (out_dir / "e_report.json").write_text(json.dumps(report, indent=2, default=float))
-    print(f"wrote {out_dir / 'e_report.json'}")
+    (out_dir / "model_evaluation_report.json").write_text(json.dumps(report, indent=2, default=float))
+    print(f"wrote {out_dir / 'model_evaluation_report.json'}")
 
 
 if __name__ == "__main__":

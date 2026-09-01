@@ -1,9 +1,9 @@
-"""E.13's arithmetic, tested where it is data-free (src/analysis/e_bip_value.py)."""
+"""E.13's arithmetic, tested where it is data-free (src/analysis/model_evaluation_bip_value.py)."""
 
 import numpy as np
 import pytest
 
-from src.analysis.e_bip_value import drift_terms, seam_attribution
+from src.analysis.model_evaluation_bip_value import drift_terms, seam_attribution
 
 
 def test_seam_attribution_is_inert_when_the_constants_are_right():

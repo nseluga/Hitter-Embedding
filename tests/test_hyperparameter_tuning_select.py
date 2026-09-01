@@ -10,8 +10,8 @@ imports the module in a clean interpreter and asserts nothing claim-1-shaped cam
 with it -- a source grep is not enough, and the first version of that test passed with the
 import present.
 
-The second is that o1 trains on a different tensor build than the d10 incumbent it is
-compared against. `reference` is log loss over the quality bins, and `phase_d` and
+The second is that selection trains on a different tensor build than the rebuild incumbent it is
+compared against. `reference` is log loss over the quality bins, and `model_v1` and
 `phase_d5` have different bin edges, so the two would be in different units while every
 column still lined up. The stage pins its build; the guard catches it at report time.
 
@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from src.analysis import o1_select
+from src.analysis import hyperparameter_tuning_select
 from src.model import sweep, train
 
 
@@ -107,22 +107,22 @@ def test_batch_size_and_weight_decay_are_not_tunable():
     run reimplement C.2 inside the network and then be scored against C.2."""
     parser_source = inspect.getsource(train.main)
     assert "--weight-decay" not in parser_source
-    for _, extra in sweep.STAGES["o1"]:
+    for _, extra in sweep.STAGES["selection"]:
         assert "--batch-size" not in extra
         assert "--weight-decay" not in extra
 
 
-def test_o1_pins_the_build_d10_trained_on():
+def test_selection_pins_the_build_rebuild_trained_on():
     from src.analysis import provenance
-    for _, extra in sweep.STAGES["o1"]:
+    for _, extra in sweep.STAGES["selection"]:
         assert "--data-dir" in extra
         assert extra[extra.index("--data-dir") + 1] == provenance.CANONICAL_DATA_DIR
 
 
-def test_o1_grid_contains_the_untuned_incumbent():
-    names = [name for name, _ in sweep.STAGES["o1"]]
-    assert o1_select.INCUMBENT in names
-    incumbent = dict(sweep.STAGES["o1"])[o1_select.INCUMBENT]
+def test_selection_grid_contains_the_untuned_incumbent():
+    names = [name for name, _ in sweep.STAGES["selection"]]
+    assert hyperparameter_tuning_select.INCUMBENT in names
+    incumbent = dict(sweep.STAGES["selection"])[hyperparameter_tuning_select.INCUMBENT]
     assert incumbent[incumbent.index("--lr") + 1] == "1e-3"
     assert "--warmup-steps" not in incumbent
 
@@ -148,21 +148,21 @@ def test_one_spelling_of_a_learning_rate():
 def test_quarantined_knobs_cannot_be_smuggled_through_train_args():
     for flag in sweep.QUARANTINED_FLAGS:
         with pytest.raises(SystemExit):
-            sweep.main_argv(["--stage", "o1", "--train-args", flag, "2048"])
+            sweep.main_argv(["--stage", "selection", "--train-args", flag, "2048"])
 
 
 def test_ledger_carries_the_knobs():
     assert "lr" in sweep.LEDGER_FIELDS and "warmup_steps" in sweep.LEDGER_FIELDS
-    with Path("results/phase_d/sweep_log.csv").open() as handle:
+    with Path("results/model_v1/sweep_log.csv").open() as handle:
         rows = list(csv.DictReader(handle))
     assert rows, "ledger is empty"
     assert set(rows[0]) == set(sweep.LEDGER_FIELDS)
-    pre_o = [r for r in rows if r["stage"] != "o1"]
+    pre_o = [r for r in rows if r["stage"] != "selection"]
     assert pre_o and all(r["lr"] == "0.001" and r["warmup_steps"] == "0" for r in pre_o), \
         "the pre-O history is the finding: one lr, no warmup, 119 runs"
-    # every d10 row names the build the 2026-08-20 probe established it trained on
-    d10 = [r for r in pre_o if r["stage"] == "d10"]
-    assert d10 and all(r["data_dir"].startswith("data/processed/phase_d5") for r in d10)
+    # every rebuild row names the build the 2026-08-20 probe established it trained on
+    rebuild = [r for r in pre_o if r["stage"] == "rebuild"]
+    assert rebuild and all(r["data_dir"].startswith("data/processed/phase_d5") for r in rebuild)
 
 
 # ------------------------------------------------------------------- selection rule
@@ -173,13 +173,13 @@ def ledger(rows):
             for s, c, i, v in rows]
 
 
-D10 = [("d10", "baseline", i, v) for i, v in
+D10 = [("rebuild", "baseline", i, v) for i, v in
        enumerate([1.02584, 1.02585, 1.02578, 1.02563, 1.02590])]
 NEUTRAL = 1.02580
 
 
 def full_grid(*rows, seeds=2):
-    """The o1 rows under test, padded out to the whole pre-registered grid.
+    """The selection rows under test, padded out to the whole pre-registered grid.
 
     `select` refuses a partial grid on purpose -- `sweep.queue` is config-major, so a night
     that runs short drops whole arms and a mean over the arms that finished is
@@ -190,31 +190,31 @@ def full_grid(*rows, seeds=2):
     the floor puts the guard in its exact-reproduction regime, which is a separate question
     from the margin these fixtures are about -- the shared-seed tests below cover it."""
     named = {r[1] for r in rows}
-    padding = [("o1", arm, i, NEUTRAL)
-               for arm in o1_select.EXPECTED_ARMS if arm not in named
+    padding = [("selection", arm, i, NEUTRAL)
+               for arm in hyperparameter_tuning_select.EXPECTED_ARMS if arm not in named
                for i in range(seeds)]
     return list(rows) + padding
 
 
 def test_the_pre_registered_grid_matches_the_stage_it_scores():
-    """o1_select declares EXPECTED_ARMS itself instead of importing sweep.STAGES, because
+    """selection_select declares EXPECTED_ARMS itself instead of importing sweep.STAGES, because
     importing sweep drags claim1_eval into sys.modules. The duplication is deliberate and
     this is the test that keeps the two copies honest."""
-    assert sorted(o1_select.EXPECTED_ARMS) == sorted(n for n, _ in sweep.STAGES["o1"])
+    assert sorted(hyperparameter_tuning_select.EXPECTED_ARMS) == sorted(n for n, _ in sweep.STAGES["selection"])
 
 
 def test_a_short_night_is_refused_rather_than_averaged():
-    rows = ledger(D10 + [("o1", "lr1e3", 7, NEUTRAL), ("o1", "lr1e3", 8, NEUTRAL),
-                         ("o1", "lr3e3", 0, 1.02500), ("o1", "lr3e3", 1, 1.02500)])
-    result = o1_select.select(rows)
+    rows = ledger(D10 + [("selection", "lr1e3", 7, NEUTRAL), ("selection", "lr1e3", 8, NEUTRAL),
+                         ("selection", "lr3e3", 0, 1.02500), ("selection", "lr3e3", 1, 1.02500)])
+    result = hyperparameter_tuning_select.select(rows)
     assert result["verdict"] == "incomplete_grid"
     assert set(result["grid"]["missing_arms"]) == {
         "lr3e4", "lr3e4_warm", "lr1e3_warm", "lr3e3_warm"}
 
 
 def test_a_one_seed_arm_is_refused_rather_than_meaned():
-    rows = ledger(D10 + full_grid(("o1", "lr3e3", 0, 1.02500), seeds=2))
-    result = o1_select.select(rows)
+    rows = ledger(D10 + full_grid(("selection", "lr3e3", 0, 1.02500), seeds=2))
+    result = hyperparameter_tuning_select.select(rows)
     assert result["verdict"] == "incomplete_grid"
     assert result["grid"]["underpowered_arms"] == ["lr3e3"]
 
@@ -226,7 +226,7 @@ def test_selector_cannot_see_claim1():
     spelling nobody would write. Import the module for real, in a clean interpreter, and ask
     what came with it: an import anywhere in the transitive graph shows up in sys.modules."""
     probe = (
-        "import sys; import src.analysis.o1_select as m;"
+        "import sys; import src.analysis.hyperparameter_tuning_select as m;"
         "leaked = [n for n in sys.modules if 'claim1' in n];"
         "print(leaked)"
     )
@@ -238,108 +238,108 @@ def test_selector_cannot_see_claim1():
 
 
 def test_incumbent_stands_when_nothing_clears_the_margin():
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
-                         ("o1", "lr3e3", 0, 1.02575), ("o1", "lr3e3", 1, 1.02575)))
-    result = o1_select.select(rows)
+    rows = ledger(D10 + full_grid(("selection", "lr1e3", 7, 1.02580), ("selection", "lr1e3", 8, 1.02580),
+                         ("selection", "lr3e3", 0, 1.02575), ("selection", "lr3e3", 1, 1.02575)))
+    result = hyperparameter_tuning_select.select(rows)
     assert result["guard"]["passed"]
     # 5e-5 better is half a seed sd -- real-looking, and noise
-    assert result["arms"]["lr3e3"]["margin_in_ses"] < o1_select.MARGIN_SES
+    assert result["arms"]["lr3e3"]["margin_in_ses"] < hyperparameter_tuning_select.MARGIN_SES
     assert result["winner"] == "lr1e3"
     assert result["verdict"] == "incumbent_stands"
 
 
 def test_a_clear_winner_is_promoted():
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
-                         ("o1", "lr3e4_warm", 0, 1.02000), ("o1", "lr3e4_warm", 1, 1.02010)))
-    result = o1_select.select(rows)
+    rows = ledger(D10 + full_grid(("selection", "lr1e3", 7, 1.02580), ("selection", "lr1e3", 8, 1.02580),
+                         ("selection", "lr3e4_warm", 0, 1.02000), ("selection", "lr3e4_warm", 1, 1.02010)))
+    result = hyperparameter_tuning_select.select(rows)
     assert result["winner"] == "lr3e4_warm"
     assert result["verdict"] == "tuned_pending_confirmation"
-    assert result["arms"]["lr3e4_warm"]["margin_in_ses"] > o1_select.MARGIN_SES
+    assert result["arms"]["lr3e4_warm"]["margin_in_ses"] > hyperparameter_tuning_select.MARGIN_SES
 
 
 def test_a_worse_arm_is_never_promoted():
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
-                         ("o1", "lr3e3", 0, 1.19000), ("o1", "lr3e3", 1, 1.19000)))
-    result = o1_select.select(rows)
+    rows = ledger(D10 + full_grid(("selection", "lr1e3", 7, 1.02580), ("selection", "lr1e3", 8, 1.02580),
+                         ("selection", "lr3e3", 0, 1.19000), ("selection", "lr3e3", 1, 1.19000)))
+    result = hyperparameter_tuning_select.select(rows)
     assert result["winner"] == "lr1e3"
     assert result["arms"]["lr3e3"]["margin_in_ses"] < 0
 
 
-def test_guard_fires_when_the_incumbent_drifts_off_its_own_d10_run():
+def test_guard_fires_when_the_incumbent_drifts_off_its_own_rebuild_run():
     """A moved tensor build shows up here and nowhere else: every column still lines up."""
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.04000), ("o1", "lr1e3", 8, 1.04000)))
-    result = o1_select.select(rows)
+    rows = ledger(D10 + full_grid(("selection", "lr1e3", 7, 1.04000), ("selection", "lr1e3", 8, 1.04000)))
+    result = hyperparameter_tuning_select.select(rows)
     assert not result["guard"]["passed"]
     assert result["verdict"] == "guard_failed"
 
 
 def test_missing_incumbent_is_refused_not_defaulted():
-    rows = ledger(D10 + [("o1", arm, i, 1.02000) for arm in o1_select.EXPECTED_ARMS
-                         if arm != o1_select.INCUMBENT for i in range(2)])
+    rows = ledger(D10 + [("selection", arm, i, 1.02000) for arm in hyperparameter_tuning_select.EXPECTED_ARMS
+                         if arm != hyperparameter_tuning_select.INCUMBENT for i in range(2)])
     with pytest.raises(ValueError, match="incumbent"):
-        o1_select.select(rows)
+        hyperparameter_tuning_select.select(rows)
 
 
 def test_noise_floor_needs_more_than_one_seed():
-    rows = ledger([("d10", "baseline", 0, 1.02584),
-                   ("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580)])
+    rows = ledger([("rebuild", "baseline", 0, 1.02584),
+                   ("selection", "lr1e3", 7, 1.02580), ("selection", "lr1e3", 8, 1.02580)])
     with pytest.raises(ValueError, match="noise floor"):
-        o1_select.select(rows)
+        hyperparameter_tuning_select.select(rows)
 
 
 def test_noise_floor_is_read_from_the_ledger_not_hardcoded():
-    tight = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
-                          ("o1", "lr3e3", 0, 1.02540), ("o1", "lr3e3", 1, 1.02540)))
-    wide = ledger([("d10", "baseline", i, v) for i, v in
+    tight = ledger(D10 + full_grid(("selection", "lr1e3", 7, 1.02580), ("selection", "lr1e3", 8, 1.02580),
+                          ("selection", "lr3e3", 0, 1.02540), ("selection", "lr3e3", 1, 1.02540)))
+    wide = ledger([("rebuild", "baseline", i, v) for i, v in
                    enumerate([1.020, 1.026, 1.031, 1.024, 1.029])] +
-                  full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
-                            ("o1", "lr3e3", 0, 1.02540), ("o1", "lr3e3", 1, 1.02540)))
-    assert o1_select.select(tight)["winner"] == "lr3e3"
-    assert o1_select.select(wide)["verdict"] == "incumbent_stands"
+                  full_grid(("selection", "lr1e3", 7, 1.02580), ("selection", "lr1e3", 8, 1.02580),
+                            ("selection", "lr3e3", 0, 1.02540), ("selection", "lr3e3", 1, 1.02540)))
+    assert hyperparameter_tuning_select.select(tight)["winner"] == "lr3e3"
+    assert hyperparameter_tuning_select.select(wide)["verdict"] == "incumbent_stands"
 
 
 def test_report_round_trips(tmp_path):
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
-                         ("o1", "lr3e3", 0, 1.02000), ("o1", "lr3e3", 1, 1.02000)))
-    result = o1_select.select(rows)
-    json_path, csv_path = o1_select.report(result, tmp_path)
+    rows = ledger(D10 + full_grid(("selection", "lr1e3", 7, 1.02580), ("selection", "lr1e3", 8, 1.02580),
+                         ("selection", "lr3e3", 0, 1.02000), ("selection", "lr3e3", 1, 1.02000)))
+    result = hyperparameter_tuning_select.select(rows)
+    json_path, csv_path = hyperparameter_tuning_select.report(result, tmp_path)
     import json
     assert json.loads(json_path.read_text())["winner"] == "lr3e3"
     written = list(csv.DictReader(csv_path.open()))
     assert [r["config"] for r in written][0] == "lr3e3"   # best first
-    assert len(written) == len(o1_select.EXPECTED_ARMS)
+    assert len(written) == len(hyperparameter_tuning_select.EXPECTED_ARMS)
     assert written[0]["promotable"] == "True"
 
 
 def test_empty_stage_is_refused():
     with pytest.raises(ValueError, match="no completed"):
-        o1_select.select(ledger(D10))
+        hyperparameter_tuning_select.select(ledger(D10))
 
 
 def test_a_two_seed_promotion_is_flagged_for_confirmation():
     """Five challengers, one incumbent, one threshold: the family-wise false-promotion
     rate is several times the per-comparison one, and a two-seed mean is thin. The
     artifact must say so rather than leaving it to the spec."""
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
-                         ("o1", "lr3e3", 0, 1.02000), ("o1", "lr3e3", 1, 1.02000)))
-    result = o1_select.select(rows)
+    rows = ledger(D10 + full_grid(("selection", "lr1e3", 7, 1.02580), ("selection", "lr1e3", 8, 1.02580),
+                         ("selection", "lr3e3", 0, 1.02000), ("selection", "lr3e3", 1, 1.02000)))
+    result = hyperparameter_tuning_select.select(rows)
     assert result["winner"] == "lr3e3"
     assert result["requires_confirmation"] is True
     assert result["verdict"] == "tuned_pending_confirmation"
 
 
 def test_a_five_seed_promotion_needs_no_confirmation():
-    rows = ledger(D10 + full_grid(*[("o1", "lr1e3", i, 1.02580) for i in (7, 8)],
-                                  *[("o1", "lr3e3", i, 1.02000) for i in range(5)]))
-    result = o1_select.select(rows)
+    rows = ledger(D10 + full_grid(*[("selection", "lr1e3", i, 1.02580) for i in (7, 8)],
+                                  *[("selection", "lr3e3", i, 1.02000) for i in range(5)]))
+    result = hyperparameter_tuning_select.select(rows)
     assert result["requires_confirmation"] is False
     assert result["verdict"] == "tuned"
 
 
 def test_the_incumbent_standing_never_asks_for_confirmation():
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02580), ("o1", "lr1e3", 8, 1.02580),
-                         ("o1", "lr3e3", 0, 1.02579), ("o1", "lr3e3", 1, 1.02579)))
-    result = o1_select.select(rows)
+    rows = ledger(D10 + full_grid(("selection", "lr1e3", 7, 1.02580), ("selection", "lr1e3", 8, 1.02580),
+                         ("selection", "lr3e3", 0, 1.02579), ("selection", "lr3e3", 1, 1.02579)))
+    result = hyperparameter_tuning_select.select(rows)
     assert result["verdict"] == "incumbent_stands"
     assert result["requires_confirmation"] is False
 
@@ -350,20 +350,20 @@ def test_an_undeclared_arm_is_refused_rather_than_ranked():
     """The grid check is symmetric. Missing arms catch a night that ran short; unexpected
     arms catch an arm appended after the table was read, which is the failure that actually
     voids a pre-registration. Without this the injected arm wins and `complete` reads true."""
-    rows = ledger(D10 + full_grid(("o1", "lr9e9_undeclared", 0, 1.02000),
-                                  ("o1", "lr9e9_undeclared", 1, 1.02000)))
-    result = o1_select.select(rows)
+    rows = ledger(D10 + full_grid(("selection", "lr9e9_undeclared", 0, 1.02000),
+                                  ("selection", "lr9e9_undeclared", 1, 1.02000)))
+    result = hyperparameter_tuning_select.select(rows)
     assert result["grid"]["unexpected_arms"] == ["lr9e9_undeclared"]
     assert result["grid"]["complete"] is False
     assert result["verdict"] == "incomplete_grid"
 
 
 def test_drift_is_flagged_uninformative_when_the_incumbent_reruns_floor_seeds():
-    """The real o1 case. `o1/lr1e3` seeds 0-1 reproduce `d10/baseline` seeds 0-1 exactly, so
+    """The real selection case. `selection/lr1e3` seeds 0-1 reproduce `rebuild/baseline` seeds 0-1 exactly, so
     the drift is an algebraic function of the floor sample and says nothing about the build.
     The guard must pass on the REPRODUCTION and say the drift is not evidence."""
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02584), ("o1", "lr1e3", 1, 1.02585)))
-    guard = o1_select.select(rows)["guard"]
+    rows = ledger(D10 + full_grid(("selection", "lr1e3", 0, 1.02584), ("selection", "lr1e3", 1, 1.02585)))
+    guard = hyperparameter_tuning_select.select(rows)["guard"]
     assert guard["shared_seeds"] == [0, 1]
     assert guard["drift_is_informative"] is False
     assert guard["basis"] == "exact reproduction on shared seeds"
@@ -375,9 +375,9 @@ def test_a_shared_seed_that_does_not_reproduce_fails_the_guard():
     """The units failure this exists for: the same recipe and seed on a build with different
     quality-bin edges cannot land on the floor's value. A drift small enough to sit inside
     the 4 sd tolerance must still fail, which the old tolerance-only guard let through."""
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 0, 1.02584 + 1e-5),
-                                  ("o1", "lr1e3", 1, 1.02585)))
-    result = o1_select.select(rows)
+    rows = ledger(D10 + full_grid(("selection", "lr1e3", 0, 1.02584 + 1e-5),
+                                  ("selection", "lr1e3", 1, 1.02585)))
+    result = hyperparameter_tuning_select.select(rows)
     assert result["guard"]["mismatched_seeds"] == [0]
     assert result["guard"]["passed"] is False
     assert result["verdict"] == "guard_failed"
@@ -388,8 +388,8 @@ def test_a_shared_seed_that_does_not_reproduce_fails_the_guard():
 def test_without_shared_seeds_the_guard_falls_back_to_the_tolerance():
     """An incumbent trained on fresh seeds has nothing to reproduce, so drift is all there
     is -- and it is then genuinely informative."""
-    rows = ledger(D10 + full_grid(("o1", "lr1e3", 7, 1.02584), ("o1", "lr1e3", 8, 1.02585)))
-    guard = o1_select.select(rows)["guard"]
+    rows = ledger(D10 + full_grid(("selection", "lr1e3", 7, 1.02584), ("selection", "lr1e3", 8, 1.02585)))
+    guard = hyperparameter_tuning_select.select(rows)["guard"]
     assert guard["shared_seeds"] == []
     assert guard["drift_is_informative"] is True
     assert guard["basis"] == "drift within tolerance"

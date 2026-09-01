@@ -10,7 +10,7 @@ Two rules this module exists to enforce, both of which fail silently otherwise:
 
 1. THE LADDER IS RE-SCORED, NOT REMEMBERED. Every Phase C rung is recomputed on the same
    eval frame in the same process, so Phase D is never compared against numbers produced
-   under a different filter, weighting, or metric vintage. `c_report` owns those baselines
+   under a different filter, weighting, or metric vintage. `baseline_ladder_report` owns those baselines
    and is imported rather than reimplemented.
 
 2. THE PAIRED COMPARISON IS THE CLAIM, NOT THE TWO ABSOLUTE NUMBERS. Both models are
@@ -32,13 +32,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.analysis import c_report, claim1_eval as evaluation, c3_gbm as c3
+from src.analysis import baseline_ladder_report, claim1_eval as evaluation, baseline_ladder_gbm as gbm
 
-OUT_DIR = Path("results/phase_d")
-DEFAULT_PREDICTIONS = OUT_DIR / "d5_predictions_d8_baseline.csv"
-MODEL_NAME = "phase_d_v1"
+OUT_DIR = Path("results/model_v1")
+DEFAULT_PREDICTIONS = OUT_DIR / "model_v1_predictions_presplit_baseline.csv"
+MODEL_NAME = "model_v1"
 # the two rungs the pre-registered gate names; everything else on the ladder is context
-GATE_OPPONENTS = ("c3_gbm_full", "c2_bivariate")
+GATE_OPPONENTS = ("gbm_full", "eb_bivariate")
 
 
 def load_predictions(path):
@@ -68,8 +68,8 @@ def compare(frames, name=MODEL_NAME, seed=0):
         merged.insert(0, "opponent", opponent)
         # NEGATIVE rmse_difference favours Phase D; POSITIVE rank_difference does. The
         # gate is the INTERVAL excluding zero, not the point estimate's sign.
-        merged["rmse_favours_phase_d"] = merged["ci_high_rmse"] < 0
-        merged["rank_favours_phase_d"] = merged["ci_low_rank"] > 0
+        merged["rmse_favours_model_v1"] = merged["ci_high_rmse"] < 0
+        merged["rank_favours_model_v1"] = merged["ci_low_rank"] > 0
         tables.append(merged)
     return pd.concat(tables, ignore_index=True)
 
@@ -116,12 +116,12 @@ def debiased_diagnostic(frames, name, seed=0):
     excess = float(np.average(frame["pred_woba"] - frame["woba"], weights=weights))
     frame["pred_woba"] = frame["pred_woba"] - excess
 
-    table = evaluation.paired_rmse_difference(frame, frames["c3_gbm_full"], seed=seed)
-    table.insert(0, "opponent", "c3_gbm_full")
+    table = evaluation.paired_rmse_difference(frame, frames["gbm_full"], seed=seed)
+    table.insert(0, "opponent", "gbm_full")
     return excess, table
 
 
-def power_restatement(comparisons, opponent="c3_gbm_full", power=0.80, alpha=0.05):
+def power_restatement(comparisons, opponent="gbm_full", power=0.80, alpha=0.05):
     """
     D5-R18(4): restate a rank-gap null as what it is -- underpowered -- with the factor.
 
@@ -198,22 +198,22 @@ def main():
     args = parser.parse_args()
 
     evaluation.assert_not_test_season(args.eval_season, final_run=args.final_run)
-    pa_df = c_report.load_targets(args.eval_targets)
-    params, _, _ = c_report.fit_and_describe(pa_df, args.eval_season, args.seed)
-    process_seasons = c3.season_process(
-        pd.read_parquet(args.pitch_events, columns=c_report.PITCH_COLUMNS))
+    pa_df = baseline_ladder_report.load_targets(args.eval_targets)
+    params, _, _ = baseline_ladder_report.fit_and_describe(pa_df, args.eval_season, args.seed)
+    process_seasons = gbm.season_process(
+        pd.read_parquet(args.pitch_events, columns=baseline_ladder_report.PITCH_COLUMNS))
 
-    predictions, _ = c_report.build_predictions(pa_df, args.eval_season, params,
+    predictions, _ = baseline_ladder_report.build_predictions(pa_df, args.eval_season, params,
                                                 process_seasons, seed=args.seed)
     predictions[args.label] = load_predictions(args.predictions)
-    frames, scored, _ = c_report.score_all(pa_df, predictions, args.eval_season)
+    frames, scored, _ = baseline_ladder_report.score_all(pa_df, predictions, args.eval_season)
 
     comparisons = compare(frames, name=args.label, seed=args.seed)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    scored.to_csv(out_dir / f"d5_claim1_scores_{args.label}.csv", index=False)
-    comparisons.to_csv(out_dir / f"d5_claim1_paired_{args.label}.csv", index=False)
+    scored.to_csv(out_dir / f"model_v1_claim1_scores_{args.label}.csv", index=False)
+    comparisons.to_csv(out_dir / f"model_v1_claim1_paired_{args.label}.csv", index=False)
 
     print("claim-1 scores (all models, one eval frame)")
     print(scored.to_string(index=False, float_format="%.4f"))
@@ -223,8 +223,8 @@ def main():
     # frame, and identical on every other by construction.
     both = second_target_table(frames)
     floor = evaluation.achievable_floor(frames[args.label])
-    both.to_csv(out_dir / f"d5_both_targets_{args.label}.csv", index=False)
-    floor.to_csv(out_dir / f"d5_achievable_floor_{args.label}.csv", index=False)
+    both.to_csv(out_dir / f"model_v1_both_targets_{args.label}.csv", index=False)
+    floor.to_csv(out_dir / f"model_v1_achievable_floor_{args.label}.csv", index=False)
     print("\nscored against both answer keys (realized wOBA is primary; no gate reads xwoba)")
     print(both.to_string(index=False, float_format="%.4f"))
     print("\nachievable floor -- RMSE between the two answer keys, a reference line, "
@@ -243,10 +243,10 @@ def main():
     verdicts = {}
     for stratum in sorted(comparisons["stratum"].unique()):
         gate = comparisons[comparisons["stratum"] == stratum]
-        against_c3 = gate[gate["opponent"] == "c3_gbm_full"]["rmse_favours_phase_d"]
+        against_gbm = gate[gate["opponent"] == "gbm_full"]["rmse_favours_model_v1"]
         verdicts[stratum] = {
-            "rmse_gate_vs_c3_full": bool(against_c3.all()) if len(against_c3) else None,
-            "ordering_gate_vs_both": bool(gate["rank_favours_phase_d"].all()),
+            "rmse_gate_vs_gbm_full": bool(against_gbm.all()) if len(against_gbm) else None,
+            "ordering_gate_vs_both": bool(gate["rank_favours_model_v1"].all()),
             "n_comparisons": int(len(gate)),
         }
     assert DECISIVE_STRATUM in verdicts, \
@@ -256,7 +256,7 @@ def main():
     for stratum, verdict in verdicts.items():
         mark = "  <- decisive" if stratum == DECISIVE_STRATUM else ""
         print(f"  {stratum:>6s}  RMSE vs C.3-full: "
-              f"{'PASS' if verdict['rmse_gate_vs_c3_full'] else 'not met':>7s}   "
+              f"{'PASS' if verdict['rmse_gate_vs_gbm_full'] else 'not met':>7s}   "
               f"ordering vs BOTH: "
               f"{'PASS' if verdict['ordering_gate_vs_both'] else 'not met':>7s}{mark}")
 
@@ -264,8 +264,8 @@ def main():
     # quoted anywhere. (4) turns each stratum's rank null into a power statement; (1) splits the
     # spread diagnostic on training-vocabulary membership, where its sign reverses.
     power = power_restatement(comparisons)
-    power.to_csv(out_dir / f"d5_power_restatement_{args.label}.csv", index=False)
-    print("\nD5-R18(4): rank-gap power against c3_gbm_full -- a null with a factor attached")
+    power.to_csv(out_dir / f"model_v1_power_restatement_{args.label}.csv", index=False)
+    print("\nD5-R18(4): rank-gap power against gbm_full -- a null with a factor attached")
     print(power.to_string(index=False, float_format="%.5f"))
 
     spread = None
@@ -274,26 +274,26 @@ def main():
         vocabulary = {int(key) for key in
                       json.loads(manifest_path.read_text())["vocabulary"]}
         spread = trained_row_spread(frames[args.label], vocabulary)
-        spread.to_csv(out_dir / f"d5_trained_spread_{args.label}.csv", index=False)
+        spread.to_csv(out_dir / f"model_v1_trained_spread_{args.label}.csv", index=False)
         print("\nD5-R18(1): predicted spread, cold-start rows separated rather than pooled")
         print(spread.to_string(index=False, float_format="%.4f"))
     else:
         print(f"\nD5-R18(1) skipped: no manifest at {manifest_path}")
 
     excess, debiased = debiased_diagnostic(frames, args.label, seed=args.seed)
-    debiased.to_csv(out_dir / f"d5_claim1_debiased_{args.label}.csv", index=False)
+    debiased.to_csv(out_dir / f"model_v1_claim1_debiased_{args.label}.csv", index=False)
     print(f"\ndebiased diagnostic (mean excess {excess:+.5f} removed) -- NOT a fix, see the "
           f"2026-08-08 knob entry")
     print(debiased.to_string(index=False, float_format="%.5f"))
 
     decisive = verdicts[DECISIVE_STRATUM]
-    rmse_pass, rank_pass = decisive["rmse_gate_vs_c3_full"], decisive["ordering_gate_vs_both"]
+    rmse_pass, rank_pass = decisive["rmse_gate_vs_gbm_full"], decisive["ordering_gate_vs_both"]
     print(f"\nRMSE gate vs C.3-full ({DECISIVE_STRATUM}): {'PASS' if rmse_pass else 'not met'}")
     print(f"ordering gate vs BOTH C.2 and C.3-full ({DECISIVE_STRATUM}): "
           f"{'PASS' if rank_pass else 'not met'}")
-    (out_dir / f"d5_claim1_verdict_{args.label}.json").write_text(json.dumps(
+    (out_dir / f"model_v1_claim1_verdict_{args.label}.json").write_text(json.dumps(
         {"decisive_stratum": DECISIVE_STRATUM,
-         "rmse_gate_vs_c3_full": rmse_pass, "ordering_gate_vs_both": rank_pass,
+         "rmse_gate_vs_gbm_full": rmse_pass, "ordering_gate_vs_both": rank_pass,
          "by_stratum": verdicts,
          # the debiased reading rides in the verdict file so it cannot be quoted without the
          # excess that produced it

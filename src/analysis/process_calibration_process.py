@@ -38,13 +38,13 @@ import pandas as pd
 import torch
 
 from src.analysis import claim1_eval, provenance
-from src.analysis.f3_heads import (BINARY_HEADS, CATEGORICAL_HEADS, ARRAY_NAMES,
+from src.analysis.process_calibration_heads import (BINARY_HEADS, CATEGORICAL_HEADS, ARRAY_NAMES,
                                    head_masks, load_season_arrays)
 from src.data.model_dataset import MASKED, RESERVED_HITTER_INDEX
 from src.model import query, query_tables as qt
 from src.model import v1
 
-DEFAULT_OUT_DIR = "results/phase_f"
+DEFAULT_OUT_DIR = "results/process_calibration"
 DEFAULT_BATCH = 32768
 # the reference's conditioning set: everything a forecaster knows except who is batting
 REFERENCE_KEYS = ("balls", "strikes", "stand", "p_throws")
@@ -155,7 +155,7 @@ def summarize(name, model_ll, cold_ll, reference_ll, mask):
 def main():
     parser = argparse.ArgumentParser(
         description="Phase F.4 -- pitch-level process scoring against no-identity references.")
-    parser.add_argument("--arm", default="d10_baseline")
+    parser.add_argument("--arm", default="rebuild_baseline")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
@@ -214,7 +214,7 @@ def main():
     rows = [summarize(name, model_ll[name], cold_ll[name], reference_ll[name], scored[name])
             for name in BINARY_HEADS + CATEGORICAL_HEADS if name in scored]
     table = pd.DataFrame(rows)
-    table.to_csv(out_dir / "f4_process_nll.csv", index=False)
+    table.to_csv(out_dir / "process_nll.csv", index=False)
 
     cold_share = float(np.mean(arrays["hitter"][eval_rows] == RESERVED_HITTER_INDEX))
     summary = {
@@ -228,11 +228,11 @@ def main():
         "note": ("diagnostic only -- the frequency reference is not a claim-1 ladder rung "
                  "and neither reference re-opens the pre-registered gates"),
     }
-    (out_dir / "f4_process_summary.json").write_text(json.dumps(summary, indent=2, default=float))
+    (out_dir / "process_summary.json").write_text(json.dumps(summary, indent=2, default=float))
 
     print("\n-- mean negative log-likelihood per scored pitch, lower is better --")
     print(table.to_string(index=False))
-    print(f"\nwrote {out_dir / 'f4_process_nll.csv'}")
+    print(f"\nwrote {out_dir / 'process_nll.csv'}")
 
 
 if __name__ == "__main__":

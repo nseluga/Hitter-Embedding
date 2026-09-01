@@ -902,7 +902,7 @@
       "bip": 0.02
     }
   },
-  "arm": "d10_meanweight",
+  "arm": "rebuild_meanweight",
   "seeds": [
     0,
     1,

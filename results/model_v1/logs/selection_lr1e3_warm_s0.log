@@ -22,4 +22,4 @@ epoch  18  train 0.99347  val 1.02670  ref 1.02670  lr 3.00e-04  75s (719 steps)
 epoch  19  train 0.99329  val 1.02577  ref 1.02577  lr 9.00e-05  39s (719 steps)
 epoch  20  train 0.99220  val 1.02588  ref 1.02588  lr 9.00e-05  43s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.02567 at epoch 17; reference 1.02567; checkpoint results/checkpoints/o1_lr1e3_warm_s0.pt
+best val loss 1.02567 at epoch 17; reference 1.02567; checkpoint results/checkpoints/selection_lr1e3_warm_s0.pt

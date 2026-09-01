@@ -1,22 +1,22 @@
 {
-  "arm": "d10_baseline",
+  "arm": "rebuild_baseline",
   "eval_season": 2024,
   "status": "retrospective diagnostic \u2014 demoted from the pre-registered early detector; it explains E.5 and gates nothing",
   "probe": {
     "target": {
-      "source_module": "src/analysis/c2_bivariate_eb.py::predict",
+      "source_module": "src/analysis/eb_bivariate_eb.py::predict",
       "column": "pred_woba, pivoted on p_throws, split = L - R",
       "quantity": "C.2 empirical-Bayes POSTERIOR MEAN split (not the raw observed split)",
-      "hyper_parameters_committed_at": "results/phase_c/c2_prior_parameters.csv"
+      "hyper_parameters_committed_at": "results/baseline_ladder/eb_prior_parameters.csv"
     },
     "features": {
-      "source": "results/checkpoints/d10_baseline_s{0..4}.pt, key model.embedding.weight",
+      "source": "results/checkpoints/rebuild_baseline_s{0..4}.pt, key model.embedding.weight",
       "vocabulary": "data/processed/phase_d5/manifest.json::vocabulary",
       "seed_handling": "per-seed decode, correlations averaged; raw embeddings NEVER averaged",
       "embedding_dim": 32
     },
     "exclusions": {
-      "hitters_with_a_c2_split": 630,
+      "hitters_with_a_eb_split": 630,
       "cold_start_excluded": 97,
       "hitters_probed": 533
     },

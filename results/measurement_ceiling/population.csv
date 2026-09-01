@@ -1,4 +1,4 @@
-batter,in_e5,in_f5,in_intersection,denom_L,denom_R,stand,stratum,pooled_denom,post_selection_descriptive
+batter,in_platoon,in_pooled,in_intersection,denom_L,denom_R,stand,stratum,pooled_denom,post_selection_descriptive
 444482,True,True,True,26.0,234.0,L,high,260,True
 453568,True,True,True,114.0,383.0,L,high,497,True
 455117,True,True,True,43.0,101.0,R,high,144,True

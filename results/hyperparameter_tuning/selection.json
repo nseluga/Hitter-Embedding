@@ -1,17 +1,17 @@
 {
-  "stage": "o1",
+  "stage": "selection",
   "rule": {
     "metric": "reference (held-out unweighted log loss per scored row)",
     "incumbent": "lr1e3",
     "margin_ses": 2.0,
     "noise_floor_sd": 0.00010416333327999322,
-    "noise_floor_source": "d10/baseline",
+    "noise_floor_source": "rebuild/baseline",
     "noise_floor_n_seeds": 5,
     "claim1_read": false
   },
   "guard": {
     "incumbent_mean": 1.025845,
-    "d10_baseline_mean": 1.0258,
+    "rebuild_baseline_mean": 1.0258,
     "drift": 4.4999999999850715e-05,
     "tolerance": 0.00041665333311997286,
     "drift_is_informative": false,

@@ -8,7 +8,7 @@ E.5 reports a within-stand weighted rank correlation of 0.146 between the model'
 predicted platoon differential and the realized one, and that number was read
 in-session as "essentially zero". That reading is only licensed if the realized
 differential is a measurable quantity in a single season. Phase C.2 says it may not
-be: `results/phase_c/c2_prior_parameters.csv` puts the TRUE between-hitter split sd at
+be: `results/baseline_ladder/eb_prior_parameters.csv` puts the TRUE between-hitter split sd at
 0.0271 wOBA (LHB) / 0.0222 (RHB) and the implied stabilization denominator at 320.65 /
 562.98 PA PER SIDE, against realized 2024 exposures whose medians are 86 (vs LHP) and
 223 (vs RHP). A correlation cannot exceed the square root of the reliability of the
@@ -24,7 +24,7 @@ toward zero. The entry of 2026-08-19 withdraws it and routes the correction here
 2 removes the sampling-noise variance from the observed side before taking the share.
 
 READ-ONLY. No model, no checkpoint, no forward pass, no training. It consumes
-`results/phase_e/e5_platoon_frame.csv` (written by `e_eval.platoon_frame`), the
+`results/model_evaluation/platoon_frame.csv` (written by `model_evaluation_eval.platoon_frame`), the
 PA-level eval-target table, and the C.2 posterior variance components. 2024 only —
 2025 is never touched (spec §10).
 
@@ -52,7 +52,7 @@ correlation rho: tau2_L + tau2_R − 2·rho·tau_L·tau_R.
 Everything is reported for LHB and RHB separately and pooled, because C.2's components
 differ by stand and Part 3's asymmetry is the load-bearing claim.
 
-Run:  PYTHONPATH=. .venv/bin/python -m src.analysis.e_platoon_ceiling
+Run:  PYTHONPATH=. .venv/bin/python -m src.analysis.model_evaluation_platoon_ceiling
 """
 
 import argparse
@@ -63,12 +63,12 @@ import numpy as np
 import pandas as pd
 
 from src.analysis import claim1_eval
-from src.analysis import e_eval
+from src.analysis import model_evaluation_eval
 
-DEFAULT_OUT_DIR = "results/phase_e"
+DEFAULT_OUT_DIR = "results/model_evaluation"
 EVAL_SEASON = 2024
-C2_PATH = "results/phase_c/c2_prior_parameters.csv"
-FRAME_PATH = "results/phase_e/e5_platoon_frame.csv"
+C2_PATH = "results/baseline_ladder/eb_prior_parameters.csv"
+FRAME_PATH = "results/model_evaluation/platoon_frame.csv"
 EVAL_TARGETS_PATH = "data/processed/eval_targets_pa.parquet"
 
 # A per-hitter, per-side variance estimate needs enough PAs to be worth anything. Below
@@ -128,7 +128,7 @@ def noise_corrected_variance(observed_variance, mean_sampling_variance):
 # ------------------------------------------------------------------ weighted moments
 
 def weighted_variance(values, weight):
-    """Weighted variance about the weighted mean (population form, matching e_eval)."""
+    """Weighted variance about the weighted mean (population form, matching model_evaluation_eval)."""
     values = np.asarray(values, dtype="float64")
     weight = np.asarray(weight, dtype="float64")
     assert len(values) == len(weight), "values and weights differ in length"
@@ -143,7 +143,7 @@ def between_within_stand(values, weight, stand):
     """
     Split a weighted variance into its between-stand and within-stand parts.
 
-    Same decomposition `e_eval.platoon_decomposition` performs; repeated here (rather
+    Same decomposition `model_evaluation_eval.platoon_decomposition` performs; repeated here (rather
     than imported) only because Part 2 needs it inside a bootstrap loop over resampled
     rows. The closure assertion below is what keeps the two honest.
     """
@@ -167,7 +167,7 @@ def between_within_stand(values, weight, stand):
 
 # ------------------------------------------------------------------ inputs
 
-def load_c2_components(path=C2_PATH):
+def load_eb_components(path=C2_PATH):
     """
     C.2's posterior variance components, keyed by batter_type.
 
@@ -176,9 +176,9 @@ def load_c2_components(path=C2_PATH):
     from the per-side components in the same file, so a silently stale column cannot
     become the ceiling.
     """
-    c2 = pd.read_csv(path)
+    eb = pd.read_csv(path)
     out = {}
-    for batter_type, part in c2.groupby("batter_type"):
+    for batter_type, part in eb.groupby("batter_type"):
         rows = part.set_index("vs_hand")
         tau2_l, tau2_r = float(rows.loc["L", "tau2"]), float(rows.loc["R", "tau2"])
         rho = float(rows.loc["L", "rho"])
@@ -268,7 +268,7 @@ def attach_sampling_variance(frame, by_batter, by_league):
 
 # ------------------------------------------------------------------ Part 1
 
-def ceiling_table(frame, c2):
+def ceiling_table(frame, eb):
     """
     Reliability and the implied rank-correlation ceiling, per stand and pooled.
 
@@ -285,7 +285,7 @@ def ceiling_table(frame, c2):
         part = frame if label == "pooled" else frame[frame["stand"] == label]
         assert len(part) > 2, f"too few hitters to characterise {label}"
         weight = part["weight"].to_numpy(dtype="float64")
-        tau2 = np.array([c2[side]["tau2_split"] for side in part["stand"]])
+        tau2 = np.array([eb[side]["tau2_split"] for side in part["stand"]])
         sampling = part["sampling_var"].to_numpy(dtype="float64")
         mean_tau2_w = float(np.average(tau2, weights=weight))
         mean_samp_w = float(np.average(sampling, weights=weight))
@@ -311,15 +311,15 @@ def ceiling_table(frame, c2):
     return pd.DataFrame(rows)
 
 
-def recompute_e5_rank_correlation(frame):
+def recompute_platoon_rank_correlation(frame):
     """
     Recompute E.5's within-stand rank correlation from the frame rather than quoting it.
 
-    Reuses `e_eval.platoon_decomposition` -- the same code that produced the reported
+    Reuses `model_evaluation_eval.platoon_decomposition` -- the same code that produced the reported
     number -- so this is a reproduction check on the stored artefact, and a mismatch
     means the frame on disk is not the frame E.5 scored.
     """
-    decomposition = e_eval.platoon_decomposition(frame)
+    decomposition = model_evaluation_eval.platoon_decomposition(frame)
     value = float(decomposition["post_hoc_within_stand_rank_corr"])
     return value, decomposition
 
@@ -435,7 +435,7 @@ def corrected_stand_share(frame, n_boot=2000, seed=0, ci=(2.5, 97.5)):
     of the cell counts (221 and 324 hitters) and is negligible against the components below.
 
     Bootstrap is over ROWS, and the frame is one row per batter, so resampling rows IS
-    clustering on batter (the same argument `e_eval.paired_platoon_difference` makes).
+    clustering on batter (the same argument `model_evaluation_eval.paired_platoon_difference` makes).
     """
     rng = np.random.default_rng(seed)
     weight = frame["weight"].to_numpy(dtype="float64")
@@ -488,14 +488,14 @@ def corrected_stand_share(frame, n_boot=2000, seed=0, ci=(2.5, 97.5)):
 
 # ------------------------------------------------------------------ Part 3
 
-def recovery_by_stand(frame, c2):
+def recovery_by_stand(frame, eb):
     """
     What fraction of the TRUE within-stand platoon spread the model's predictions span,
     per stand, noise-corrected.
 
     Two denominators, both reported, because they come from independent sources and the
     in-session figures (54% LHB / 18% RHB) used only the first:
-      * `ratio_vs_c2` divides the model's within-stand predicted sd by C.2's
+      * `ratio_vs_eb` divides the model's within-stand predicted sd by C.2's
         `tau_split` -- a posterior quantity fit on many seasons.
       * `ratio_vs_realized_true` divides it by sqrt(Var[delta_obs] − E[sampling var])
         computed inside this 2024 stand group -- purely empirical, no prior.
@@ -511,7 +511,7 @@ def recovery_by_stand(frame, c2):
         mean_samp = float(np.average(part["sampling_var"], weights=weight))
         var_true = noise_corrected_variance(var_obs, mean_samp)
         # SENSITIVITY. The population weighted variance above is the estimator
-        # e_eval.platoon_decomposition uses, and matching it is what makes the Part 2
+        # model_evaluation_eval.platoon_decomposition uses, and matching it is what makes the Part 2
         # correction comparable to the 10.9% figure it supersedes. np.cov's aweights
         # form applies a reliability-weight bias correction which, with weights
         # spanning 20-500 PA, is a live alternative. Both are reported so the LHB
@@ -534,8 +534,8 @@ def recovery_by_stand(frame, c2):
             "noise_corrected_variance_is_positive": bool(var_true > 0),
             "sd_obs_within_stand_true": float(np.sqrt(var_true)) if var_true > 0 else float("nan"),
             "mean_sampling_var_weighted": mean_samp,
-            "tau_split_c2": c2[side]["tau_split"],
-            "ratio_vs_c2": float(np.sqrt(var_pred) / c2[side]["tau_split"]),
+            "tau_split_eb": eb[side]["tau_split"],
+            "ratio_vs_eb": float(np.sqrt(var_pred) / eb[side]["tau_split"]),
             "ratio_vs_realized_true": float(np.sqrt(var_pred / var_true)) if var_true > 0
                                       else float("nan"),
             "sd_obs_within_stand_raw_aweights": float(np.sqrt(var_obs_aweights)),
@@ -547,7 +547,7 @@ def recovery_by_stand(frame, c2):
         })
     table = pd.DataFrame(rows)
     left, right = table.set_index("stand").loc["L"], table.set_index("stand").loc["R"]
-    table.attrs["asymmetry_vs_c2"] = float(left["ratio_vs_c2"] / right["ratio_vs_c2"])
+    table.attrs["asymmetry_vs_eb"] = float(left["ratio_vs_eb"] / right["ratio_vs_eb"])
     table.attrs["asymmetry_vs_realized_true"] = float(
         left["ratio_vs_realized_true"] / right["ratio_vs_realized_true"])
     table.attrs["asymmetry_vs_realized_true_aweights"] = float(
@@ -564,7 +564,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--frame", default=FRAME_PATH)
     parser.add_argument("--eval-targets", default=EVAL_TARGETS_PATH)
-    parser.add_argument("--c2", default=C2_PATH)
+    parser.add_argument("--eb", default=C2_PATH)
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     parser.add_argument("--eval-season", type=int, default=EVAL_SEASON)
     parser.add_argument("--n-boot", type=int, default=2000)
@@ -580,7 +580,7 @@ def main():
     frame = pd.read_csv(args.frame)
     assert frame["batter"].is_unique, "the E.5 frame has duplicate batters"
     assert set(frame["stand"].unique()) <= {"L", "R"}, "unexpected stand value in the E.5 frame"
-    c2 = load_c2_components(args.c2)
+    eb = load_eb_components(args.eb)
 
     pa_df = pd.read_parquet(args.eval_targets)
     by_batter, by_league = per_pa_variance_tables(pa_df, args.eval_season)
@@ -591,17 +591,17 @@ def main():
     sigma_check = {
         f"{stand}_vs_{hand}": {
             "realized_2024": float(league_lookup.loc[(stand, hand)]),
-            "c2_sigma2_within_pa": c2[stand][f"sigma2_within_pa_vs_{hand}"],
+            "eb_sigma2_within_pa": eb[stand][f"sigma2_within_pa_vs_{hand}"],
         } for stand in ("L", "R") for hand in ("L", "R")}
     for key, pair in sigma_check.items():
-        ratio = pair["realized_2024"] / pair["c2_sigma2_within_pa"]
+        ratio = pair["realized_2024"] / pair["eb_sigma2_within_pa"]
         assert 0.7 < ratio < 1.4, (
             f"realized per-PA wOBA variance disagrees with C.2 for {key}: ratio {ratio}")
         pair["ratio"] = float(ratio)
 
     print("E.15 Part 1 — measurement ceiling")
-    ceilings = ceiling_table(frame, c2)
-    observed_corr, decomposition = recompute_e5_rank_correlation(frame)
+    ceilings = ceiling_table(frame, eb)
+    observed_corr, decomposition = recompute_platoon_rank_correlation(frame)
     by_stand_corr = within_stand_rank_correlation_by_stand(frame)
     split_half = split_half_reliability(frame, pa_df, args.eval_season)
 
@@ -616,14 +616,14 @@ def main():
     sh_index = split_half.set_index("stand")
     agreement = {}
     for label in ("L", "R", "pooled"):
-        c2_value = float(ceiling_index.loc[label, "reliability_variance_ratio"])
+        eb_value = float(ceiling_index.loc[label, "reliability_variance_ratio"])
         sh_value = float(sh_index.loc[label, "reliability_spearman_brown"])
         if sh_value <= 0:
             ratio = float("nan")
         else:
-            ratio = max(c2_value / sh_value, sh_value / c2_value)
+            ratio = max(eb_value / sh_value, sh_value / eb_value)
         agreement[label] = {
-            "c2_derived_reliability": c2_value,
+            "eb_derived_reliability": eb_value,
             "split_half_reliability": sh_value,
             "disagreement_factor": ratio,
             "agree_within_1_5x": bool(np.isfinite(ratio) and ratio <= 1.5),
@@ -634,7 +634,7 @@ def main():
     corrected = corrected_stand_share(frame, n_boot=args.n_boot, seed=args.seed)
 
     print("E.15 Part 3 — recovery of the true within-stand spread")
-    recovery = recovery_by_stand(frame, c2)
+    recovery = recovery_by_stand(frame, eb)
 
     expectations = {
         "part1_reliability_near_0.13_L_and_0.06_R": {
@@ -654,7 +654,7 @@ def main():
                          and abs(ceiling_index.loc["R", "ceiling_rank_corr"] - 0.25) < 0.10),
             "rule": "held if each ceiling is within 0.10 of its expectation",
         },
-        "part1_e5_is_40_to_55_percent_of_ceiling": {
+        "part1_platoon_is_40_to_55_percent_of_ceiling": {
             "expected": [0.40, 0.55],
             "observed": fraction_of_ceiling["pooled"],
             "held": bool(0.40 <= fraction_of_ceiling["pooled"] <= 0.55),
@@ -666,7 +666,7 @@ def main():
         },
         "part3_asymmetry_survives_correction": {
             "expected": "the LHB/RHB recovery ratio stays near 3x after noise correction",
-            "observed": {"asymmetry_vs_c2": recovery.attrs["asymmetry_vs_c2"],
+            "observed": {"asymmetry_vs_eb": recovery.attrs["asymmetry_vs_eb"],
                          "asymmetry_vs_realized_true": recovery.attrs["asymmetry_vs_realized_true"],
                          "asymmetry_vs_realized_true_aweights":
                              recovery.attrs["asymmetry_vs_realized_true_aweights"]},
@@ -685,16 +685,16 @@ def main():
         "eval_season": args.eval_season,
         "read_only": True,
         "sources": {
-            "e5_frame": args.frame,
-            "e5_frame_producer": "src/analysis/e_eval.py:platoon_frame",
-            "c2_prior_parameters": args.c2,
+            "platoon_frame": args.frame,
+            "platoon_frame_producer": "src/analysis/model_evaluation_eval.py:platoon_frame",
+            "eb_prior_parameters": args.eb,
             "pa_level_eval_targets": args.eval_targets,
-            "e5_reported_within_stand_rank_corr": "results/phase_e/e_report.json"
-                                                  " -> e5_platoon.decomposition",
+            "platoon_reported_within_stand_rank_corr": "results/model_evaluation/model_evaluation_report.json"
+                                                  " -> platoon.decomposition",
             "withdrawn_claim": "docs/decision-log.md 2026-08-18 (81.7% vs 10.9%),"
                                " withdrawn 2026-08-19 and corrected in Part 2 here",
         },
-        "c2_components_used": c2,
+        "eb_components_used": eb,
         "per_pa_variance_cross_check": sigma_check,
         "sampling_variance_source": {
             "rule": f"hitter's own realized per-PA wOBA variance when that side has "
@@ -711,11 +711,11 @@ def main():
         },
         "part1_ceiling": {
             "by_stand": ceilings.to_dict(orient="records"),
-            "e5_within_stand_rank_corr_recomputed": observed_corr,
-            "e5_within_stand_rank_corr_reported": E5_REPORTED_WITHIN_STAND_RANK_CORR,
+            "platoon_within_stand_rank_corr_recomputed": observed_corr,
+            "platoon_within_stand_rank_corr_reported": E5_REPORTED_WITHIN_STAND_RANK_CORR,
             "recomputation_matches_report": bool(
                 abs(observed_corr - E5_REPORTED_WITHIN_STAND_RANK_CORR) < 1e-9),
-            "e5_within_stand_rank_corr_by_stand": by_stand_corr,
+            "platoon_within_stand_rank_corr_by_stand": by_stand_corr,
             "fraction_of_ceiling": fraction_of_ceiling,
             "split_half": split_half.to_dict(orient="records"),
             "reliability_route_agreement": agreement,
@@ -726,12 +726,12 @@ def main():
                 "the two routes DISAGREE by more than 1.5x. Both are reported and NEITHER "
                 "is adopted, per spec §12.5. Any downstream reading of E.5 must carry both "
                 "ceilings."),
-            "decomposition_from_e_eval": decomposition,
+            "decomposition_from_model_evaluation_eval": decomposition,
         },
         "part2_errors_in_variables": corrected,
         "part3_recovery": {
             "by_stand": recovery.to_dict(orient="records"),
-            "asymmetry_vs_c2": recovery.attrs["asymmetry_vs_c2"],
+            "asymmetry_vs_eb": recovery.attrs["asymmetry_vs_eb"],
             "asymmetry_vs_realized_true": recovery.attrs["asymmetry_vs_realized_true"],
             "asymmetry_vs_realized_true_aweights":
                 recovery.attrs["asymmetry_vs_realized_true_aweights"],
@@ -757,7 +757,7 @@ def main():
             "assigned to whichever C.2 batter_type they batted from more often; C.2's separate "
             "S row is not used. 2024 switch hitters are a small minority of the 545.",
             "All weighted variances use the POPULATION form (np.average of squared "
-            "deviations), matching e_eval.platoon_decomposition, so the corrected share in "
+            "deviations), matching model_evaluation_eval.platoon_decomposition, so the corrected share in "
             "Part 2 is directly comparable to the 10.9% it supersedes. np.cov's aweights "
             "bias-corrected form is reported alongside in Part 3; within a stand the two "
             "differ by well under 1% and the LHB negative sign holds under both.",
@@ -769,10 +769,10 @@ def main():
         ],
     }
 
-    frame.to_csv(out_dir / "e15_ceiling_per_hitter.csv", index=False)
-    ceilings.to_csv(out_dir / "e15_ceiling_by_stand.csv", index=False)
-    (out_dir / "e15_ceiling.json").write_text(json.dumps(report, indent=2, default=float))
-    print(f"wrote {out_dir / 'e15_ceiling.json'}")
+    frame.to_csv(out_dir / "ceiling_per_hitter.csv", index=False)
+    ceilings.to_csv(out_dir / "ceiling_by_stand.csv", index=False)
+    (out_dir / "ceiling.json").write_text(json.dumps(report, indent=2, default=float))
+    print(f"wrote {out_dir / 'ceiling.json'}")
 
 
 if __name__ == "__main__":

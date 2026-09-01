@@ -1,5 +1,5 @@
 """
-Phase D.5 — the four auxiliary tables the query machinery needs (docs/phase-d5-spec.md §2).
+Phase D.5 — the four auxiliary tables the query machinery needs (docs/phase-model_v1-spec.md §2).
 
 v1 predicts p(swing), p(contact | swing), and contact quality on balls in play. None of
 those is enough to finish a plate appearance, so D.5 supplies what the network does not:
@@ -38,7 +38,7 @@ with weight n/(n+alpha), where alpha is the variance-components ratio noise/sign
 `stabilization.py` already computes for the equal-weight point. A search found no published
 empirical-Bayes treatment of pitch-usage or batted-ball-outcome tables, so this follows the
 project's own C.2 precedent rather than an outside source, and that is stated rather than
-implied (docs/phase-d5-spec.md §5.2).
+implied (docs/phase-model_v1-spec.md §5.2).
 """
 
 import numpy as np
@@ -55,7 +55,7 @@ BIP_CLASSES = ("OUT", "1B", "2B", "3B", "HR")
 
 # `intent_ball` is excluded from every table and from the resampling pool: IBB sits outside
 # the wOBA denominator (eval_targets.py:61), so a simulator that generated intentional balls
-# would produce plate appearances the metric does not count (docs/phase-d5-spec.md §4.3)
+# would produce plate appearances the metric does not count (docs/phase-model_v1-spec.md §4.3)
 EXCLUDED_DESCRIPTIONS = ("intent_ball",)
 BALL_DESCRIPTIONS = ("ball", "blocked_ball")
 CONTACT_DESCRIPTION_TO_CLASS = {"foul": 0, "foul_tip": 1, "hit_into_play": 2}
@@ -378,7 +378,7 @@ class Repertoire:
     def sample(self, pitcher_slot, stand_slot, balls, strikes, n, generator):
         """
         Up to n rows for a cell, backing off when the cell is thin.
-        Backoff order per docs/phase-d5-spec.md §2.3: exact cell, then the pitcher's
+        Backoff order per docs/phase-model_v1-spec.md §2.3: exact cell, then the pitcher's
         rows at that strike count regardless of balls, then all his rows to that stand.
         Returns (rows, level) so the caller can report how often backoff fired.
         """

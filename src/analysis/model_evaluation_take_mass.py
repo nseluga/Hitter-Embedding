@@ -35,10 +35,10 @@ import pandas as pd
 import torch
 
 from src.analysis import claim1_eval
-from src.analysis.e_price_draw import league_chain, to_aggregates
+from src.analysis.model_evaluation_price_draw import league_chain, to_aggregates
 from src.model import query, query_tables as qt
 
-DEFAULT_OUT_DIR = "results/phase_e"
+DEFAULT_OUT_DIR = "results/model_evaluation"
 N_EXACT = 24   # reference draws per cell; 4x the composition's 6, to quiet the reference side
 
 
@@ -97,7 +97,7 @@ def score_take_mass(models, context_memmap, hitter_rows, pitch_rows, batch=32768
 def main():
     parser = argparse.ArgumentParser(
         description="Phase E.9 — take-mass shift from the resampled pitch mix.")
-    parser.add_argument("--arm", default="d10_baseline")
+    parser.add_argument("--arm", default="rebuild_baseline")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
@@ -160,7 +160,7 @@ def main():
     table = pd.DataFrame(rows)
     table["take_mass_gap"] = table["take_mass_drawn"] - table["take_mass_exact"]
     table["share"] = [shares[(row.stand, row.p_throws)] for row in table.itertuples()]
-    table.to_csv(out_dir / "e9_take_mass.csv", index=False)
+    table.to_csv(out_dir / "take_mass_take_mass.csv", index=False)
 
     by_count = table.groupby(["balls", "strikes"]).apply(
         lambda part: pd.Series({
@@ -192,7 +192,7 @@ def main():
     after = query.absorbing_rates(to_aggregates(shifted))
 
     channel_2 = float(after["bb"][0, 0] - base["bb"][0, 0])
-    channel_1 = json.loads((out_dir / "e8_draw_price_summary.json").read_text())
+    channel_1 = json.loads((out_dir / "draw_price_draw_price_summary.json").read_text())
     residual = channel_1["residual_walk_excess"]
     summary = {
         "arm": args.arm, "n_pitchers_requested": args.n_pitchers,
@@ -209,8 +209,8 @@ def main():
         "share_of_residual_explained": (channel_1["delta_bb_from_draw"] + channel_2) / residual,
         "delta_k_channel_2": float(after["k"][0, 0] - base["k"][0, 0]),
     }
-    by_count.to_csv(out_dir / "e9_take_mass_by_count.csv", index=False)
-    (out_dir / "e9_take_mass_summary.json").write_text(json.dumps(summary, indent=2))
+    by_count.to_csv(out_dir / "take_mass_take_mass_by_count.csv", index=False)
+    (out_dir / "take_mass_take_mass_summary.json").write_text(json.dumps(summary, indent=2))
 
     print("\n-- take mass: drawn vs the pitcher's own cell --")
     print(by_count.to_string(index=False))

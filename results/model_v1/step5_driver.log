@@ -1,32 +1,32 @@
       14 runs queued, 3 at a time, 2 threads each
-start d10_baseline_s1
-start d10_baseline_s0
-start d10_baseline_fidelity
-done  d10_baseline_s0
-start d10_baseline_s2
-done  d10_baseline_s1
-start d10_baseline_s3
-done  d10_baseline_s3
-start d10_baseline_s4
-done  d10_baseline_s2
-start d10_baseline
-done  d10_baseline_s4
-start d10_dim16
+start rebuild_baseline_s1
+start rebuild_baseline_s0
+start rebuild_baseline_fidelity
+done  rebuild_baseline_s0
+start rebuild_baseline_s2
+done  rebuild_baseline_s1
+start rebuild_baseline_s3
+done  rebuild_baseline_s3
+start rebuild_baseline_s4
+done  rebuild_baseline_s2
+start rebuild_baseline
+done  rebuild_baseline_s4
+start rebuild_dim16
 bash: line 1: 86976 Terminated: 15          OMP_NUM_THREADS=$THREADS MKL_NUM_THREADS=$THREADS .venv/bin/python -u -m src.model.query --arm "$arm" --label "$label" --data-dir "$data" --out-dir "$OUT_DIR" "$@" > "$OUT_DIR/step5_${label}.log" 2>&1
-FAIL  d10_baseline_fidelity (see results/phase_d/step5_d10_baseline_fidelity.log)
+FAIL  rebuild_baseline_fidelity (see results/model_v1/step5_rebuild_baseline_fidelity.log)
 bash: line 1: 30479 Terminated: 15          OMP_NUM_THREADS=$THREADS MKL_NUM_THREADS=$THREADS .venv/bin/python -u -m src.model.query --arm "$arm" --label "$label" --data-dir "$data" --out-dir "$OUT_DIR" "$@" > "$OUT_DIR/step5_${label}.log" 2>&1
-FAIL  d10_dim16 (see results/phase_d/step5_d10_dim16.log)
+FAIL  rebuild_dim16 (see results/model_v1/step5_rebuild_dim16.log)
 bash: line 1: 15177 Terminated: 15          OMP_NUM_THREADS=$THREADS MKL_NUM_THREADS=$THREADS .venv/bin/python -u -m src.model.query --arm "$arm" --label "$label" --data-dir "$data" --out-dir "$OUT_DIR" "$@" > "$OUT_DIR/step5_${label}.log" 2>&1
-FAIL  d10_baseline (see results/phase_d/step5_d10_baseline.log)
-start d10_dim64
+FAIL  rebuild_baseline (see results/model_v1/step5_rebuild_baseline.log)
+start rebuild_dim64
 bash: line 1: 42941 Terminated: 15          OMP_NUM_THREADS=$THREADS MKL_NUM_THREADS=$THREADS .venv/bin/python -u -m src.model.query --arm "$arm" --label "$label" --data-dir "$data" --out-dir "$OUT_DIR" "$@" > "$OUT_DIR/step5_${label}.log" 2>&1
-FAIL  d10_dim64 (see results/phase_d/step5_d10_dim64.log)
-give up on d10_invfreq: 0/5 seeds trained and the sweep is not running
-give up on d10_nospray: 0/5 seeds trained and the sweep is not running
-give up on d10_block: 0/5 seeds trained and the sweep is not running
-start d10_bilinear
-start d10_meanweight
+FAIL  rebuild_dim64 (see results/model_v1/step5_rebuild_dim64.log)
+give up on rebuild_invfreq: 0/5 seeds trained and the sweep is not running
+give up on rebuild_nospray: 0/5 seeds trained and the sweep is not running
+give up on rebuild_block: 0/5 seeds trained and the sweep is not running
+start rebuild_bilinear
+start rebuild_meanweight
 bash: line 1: 89496 Terminated: 15          OMP_NUM_THREADS=$THREADS MKL_NUM_THREADS=$THREADS .venv/bin/python -u -m src.model.query --arm "$arm" --label "$label" --data-dir "$data" --out-dir "$OUT_DIR" "$@" > "$OUT_DIR/step5_${label}.log" 2>&1
-FAIL  d10_bilinear (see results/phase_d/step5_d10_bilinear.log)
+FAIL  rebuild_bilinear (see results/model_v1/step5_rebuild_bilinear.log)
 bash: line 1:  1385 Terminated: 15          OMP_NUM_THREADS=$THREADS MKL_NUM_THREADS=$THREADS .venv/bin/python -u -m src.model.query --arm "$arm" --label "$label" --data-dir "$data" --out-dir "$OUT_DIR" "$@" > "$OUT_DIR/step5_${label}.log" 2>&1
-FAIL  d10_meanweight (see results/phase_d/step5_d10_meanweight.log)
+FAIL  rebuild_meanweight (see results/model_v1/step5_rebuild_meanweight.log)

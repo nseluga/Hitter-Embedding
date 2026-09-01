@@ -24,7 +24,7 @@
     "rate_bip_00": 0.10353275187137224,
     "rate_bip_points_00": 0.03975277100307476
   },
-  "arm": "d8_baseline",
+  "arm": "presplit_baseline",
   "seeds": [
     0,
     1,

@@ -28,4 +28,4 @@ epoch  26  train 1.00484  val 1.02704  ref 1.02704  lr 8.10e-06  46s (719 steps)
 epoch  27  train 1.00482  val 1.02710  ref 1.02710  lr 2.43e-06  47s (719 steps)
 epoch  28  train 1.00476  val 1.02703  ref 1.02703  lr 2.43e-06  49s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.02697 at epoch 25; reference 1.02697; checkpoint results/checkpoints/d9_dim16_s2.pt
+best val loss 1.02697 at epoch 25; reference 1.02697; checkpoint results/checkpoints/splithead_dim16_s2.pt

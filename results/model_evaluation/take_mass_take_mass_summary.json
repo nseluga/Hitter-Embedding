@@ -1,5 +1,5 @@
 {
-  "arm": "d10_baseline",
+  "arm": "rebuild_baseline",
   "n_pitchers_requested": 200,
   "n_hitters": 4,
   "n_exact_reference_draws": 24,

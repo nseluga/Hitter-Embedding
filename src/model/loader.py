@@ -16,7 +16,7 @@ Three failures here are silent, and each one produces a number rather than an er
 
 3. THE TEST SPLIT. `split_indices` returns test indices because D.6's final run
    needs them. Nothing in this module refuses to hand them over -- the guard is
-   `assert_not_test_season` at the CLI boundary, mirroring `c_report.py`. A caller
+   `assert_not_test_season` at the CLI boundary, mirroring `baseline_ladder_report.py`. A caller
    that skips that guard scores against 2025 and gets a perfectly plausible number.
 """
 

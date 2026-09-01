@@ -1,5 +1,5 @@
 """
-Phase D.5 — composing per-pitch conditionals into side-specific wOBA (docs/phase-d5-spec.md).
+Phase D.5 — composing per-pitch conditionals into side-specific wOBA (docs/phase-model_v1-spec.md).
 
 v1 emits conditionals per pitch; the claim-1 metric wants one wOBA number per
 (batter, pitcher hand). This module is the machinery between them, and it is exact
@@ -56,8 +56,8 @@ from src.model.v1 import HitterEmbeddingV1
 
 DEFAULT_DATA_DIR = "data/processed/phase_d"
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
-DEFAULT_OUT_DIR = "results/phase_d"
-DEFAULT_ARM = "d8_baseline"
+DEFAULT_OUT_DIR = "results/model_v1"
+DEFAULT_ARM = "presplit_baseline"
 
 # pre-registered knobs (spec §9). Set by benchmark, then frozen; never by their effect on
 # the claim-1 metric, because claim-1 is produced BY this module.
@@ -108,7 +108,7 @@ def load_ensemble(checkpoint_paths, manifest, n_context):
     """
     models = []
     for path in checkpoint_paths:
-        # weights_only=False is required -- d8_invfreq stores a tensor inside args
+        # weights_only=False is required -- presplit_invfreq stores a tensor inside args
         saved = torch.load(path, map_location="cpu", weights_only=False)
         args = saved["args"]
         # `split` and `spray` postdate the first 39 runs, so they are read with defaults
@@ -421,7 +421,7 @@ def _panel(slots, probability, n_pitchers, generator):
 def _stand_lookup(pa_df, eval_season):
     """
     Which side of the plate each hitter stands on, per (batter, pitcher hand).
-    Keyed on the PAIR, following c3_gbm.py:136 -- a per-batter mode would label every
+    Keyed on the PAIR, following gbm.py:136 -- a per-batter mode would label every
     switch hitter right-handed, since they face right-handed pitching far more often.
     """
     window = pa_df[pa_df["season"] == eval_season]
@@ -900,14 +900,14 @@ def main():
                                        unmeasured_split=not args.no_unmeasured_split,
                                        batters=args.batters)
     # the CSV lands before the probe runs, for the same reason
-    predictions.to_csv(out_dir / f"d5_predictions_{label}.csv", index=False)
-    _progress(f"wrote {out_dir / f'd5_predictions_{label}.csv'}")
+    predictions.to_csv(out_dir / f"model_v1_predictions_{label}.csv", index=False)
+    _progress(f"wrote {out_dir / f'model_v1_predictions_{label}.csv'}")
 
     if args.batters is not None:
         # a fidelity number computed over 50 hitters is not the league's, and a diagnostics file
         # that carries one under the same key as a full run's is how a subset number gets quoted
         # as a league number six weeks later
-        (out_dir / f"d5_diagnostics_{label}.json").write_text(
+        (out_dir / f"model_v1_diagnostics_{label}.json").write_text(
             json.dumps({**diagnostics, "reference": reference, "arm": args.arm,
                         "seeds": args.seeds, "eval_season": args.eval_season}, indent=2))
         _progress(f"batter subset ({len(args.batters)} ids): fidelity and both probes skipped, "
@@ -940,7 +940,7 @@ def main():
                     - min(run[key] for run in per_seed.values()))
               for key in next(iter(per_seed.values()))} if per_seed else {}
 
-    (out_dir / f"d5_diagnostics_{label}.json").write_text(
+    (out_dir / f"model_v1_diagnostics_{label}.json").write_text(
         json.dumps({**diagnostics, "composition": composition,
                     "composition_per_seed": per_seed, "composition_spread": spread,
                     "fidelity": fidelity, "reference": reference,
@@ -970,7 +970,7 @@ def main():
           f"{coverage['bip_available']} "
           f"({coverage['bip_joined'] / coverage['bip_available']:.1%})")
     print(f"contact split from: {diagnostics['contact_split_source']}")
-    print(f"wrote {out_dir / f'd5_predictions_{label}.csv'}")
+    print(f"wrote {out_dir / f'model_v1_predictions_{label}.csv'}")
 
 
 if __name__ == "__main__":

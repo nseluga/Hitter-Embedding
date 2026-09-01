@@ -33,7 +33,7 @@ import pandas as pd
 from src.analysis import claim1_eval
 from src.model import query, query_tables as qt
 
-DEFAULT_OUT_DIR = "results/phase_e"
+DEFAULT_OUT_DIR = "results/model_evaluation"
 TAKE_CLASSES = ("ball", "called_strike", "hbp")
 
 
@@ -162,7 +162,7 @@ def main():
     table = resampler_audit(tables, frame, seed=args.seed,
                             use_offsets=args.take_count_offsets)
     suffix = "_offsets" if args.take_count_offsets else ""
-    table.to_csv(out_dir / f"e7_resampler_audit{suffix}.csv", index=False)
+    table.to_csv(out_dir / f"resampler_audit_resampler_audit{suffix}.csv", index=False)
 
     # collapse to one row per count over the four (stand, hand) cells, weighted by the
     # handedness shares the composition itself uses -- an unweighted mean over the four
@@ -179,7 +179,7 @@ def main():
         }), include_groups=False).reset_index()
     by_count["draw_gap_ball"] = by_count["sampled_ball"] - by_count["exact_ball"]
     by_count["pool_gap_ball"] = by_count["exact_ball"] - by_count["league_ball"]
-    by_count.to_csv(out_dir / f"e7_resampler_by_count{suffix}.csv", index=False)
+    by_count.to_csv(out_dir / f"resampler_audit_resampler_by_count{suffix}.csv", index=False)
 
     summary = {
         "eval_season": args.eval_season, "take_count_offsets": args.take_count_offsets,
@@ -195,12 +195,12 @@ def main():
         "backoff_levels": [int(table[f"backoff_{name}"].iloc[::12].sum())
                            for name in ("exact", "strikes", "stand", "empty")],
     }
-    (out_dir / f"e7_resampler_summary{suffix}.json").write_text(json.dumps(summary, indent=2))
+    (out_dir / f"resampler_audit_resampler_summary{suffix}.json").write_text(json.dumps(summary, indent=2))
 
     pd.set_option("display.width", 200)
     print("\n-- P(ball | take) by count: sampled draw vs the pool's own cell vs league --")
     print(by_count.to_string(index=False))
-    print(f"\nwrote {out_dir / f'e7_resampler_by_count{suffix}.csv'}")
+    print(f"\nwrote {out_dir / f'resampler_audit_resampler_by_count{suffix}.csv'}")
 
 
 if __name__ == "__main__":

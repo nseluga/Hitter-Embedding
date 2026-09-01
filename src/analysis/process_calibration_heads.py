@@ -39,7 +39,7 @@ from src.data.model_dataset import MASKED
 from src.model import query, query_tables as qt
 from src.model import v1
 
-DEFAULT_OUT_DIR = "results/phase_f"
+DEFAULT_OUT_DIR = "results/process_calibration"
 DEFAULT_BATCH = 32768
 # heads scored here; the swing head keeps its own artifact from E.6 and is re-scored
 # alongside the others so one table carries all six
@@ -177,7 +177,7 @@ def expected_index_table(labels, probabilities, by_values, by_name, head):
 def main():
     parser = argparse.ArgumentParser(
         description="Phase F.3 -- per-head calibration on real held-out pitches.")
-    parser.add_argument("--arm", default="d10_baseline")
+    parser.add_argument("--arm", default="rebuild_baseline")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
@@ -279,7 +279,7 @@ def main():
     table = pd.concat(tables, ignore_index=True)
     table = table[["head", "grouping", "cell", "class", "n_rows", "observed", "predicted",
                    "gap", "relative_gap"]]
-    table.to_csv(out_dir / "f3_head_calibration.csv", index=False)
+    table.to_csv(out_dir / "heads_head_calibration.csv", index=False)
 
     overall = table[(table["grouping"] == "overall")]
     two_strike = table[(table["grouping"] == "two_strike")]
@@ -305,11 +305,11 @@ def main():
                               & (table["n_rows"] >= 1000)]["relative_gap"].abs().max())
             for name in table["head"].unique()},
     }
-    (out_dir / "f3_heads_summary.json").write_text(json.dumps(summary, indent=2))
+    (out_dir / "heads_summary.json").write_text(json.dumps(summary, indent=2))
 
     print("\n-- overall, every head --")
     print(overall.to_string(index=False))
-    print(f"\nwrote {out_dir / 'f3_head_calibration.csv'}")
+    print(f"\nwrote {out_dir / 'heads_head_calibration.csv'}")
 
 
 if __name__ == "__main__":

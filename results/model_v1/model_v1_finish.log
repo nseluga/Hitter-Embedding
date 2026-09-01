@@ -1,30 +1,30 @@
-=== d5_finish start 2026-08-14 18:39 | JOBS=1 THREADS=4 ===
+=== model_v1_finish start 2026-08-14 18:39 | JOBS=1 THREADS=4 ===
 === sweep clear 2026-08-14 19:32 ===
 trained runs in ledger: 40
       14 runs queued, 1 at a time, 4 threads each
-start d10_baseline_fidelity
-done  d10_baseline_fidelity
-skip d10_baseline_s0 (already finished)
-skip d10_baseline_s1 (already finished)
-skip d10_baseline_s2 (already finished)
-skip d10_baseline_s3 (already finished)
-skip d10_baseline_s4 (already finished)
-start d10_baseline
-done  d10_baseline
-start d10_dim16
-done  d10_dim16
-start d10_dim64
-done  d10_dim64
-start d10_bilinear
-done  d10_bilinear
-start d10_meanweight
-done  d10_meanweight
-start d10_invfreq
-done  d10_invfreq
-start d10_nospray
-FAIL  d10_nospray (see results/phase_d/step5_d10_nospray.log)
-start d10_block
-done  d10_block
+start rebuild_baseline_fidelity
+done  rebuild_baseline_fidelity
+skip rebuild_baseline_s0 (already finished)
+skip rebuild_baseline_s1 (already finished)
+skip rebuild_baseline_s2 (already finished)
+skip rebuild_baseline_s3 (already finished)
+skip rebuild_baseline_s4 (already finished)
+start rebuild_baseline
+done  rebuild_baseline
+start rebuild_dim16
+done  rebuild_dim16
+start rebuild_dim64
+done  rebuild_dim64
+start rebuild_bilinear
+done  rebuild_bilinear
+start rebuild_meanweight
+done  rebuild_meanweight
+start rebuild_invfreq
+done  rebuild_invfreq
+start rebuild_nospray
+FAIL  rebuild_nospray (see results/model_v1/step5_rebuild_nospray.log)
+start rebuild_block
+done  rebuild_block
 --- queue drained; runs without a diagnostics JSON did not finish ---
-missing: d10_nospray
-=== d5_finish done 2026-08-15 03:21 ===
+missing: rebuild_nospray
+=== model_v1_finish done 2026-08-15 03:21 ===

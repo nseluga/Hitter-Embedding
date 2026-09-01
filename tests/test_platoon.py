@@ -27,7 +27,7 @@ from src.data import eval_targets as et
 
 # the shipped arm, named rather than globbed: a glob would silently start testing whatever
 # composition ran last, which is how a standing diagnostic stops standing for anything
-PREDICTIONS = "results/phase_d/d5_predictions_d9_baseline_head.csv"
+PREDICTIONS = "results/model_v1/model_v1_predictions_splithead_baseline_head.csv"
 EVAL_TARGETS = "data/processed/eval_targets_pa.parquet"
 
 # review's cohort definition -- side-specific PA in the evaluated season

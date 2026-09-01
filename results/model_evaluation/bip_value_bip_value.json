@@ -1,5 +1,5 @@
 {
-  "arm": "d10_baseline",
+  "arm": "rebuild_baseline",
   "eval_season": 2024,
   "data_dir": "data/processed/phase_d5",
   "build_note": "the D.10 composition's train constants reproduce ONLY from data/processed/phase_d5 (measured_share 0.92313); data/processed/phase_d, whose quality bin edges differ, gives 0.96371",
@@ -7,7 +7,7 @@
     "value_modelled_bip": 0.37864233821410337,
     "value_observed_bip": 0.3635263829493724,
     "gap": 0.015115955264730974,
-    "note": "value_modelled.bip is a RESIDUAL in e_eval.level_closure, so it absorbs every error not expressible in the bb/hbp/k rates",
+    "note": "value_modelled.bip is a RESIDUAL in model_evaluation_eval.level_closure, so it absorbs every error not expressible in the bb/hbp/k rates",
     "n_groups": 1074,
     "n_pa": 169589.0
   },
@@ -84,7 +84,7 @@
     "The matched population is reproduced at PA level by (batter, p_throws) group membership; group denominator equals that group's denominator PA count, so pooling PAs reproduces E.3's denominator weighting exactly.",
     "Check B's 2024 V is fit with the same shrinkage estimator as the train V, so a 2024 cell with little data is pulled toward the 2024 (ev, la) marginal. That attenuates per-cell conditional drift toward its own-season aggregate; the aggregate itself is close to preserved, but the reported conditional drift is a mildly conservative estimate rather than an unbiased one.",
     "Bins are the tensors' train-fit equal-mass indices for both fits; 2024 balls outside the train support are clipped into edge cells by `assign_bins`.",
-    "Two tensor builds sit on disk with different quality bin edges; this module uses phase_d5 because it is the one that reproduces the D.10 run's league constants exactly. Whether E.3 itself was computed against the same build is not re-verified here beyond the matched population's PA count matching.",
+    "Two tensor builds sit on disk with different quality bin edges; this module uses model_v1_rebuild because it is the one that reproduces the D.10 run's league constants exactly. Whether E.3 itself was computed against the same build is not re-verified here beyond the matched population's PA count matching.",
     "Balls in play whose PA does not join a wOBA category (SH, INT, unjoined rows) drop from both V fits, as they do in the shipped `fit_outcome_table`.",
     "The two checks are treated as additive when summed against the gap; they touch different terms (the seam's constants against V's conditionals) but the split is not orthogonalised, so the residual carries any interaction between them."
   ]

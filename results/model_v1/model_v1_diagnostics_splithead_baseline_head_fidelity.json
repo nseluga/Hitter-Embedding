@@ -254,7 +254,7 @@
       "bip": 0.02
     }
   },
-  "arm": "d9_baseline",
+  "arm": "splithead_baseline",
   "seeds": [
     0,
     1,

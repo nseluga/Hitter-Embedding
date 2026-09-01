@@ -1,10 +1,10 @@
 """
 Phase B.1 report generator. Reuses the tested stabilization estimators to emit the
-signal-per-PA analysis as durable artifacts under results/phase_b/: the full panel,
+signal-per-PA analysis as durable artifacts under results/feature_screening/: the full panel,
 the common-PA-axis ranking (#4), the spray-clipping check (#5), the wOBA survivorship
 decomposition, and three figures. Deterministic and seeded; rerun to regenerate.
 
-Run: python -m src.analysis.b1_report
+Run: python -m src.analysis.feature_screening_report
 """
 
 import os
@@ -19,7 +19,7 @@ from src.analysis import stabilization as stab
 from src.data import labels
 from src.data.eval_targets import primarily_pitchers
 
-OUT = "results/phase_b"
+OUT = "results/feature_screening"
 MAX_TRAIN_SEASON = 2023
 GRID = [10, 25, 50, 100, 200, 400, 800]
 N_BOOT = 300

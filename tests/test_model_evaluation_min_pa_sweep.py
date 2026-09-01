@@ -1,8 +1,8 @@
 """
-E.11b's sweep bookkeeping (src/analysis/e_min_pa_sweep.py).
+E.11b's sweep bookkeeping (src/analysis/model_evaluation_min_pa_sweep.py).
 
 `sweep` itself computes nothing statistical -- it rebuilds the eval frame at each threshold
-and then collapses `d5_report.compare`'s rows into a per-threshold verdict. That collapse is
+and then collapses `model_v1_ablation_report.compare`'s rows into a per-threshold verdict. That collapse is
 where the silent failures live: reading the rank margin off the wrong OPPONENT's row (both
 are present and both look like margins), taking the ordering gate from one opponent instead
 of both, or declaring the verdict stable because the set it de-duplicates lost the flip.
@@ -15,10 +15,10 @@ is actually varying.
 import pandas as pd
 import pytest
 
-from src.analysis import claim1_eval as evaluation, d5_report, e_min_pa_sweep
+from src.analysis import claim1_eval as evaluation, model_v1_ablation_report, model_evaluation_min_pa_sweep
 
-LABEL = "e11_d10_baseline"
-OPPONENTS = ("c3_gbm_full", "c2_bivariate")
+LABEL = "min_pa_sweep_rebuild_baseline"
+OPPONENTS = ("gbm_full", "eb_bivariate")
 
 
 def _pa_table(rows):
@@ -67,12 +67,12 @@ def _stub_compare(monkeypatch, script):
             for stratum in ("low", "high"):
                 rows.append({"opponent": opponent, "stratum": stratum,
                              "n_hitters": n_hitters, "n_batters": n_hitters,
-                             "rmse_favours_phase_d": rmse_ok, "rank_favours_phase_d": rank_ok,
+                             "rmse_favours_model_v1": rmse_ok, "rank_favours_model_v1": rank_ok,
                              "rank_difference": margin, "ci_low_rank": margin - 0.01,
                              "ci_high_rank": margin + 0.01})
         return pd.DataFrame(rows)
 
-    monkeypatch.setattr(d5_report, "compare", fake_compare)
+    monkeypatch.setattr(model_v1_ablation_report, "compare", fake_compare)
 
 
 def test_sweep_rebuilds_the_frame_at_every_threshold(case, monkeypatch):
@@ -82,7 +82,7 @@ def test_sweep_rebuilds_the_frame_at_every_threshold(case, monkeypatch):
     """
     _stub_compare(monkeypatch, lambda n, opponent: (True, True, 0.05))
     pa_df, predictions = case
-    table, verdict = e_min_pa_sweep.sweep(pa_df, predictions, 2024, LABEL)
+    table, verdict = model_evaluation_min_pa_sweep.sweep(pa_df, predictions, 2024, LABEL)
 
     assert verdict["thresholds"] == list(evaluation.MIN_EVAL_PA_SENSITIVITY) == [10, 25, 50]
     assert table.columns[0] == "min_eval_pa"
@@ -91,30 +91,30 @@ def test_sweep_rebuilds_the_frame_at_every_threshold(case, monkeypatch):
     assert verdict["stability"]["low_stratum_n_hitters"] == [4, 3, 2]
 
 
-def test_the_rank_margin_is_read_off_the_c3_full_row(case, monkeypatch):
+def test_the_rank_margin_is_read_off_the_gbm_full_row(case, monkeypatch):
     """Both opponents carry a rank_difference; only C.3-full's is the reported margin."""
-    margins = {"c3_gbm_full": 0.07, "c2_bivariate": -0.42}
+    margins = {"gbm_full": 0.07, "eb_bivariate": -0.42}
     _stub_compare(monkeypatch, lambda n, opponent: (True, True, margins[opponent]))
     pa_df, predictions = case
-    _, verdict = e_min_pa_sweep.sweep(pa_df, predictions, 2024, LABEL)
+    _, verdict = model_evaluation_min_pa_sweep.sweep(pa_df, predictions, 2024, LABEL)
 
     low = verdict["by_threshold"]["10"]["low"]
-    assert low["rank_difference_vs_c3_full"] == pytest.approx(0.07)
-    assert low["rank_ci_low_vs_c3_full"] == pytest.approx(0.06)     # margin - 0.01
-    assert low["rank_ci_high_vs_c3_full"] == pytest.approx(0.08)    # margin + 0.01
+    assert low["rank_difference_vs_gbm_full"] == pytest.approx(0.07)
+    assert low["rank_ci_low_vs_gbm_full"] == pytest.approx(0.06)     # margin - 0.01
+    assert low["rank_ci_high_vs_gbm_full"] == pytest.approx(0.08)    # margin + 0.01
     assert verdict["stability"]["low_stratum_rank_difference"] == [0.07, 0.07, 0.07]
 
 
-def test_the_ordering_gate_needs_both_opponents_and_the_rmse_gate_needs_only_c3(case, monkeypatch):
+def test_the_ordering_gate_needs_both_opponents_and_the_rmse_gate_needs_only_gbm(case, monkeypatch):
     """C.3-full passes both; C.2 fails the ordering gate. RMSE is a C.3-full-only gate, so it
     still passes, while the ordering gate must fail on the AND across the two opponents."""
     _stub_compare(monkeypatch,
-                  lambda n, opponent: (True, opponent == "c3_gbm_full", 0.05))
+                  lambda n, opponent: (True, opponent == "gbm_full", 0.05))
     pa_df, predictions = case
-    _, verdict = e_min_pa_sweep.sweep(pa_df, predictions, 2024, LABEL)
+    _, verdict = model_evaluation_min_pa_sweep.sweep(pa_df, predictions, 2024, LABEL)
 
     low = verdict["by_threshold"]["25"]["low"]
-    assert low["rmse_gate_vs_c3_full"] is True
+    assert low["rmse_gate_vs_gbm_full"] is True
     assert low["ordering_gate_vs_both"] is False
 
 
@@ -125,16 +125,16 @@ def test_a_verdict_that_flips_with_the_threshold_is_reported_unstable(case, monk
     """
     pa_df, predictions = case
     _stub_compare(monkeypatch, lambda n, opponent: (True, True, 0.05))
-    _, steady = e_min_pa_sweep.sweep(pa_df, predictions, 2024, LABEL)
+    _, steady = model_evaluation_min_pa_sweep.sweep(pa_df, predictions, 2024, LABEL)
     assert steady["stability"]["rmse_gate_stable"] is True
     assert steady["stability"]["ordering_gate_stable"] is True
 
     _stub_compare(monkeypatch, lambda n, opponent: (n > 2, n > 2, 0.05))
-    _, flipped = e_min_pa_sweep.sweep(pa_df, predictions, 2024, LABEL)
+    _, flipped = model_evaluation_min_pa_sweep.sweep(pa_df, predictions, 2024, LABEL)
     assert flipped["stability"]["rmse_gate_stable"] is False
     assert flipped["stability"]["ordering_gate_stable"] is False
-    assert flipped["by_threshold"]["10"]["low"]["rmse_gate_vs_c3_full"] is True
-    assert flipped["by_threshold"]["50"]["low"]["rmse_gate_vs_c3_full"] is False
+    assert flipped["by_threshold"]["10"]["low"]["rmse_gate_vs_gbm_full"] is True
+    assert flipped["by_threshold"]["50"]["low"]["rmse_gate_vs_gbm_full"] is False
 
 
 def test_a_missing_scored_arm_fails_loud(case, monkeypatch):
@@ -142,4 +142,4 @@ def test_a_missing_scored_arm_fails_loud(case, monkeypatch):
     _stub_compare(monkeypatch, lambda n, opponent: (True, True, 0.05))
     pa_df, predictions = case
     with pytest.raises(AssertionError):
-        e_min_pa_sweep.sweep(pa_df, predictions, 2024, "not_an_arm")
+        model_evaluation_min_pa_sweep.sweep(pa_df, predictions, 2024, "not_an_arm")

@@ -1,8 +1,8 @@
 {
-  "arm": "d10_baseline",
+  "arm": "rebuild_baseline",
   "eval_season": 2024,
-  "predictions": "results/phase_d/d5_predictions_d10_baseline.csv",
-  "e1_matched_population": {
+  "predictions": "results/model_v1/model_v1_predictions_rebuild_baseline.csv",
+  "matched_population_matched_population": {
     "bb": {
       "modelled": 0.08537744148936956,
       "tolerance": 0.02,
@@ -184,7 +184,7 @@
     "value_effect_total": 0.010340775278350213,
     "share_explained_by_rates": 0.2547575916104136
   },
-  "e4_calibration": {
+  "calibration": {
     "coverage": {
       "eval_season": 2024,
       "actual_groups": 1279,
@@ -263,7 +263,7 @@
       }
     ]
   },
-  "e5_platoon": {
+  "platoon": {
     "route_a_by_stand": {
       "L": -0.02646739235162382,
       "R": 0.014940144761076635

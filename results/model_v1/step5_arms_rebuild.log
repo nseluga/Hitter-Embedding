@@ -17,4 +17,4 @@ stratum  n_seeds    mean      sd   range
    high        5 0.04380 0.00098 0.00245
     all        5 0.04815 0.00076 0.00186
 
-wrote results/phase_d/d5_arms_verdict_d10.json
+wrote results/model_v1/model_v1_arms_verdict_rebuild.json

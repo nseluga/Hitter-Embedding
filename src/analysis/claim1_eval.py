@@ -119,9 +119,9 @@ STRATUM_NAMES = ("low", "medium", "high")
 # stratum against 2.4% of the high — it trims the headline stratum's worst performers
 # and so flatters every model's level, and no threshold makes that go away (a hitter
 # who never played cannot be scored). At 25 those figures were 36.6% and 6.2%. It is
-# therefore accompanied by a reported sensitivity: `c_report.py` re-scores the headline
+# therefore accompanied by a reported sensitivity: `baseline_ladder_report.py` re-scores the headline
 # comparison across MIN_EVAL_PA_SENSITIVITY and commits the result
-# (results/phase_c/c_min_eval_pa_sensitivity.csv), so a conclusion that depends on the
+# (results/baseline_ladder/baseline_ladder_min_eval_pa_sensitivity.csv), so a conclusion that depends on the
 # cut is visible rather than assumed away.
 #
 # Set to 10, revised from 25 on 2026-07-29 (Nate's call, decision log). The reason is
@@ -184,7 +184,7 @@ def assign_stratum(prior_pa, boundaries=STRATUM_BOUNDARIES):
     """
     Bucket prior side-specific PA into the low/medium/high exposure strata.
     prior_pa: a Series of PA counts. Returns a Series of stratum labels.
-    Boundaries are half-open: low < b0 <= medium < b1 <= high.
+    Boundaries are half-open: low < b0 <= medium < feature_screening <= high.
     """
     low_cut, high_cut = boundaries
     assert low_cut < high_cut, "stratum boundaries must be increasing"

@@ -902,7 +902,7 @@
       "bip": 0.02
     }
   },
-  "arm": "d10_invfreq",
+  "arm": "rebuild_invfreq",
   "seeds": [
     0,
     1,

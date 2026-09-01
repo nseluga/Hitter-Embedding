@@ -20,7 +20,7 @@ Two things this reports besides the objective:
 
     python -m src.data.bin_design
 
-Writes results/phase_d/d5_bin_design.json. Chooses nothing on its own -- the winner is recorded
+Writes results/model_v1/model_v1_bin_design.json. Chooses nothing on its own -- the winner is recorded
 in the decision log by hand, because freezing the edges is a decision and not an argmax.
 """
 
@@ -75,7 +75,7 @@ def main():
     parser = argparse.ArgumentParser(description="Measure three candidate quality binnings.")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
-    parser.add_argument("--out-dir", default="results/phase_d")
+    parser.add_argument("--out-dir", default="results/model_v1")
     parser.add_argument("--n-bins", type=int, default=md.DEFAULT_QUALITY_BINS)
     parser.add_argument("--train-seasons", type=int, nargs="+", default=None,
                         help="defaults to the frozen split's train seasons")
@@ -104,7 +104,7 @@ def main():
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "d5_bin_design.json"
+    out_path = out_dir / "model_v1_bin_design.json"
     out_path.write_text(json.dumps({"n_bins": args.n_bins,
                                     "train_seasons": train_seasons,
                                     "placeholder_rows": placeholders,

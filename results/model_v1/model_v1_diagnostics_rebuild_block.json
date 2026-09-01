@@ -902,7 +902,7 @@
       "bip": 0.02
     }
   },
-  "arm": "d10_block",
+  "arm": "rebuild_block",
   "seeds": [
     0,
     1,

@@ -8,116 +8,116 @@
   "by_threshold": {
     "10": {
       "all": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 1149,
         "n_batters": 604,
-        "rank_difference_vs_c3_full": 0.017353908415729924,
-        "rank_ci_low_vs_c3_full": -0.02367694030796417,
-        "rank_ci_high_vs_c3_full": 0.058810646510242766
+        "rank_difference_vs_gbm_full": 0.017353908415729924,
+        "rank_ci_low_vs_gbm_full": -0.02367694030796417,
+        "rank_ci_high_vs_gbm_full": 0.058810646510242766
       },
       "high": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 489,
         "n_batters": 318,
-        "rank_difference_vs_c3_full": -0.034755654434154515,
-        "rank_ci_low_vs_c3_full": -0.09184034756075503,
-        "rank_ci_high_vs_c3_full": 0.019371413449973906
+        "rank_difference_vs_gbm_full": -0.034755654434154515,
+        "rank_ci_low_vs_gbm_full": -0.09184034756075503,
+        "rank_ci_high_vs_gbm_full": 0.019371413449973906
       },
       "low": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 380,
         "n_batters": 239,
-        "rank_difference_vs_c3_full": 0.09274035097353958,
-        "rank_ci_low_vs_c3_full": -0.034291174721103275,
-        "rank_ci_high_vs_c3_full": 0.21941158383951861
+        "rank_difference_vs_gbm_full": 0.09274035097353958,
+        "rank_ci_low_vs_gbm_full": -0.034291174721103275,
+        "rank_ci_high_vs_gbm_full": 0.21941158383951861
       },
       "medium": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 280,
         "n_batters": 238,
-        "rank_difference_vs_c3_full": 0.07734550899684473,
-        "rank_ci_low_vs_c3_full": -0.021459811405205306,
-        "rank_ci_high_vs_c3_full": 0.18008103318815397
+        "rank_difference_vs_gbm_full": 0.07734550899684473,
+        "rank_ci_low_vs_gbm_full": -0.021459811405205306,
+        "rank_ci_high_vs_gbm_full": 0.18008103318815397
       }
     },
     "25": {
       "all": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 1013,
         "n_batters": 561,
-        "rank_difference_vs_c3_full": 0.01819197022625535,
-        "rank_ci_low_vs_c3_full": -0.022101557530856766,
-        "rank_ci_high_vs_c3_full": 0.05863699225780314
+        "rank_difference_vs_gbm_full": 0.01819197022625535,
+        "rank_ci_low_vs_gbm_full": -0.022101557530856766,
+        "rank_ci_high_vs_gbm_full": 0.05863699225780314
       },
       "high": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 469,
         "n_batters": 309,
-        "rank_difference_vs_c3_full": -0.036113885628475395,
-        "rank_ci_low_vs_c3_full": -0.09230516553310268,
-        "rank_ci_high_vs_c3_full": 0.022562501526965255
+        "rank_difference_vs_gbm_full": -0.036113885628475395,
+        "rank_ci_low_vs_gbm_full": -0.09230516553310268,
+        "rank_ci_high_vs_gbm_full": 0.022562501526965255
       },
       "low": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 294,
         "n_batters": 204,
-        "rank_difference_vs_c3_full": 0.10825915456631685,
-        "rank_ci_low_vs_c3_full": -0.0288920358455891,
-        "rank_ci_high_vs_c3_full": 0.24522818116442735
+        "rank_difference_vs_gbm_full": 0.10825915456631685,
+        "rank_ci_low_vs_gbm_full": -0.0288920358455891,
+        "rank_ci_high_vs_gbm_full": 0.24522818116442735
       },
       "medium": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 250,
         "n_batters": 218,
-        "rank_difference_vs_c3_full": 0.08005079919578101,
-        "rank_ci_low_vs_c3_full": -0.019733735693327314,
-        "rank_ci_high_vs_c3_full": 0.18749757502198303
+        "rank_difference_vs_gbm_full": 0.08005079919578101,
+        "rank_ci_low_vs_gbm_full": -0.019733735693327314,
+        "rank_ci_high_vs_gbm_full": 0.18749757502198303
       }
     },
     "50": {
       "all": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 848,
         "n_batters": 493,
-        "rank_difference_vs_c3_full": 0.02070965630668814,
-        "rank_ci_low_vs_c3_full": -0.021237203407170717,
-        "rank_ci_high_vs_c3_full": 0.06414710955557806
+        "rank_difference_vs_gbm_full": 0.02070965630668814,
+        "rank_ci_low_vs_gbm_full": -0.021237203407170717,
+        "rank_ci_high_vs_gbm_full": 0.06414710955557806
       },
       "high": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 444,
         "n_batters": 300,
-        "rank_difference_vs_c3_full": -0.034325062302830556,
-        "rank_ci_low_vs_c3_full": -0.09329796910362287,
-        "rank_ci_high_vs_c3_full": 0.023765097071537882
+        "rank_difference_vs_gbm_full": -0.034325062302830556,
+        "rank_ci_low_vs_gbm_full": -0.09329796910362287,
+        "rank_ci_high_vs_gbm_full": 0.023765097071537882
       },
       "low": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 194,
         "n_batters": 141,
-        "rank_difference_vs_c3_full": 0.10987212894313958,
-        "rank_ci_low_vs_c3_full": -0.04559172142896207,
-        "rank_ci_high_vs_c3_full": 0.2566983339045523
+        "rank_difference_vs_gbm_full": 0.10987212894313958,
+        "rank_ci_low_vs_gbm_full": -0.04559172142896207,
+        "rank_ci_high_vs_gbm_full": 0.2566983339045523
       },
       "medium": {
-        "rmse_gate_vs_c3_full": false,
+        "rmse_gate_vs_gbm_full": false,
         "ordering_gate_vs_both": false,
         "n_hitters": 210,
         "n_batters": 183,
-        "rank_difference_vs_c3_full": 0.08951854102310502,
-        "rank_ci_low_vs_c3_full": -0.009856372497042113,
-        "rank_ci_high_vs_c3_full": 0.19826001433857182
+        "rank_difference_vs_gbm_full": 0.08951854102310502,
+        "rank_ci_low_vs_gbm_full": -0.009856372497042113,
+        "rank_ci_high_vs_gbm_full": 0.19826001433857182
       }
     }
   },

@@ -1,5 +1,5 @@
 {
-  "arm": "o1_lr1e3_warm",
+  "arm": "selection_lr1e3_warm",
   "n_seeds": 2,
   "note": "n=2, descriptive only, never a promotion criterion",
   "seeds": {

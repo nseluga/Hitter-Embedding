@@ -2,7 +2,7 @@
   "post_selection_descriptive": "post-selection descriptive: computed on 2024 after the pre-registered platoon gate ran and failed (docs/research-manifest.md, 2026-08-20). Not a test of a hypothesis.",
   "bounded": "one-day hard cap per spec \u00a7M.0; audit + one simulation, no iteration",
   "audit": {
-    "implementation": "src/analysis/e_platoon_ceiling.py::split_half_reliability",
+    "implementation": "src/analysis/model_evaluation_platoon_ceiling.py::split_half_reliability",
     "checks": {
       "split_definition": "game_pk parity \u2014 halves are disjoint GAMES, so no plate appearance appears in both halves and within-game correlation cannot leak across the split. Deterministic, no seed. CORRECT.",
       "pairing": "halves are pivoted per batter and joined on the batter index, so the correlation is across hitters with one row each. CORRECT.",

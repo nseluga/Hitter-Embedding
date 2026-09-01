@@ -18,7 +18,7 @@
       "la",
       "spray"
     ],
-    "arm": "d10_baseline",
+    "arm": "rebuild_baseline",
     "seeds": [
       0,
       1,
@@ -32,16 +32,16 @@
   "pooled_hand_label": "B",
   "pooling_weight": "prior side-specific denominator PA, normalized within batter",
   "rungs_pooled": [
-    "c1_bucketed",
-    "c1_raw",
+    "trailing_bucketed",
+    "trailing_raw",
     "no_info_league_average",
-    "phase_d"
+    "model_v1"
   ],
   "rungs_omitted": [
-    "c2_bivariate",
-    "c2_book_rho_reference",
-    "c3_gbm_outcome",
-    "c3_gbm_full"
+    "eb_bivariate",
+    "eb_book_rho_reference",
+    "gbm_outcome",
+    "gbm_full"
   ],
   "omission_reason": "C.2 needs its fitted prior parameters and C.3 needs a GBM refit; both gate opponents are therefore absent and this table is not a gate",
   "stratum_caveat": "STRATUM_BOUNDARIES was calibrated on side-specific prior PA; pooled exposure is roughly double, so these strata are not comparable to the side-specific strata elsewhere",

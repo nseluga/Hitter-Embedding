@@ -148,33 +148,33 @@
       "convention": "pa_star_weak_side"
     }
   },
-  "achieved_rank_corr_e5": 0.14626474805407283,
+  "achieved_rank_corr_platoon": 0.14626474805407283,
   "route_c": {
     "verdict": "uninformative_inside_both_nulls",
     "reading": "Route C's LHB value sits inside BOTH simulated nulls, so it discriminates nothing: the split-half estimator at these half-length exposures has too much sampling variance to separate tau2=0 from tau2=B'. The alarming -0.366 in E.15 is Spearman-Brown magnifying an ordinary null draw (the raw half correlation is at the 18th percentile of the tau2=0 null). Route C is retired as evidence in either direction, which is the bounded outcome the spec allows. It was never an estimator.",
-    "artifact": "results/phase_m/m0_route_c_diagnostic.json"
+    "artifact": "results/measurement_ceiling/routes_route_baseline_ladder_diagnostic.json"
   },
   "field_provenance": {
-    "route_b_field": "tau2_split_derived (results/phase_c/c2_prior_parameters.csv)",
-    "accessor": "c2_bivariate_eb.implied_split_constant -> tau2_split",
+    "route_b_field": "tau2_split_derived (results/baseline_ladder/eb_prior_parameters.csv)",
+    "accessor": "eb_bivariate_eb.implied_split_constant -> tau2_split",
     "identity": "tau2_L + tau2_R - 2*rho*sqrt(tau2_L*tau2_R)",
-    "note": "E.15's Route B read this column via e_platoon_ceiling.load_c2_components['tau2_split']; for a DIFFERENTIAL the derived split variance IS the within-stand tau2, so the spec's parenthetical describes the same quantity."
+    "note": "E.15's Route B read this column via model_evaluation_platoon_ceiling.load_eb_components['tau2_split']; for a DIFFERENTIAL the derived split variance IS the within-stand tau2, so the spec's parenthetical describes the same quantity."
   },
   "reproduction": {
     "route_b_committed": 0.00059034,
     "route_b_recomputed": 0.0005903354341684647,
     "route_b_reproduces": true,
     "fitting_window_spec_says": "nine-season, 2016-2024",
-    "fitting_window_code_uses": "2021-2023 (c1_trailing.TRAILING_SEASONS = 3)",
+    "fitting_window_code_uses": "2021-2023 (trailing.TRAILING_SEASONS = 3)",
     "window_note": "the spec's window PROSE is wrong; the committed VALUE reproduces exactly on the code's three-season window, so \u00a710 rule 4 does not fire. B and B' differ only in population, which is what the B->B' diagnostic requires."
   },
-  "c3_full_availability": {
+  "gbm_full_availability": {
     "emitted": true,
     "fallback_rule": "\u00a710 rule 1 \u2014 FIRED at Phase M (2026-08-30), DISCHARGED in Pass A1",
-    "why_it_fired": "C.3-full had no persisted fitted artifact anywhere in `results/`, and `c3_gbm.predict` calls `c3_gbm.fit` internally, so side-specific predictions required retraining the GBM on the 341MB labeled pitch table \u2014 the condition rule 1 names.",
-    "why_it_is_discharged": "the retrain is the supported path at `src/analysis/c_report.py:364` and costs 7 seconds, not the session it was scoped as. Pass A1 ran it once and persisted the output to `results/phase_m/m1_c3_full_predictions.csv`, so the rule's condition is false for every later pass.",
-    "reproduction": "the refit reproduces the committed Phase C `c3_gbm_full` claim-1 row to 1.0e-9 on RMSE and 5.6e-17 on rank correlation in every stratum, so the 2026-08-31 revisit condition (absence becomes a capability limit if the refit cannot reproduce Phase C) does not fire.",
-    "predictions": "results/phase_m/m1_c3_full_predictions.csv",
+    "why_it_fired": "C.3-full had no persisted fitted artifact anywhere in `results/`, and `gbm.predict` calls `gbm.fit` internally, so side-specific predictions required retraining the GBM on the 341MB labeled pitch table \u2014 the condition rule 1 names.",
+    "why_it_is_discharged": "the retrain is the supported path at `src/analysis/baseline_ladder_report.py:364` and costs 7 seconds, not the session it was scoped as. Pass A1 ran it once and persisted the output to `results/measurement_ceiling/differential_gbm_full_predictions.csv`, so the rule's condition is false for every later pass.",
+    "reproduction": "the refit reproduces the committed Phase C `gbm_full` claim-1 row to 1.0e-9 on RMSE and 5.6e-17 on rank correlation in every stratum, so the 2026-08-31 revisit condition (absence becomes a capability limit if the refit cannot reproduce Phase C) does not fire.",
+    "predictions": "results/measurement_ceiling/differential_gbm_full_predictions.csv",
     "never": "no differential head was improvised, per the spec's explicit prohibition."
   }
 }

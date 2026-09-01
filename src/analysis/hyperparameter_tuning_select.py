@@ -1,11 +1,11 @@
 """
 Phase O.1 -- pick a learning rate and warmup from the ledger, and nothing else.
 
-PRE-REGISTERED BEFORE ANY o1 RUN EXISTS. The rule below is fixed in code so that it
+PRE-REGISTERED BEFORE ANY selection RUN EXISTS. The rule below is fixed in code so that it
 cannot be adjusted after seeing which arm it promotes.
 
 WHY THIS MODULE MAY SELECT ON LIKELIHOOD WHEN PHASE E SAID IT COULD NOT. Across the seven
-well-trained d10 arms, held-out log likelihood and the claim-1 rank statistic correlate at
+well-trained rebuild arms, held-out log likelihood and the claim-1 rank statistic correlate at
 0.000. Seven points put a 95% interval of roughly +/-0.75 on that estimate, so it is NOT
 evidence that the two are unrelated -- it is only evidence that likelihood cannot be shown
 to RANK converged models. Phase O does not ask it to. It asks whether a run reached its own
@@ -20,14 +20,14 @@ computed on 2024 from a build tuned here is post-selection and must be labelled 
 The confirmatory number is the 2025 run, which stays sealed until after Phase M.
 
 CLAIM 1 IS NEVER READ HERE. Not as a tiebreak, not as a sanity check. This module does not
-import `claim1_eval` and `test_o1_select.py` asserts that it does not, because a tuned
+import `claim1_eval` and `test_selection_select.py` asserts that it does not, because a tuned
 build chosen with one eye on claim 1 makes claim 1 a selected number and the project's
 headline is a claim-1 number.
 
 THE RULE.
-1. Score each o1 config by the MEAN of its `reference` column across seeds -- unweighted
+1. Score each selection config by the MEAN of its `reference` column across seeds -- unweighted
    held-out 2024 log loss per scored row, the one ledger column comparable across configs.
-2. The noise floor is the across-seed standard deviation of `reference` for the d10
+2. The noise floor is the across-seed standard deviation of `reference` for the rebuild
    `baseline` arm (five seeds, same architecture, same build): 1.04e-4.
 3. `lr1e3` (lr 1e-3, no warmup) is the incumbent -- the setting all 119 pre-O runs used.
    An arm is PROMOTED only if it beats the incumbent's mean by more than `MARGIN_SES`
@@ -44,8 +44,8 @@ three arms that happened to finish looks exactly like a mean over six. The expec
 is pre-registered as EXPECTED_ARMS and any absence refuses the selection. Same for depth: an arm
 with fewer than MIN_SEEDS_PER_ARM seeds has no measurable spread and is not a mean.
 
-GUARD. The incumbent arm re-runs the d10 baseline recipe at a different stage, so its mean
-`reference` must land within `INCUMBENT_TOLERANCE_SDS` of the d10 baseline's. If it does
+GUARD. The incumbent arm re-runs the rebuild baseline recipe at a different stage, so its mean
+`reference` must land within `INCUMBENT_TOLERANCE_SDS` of the rebuild baseline's. If it does
 not, something moved underneath the comparison -- almost certainly the tensor build -- and
 the selection is refused rather than reported.
 
@@ -59,11 +59,11 @@ import math
 import statistics
 from pathlib import Path
 
-LEDGER = Path("results/phase_d/sweep_log.csv")
-OUT_DIR = Path("results/phase_o")
-STAGE = "o1"
+LEDGER = Path("results/model_v1/sweep_log.csv")
+OUT_DIR = Path("results/hyperparameter_tuning")
+STAGE = "selection"
 INCUMBENT = "lr1e3"
-NOISE_FLOOR_STAGE, NOISE_FLOOR_CONFIG = "d10", "baseline"
+NOISE_FLOOR_STAGE, NOISE_FLOOR_CONFIG = "rebuild", "baseline"
 MARGIN_SES = 2.0
 INCUMBENT_TOLERANCE_SDS = 4.0
 CONFIRMATION_SEEDS = 5
@@ -71,7 +71,7 @@ MIN_SEEDS_PER_ARM = 2
 # The pre-registered grid, declared HERE rather than imported from `sweep`. Importing sweep
 # transitively puts claim1_eval in sys.modules, and this module's whole licence is that claim
 # 1 cannot reach it -- a firewall that holds only until someone adds a convenient import is
-# not a firewall. `test_o1_select.py` asserts this list still matches sweep.STAGES["o1"]; a
+# not a firewall. `test_selection_select.py` asserts this list still matches sweep.STAGES["selection"]; a
 # test may import both, because a test is not the thing being firewalled.
 EXPECTED_ARMS = ("lr1e3", "lr1e3_warm", "lr3e3", "lr3e3_warm", "lr3e4", "lr3e4_warm")
 
@@ -99,7 +99,7 @@ def build_check(rows, stage=STAGE):
     """
     Is the stage's incumbent scored in the same UNITS as the noise-floor arm?
 
-    `reference` is log loss over quality bins, and `phase_d` and `phase_d5` carry different
+    `reference` is log loss over quality bins, and `model_v1` and `phase_d5` carry different
     bin edges, so a run on the wrong build lands on a different scale while every ledger
     column still lines up. That is the one failure this check exists for.
 
@@ -125,7 +125,7 @@ def build_check(rows, stage=STAGE):
 
 
 def noise_floor(rows):
-    """Across-seed sd of `reference` for the d10 baseline -- the smallest difference that
+    """Across-seed sd of `reference` for the rebuild baseline -- the smallest difference that
     is not seed noise. Computed from the ledger, never hardcoded, so a re-run moves it."""
     values = references(rows, NOISE_FLOOR_STAGE, NOISE_FLOOR_CONFIG)
     if len(values) < 2:
@@ -180,7 +180,7 @@ def select(rows, stage=STAGE):
                 else drift <= INCUMBENT_TOLERANCE_SDS * floor_sd)
 
     # The threshold is a difference of two means, so it is scaled by the standard error of
-    # THAT difference, not by a single run's sd. With n seeds per arm and the d10 baseline
+    # THAT difference, not by a single run's sd. With n seeds per arm and the rebuild baseline
     # sd standing in for the per-run sd, SE = sd * sqrt(1/n_a + 1/n_incumbent). At two seeds
     # each this happens to equal `floor_sd`, which is exactly why the earlier version looked
     # correct; it stops being correct the moment the seed counts differ.
@@ -218,7 +218,7 @@ def select(rows, stage=STAGE):
         },
         "guard": {
             "incumbent_mean": incumbent_mean,
-            "d10_baseline_mean": floor_mean,
+            "rebuild_baseline_mean": floor_mean,
             "drift": drift,
             "tolerance": INCUMBENT_TOLERANCE_SDS * floor_sd,
             "drift_is_informative": build["independent_of_noise_floor"],
@@ -250,10 +250,10 @@ def select(rows, stage=STAGE):
 def report(result, out_dir=OUT_DIR):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    json_path = out_dir / "o1_selection.json"
+    json_path = out_dir / "selection.json"
     json_path.write_text(json.dumps(result, indent=2) + "\n")
 
-    csv_path = out_dir / "o1_selection.csv"
+    csv_path = out_dir / "selection.csv"
     fields = ("config", "n_seeds", "reference_mean", "reference_sd",
               "margin_vs_incumbent", "standard_error", "margin_in_ses", "promotable")
     with csv_path.open("w", newline="") as handle:
@@ -284,7 +284,7 @@ def main():
               f"{grid['underpowered_arms'] or 'none'}. Selection refused.")
     if not result["guard"]["passed"]:
         print(f"GUARD FAILED: incumbent mean {result['guard']['incumbent_mean']:.5f} vs "
-              f"d10 baseline {result['guard']['d10_baseline_mean']:.5f} "
+              f"rebuild baseline {result['guard']['rebuild_baseline_mean']:.5f} "
               f"(drift {result['guard']['drift']:.2e} > "
               f"{result['guard']['tolerance']:.2e}). Selection refused.")
     for name, arm in sorted(result["arms"].items(), key=lambda kv: kv[1]["reference_mean"]):

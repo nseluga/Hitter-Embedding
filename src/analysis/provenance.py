@@ -2,7 +2,7 @@
 Phase F.1 -- what produced an artifact, recorded in the artifact.
 
 Every audit module reads a built tensor directory and a set of checkpoints, and until now
-almost none of them said which. `results/phase_e` carries ~20 JSON artifacts and three
+almost none of them said which. `results/model_evaluation` carries ~20 JSON artifacts and three
 record a `data_dir`. The 2026-08-19 decision-log entry established by a field-by-field
 audit that `data/processed/phase_d` and `phase_d5` differ ONLY in `quality_bin_edges` and
 the `ev`/`la`/`spray` index arrays, so today's numbers are unaffected by the stale defaults.

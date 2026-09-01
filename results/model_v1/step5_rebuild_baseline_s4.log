@@ -1,6 +1,6 @@
 [    0.0s] loading tensors and aligning the pitch frame
 [   17.1s] fitting the four auxiliary tables
-[   77.2s] wrote results/phase_d/league_reference_rates.json
+[   77.2s] wrote results/model_v1/league_reference_rates.json
 [   80.3s] LHB vs LHP: 210 hitters x 540 pitchers
 [  175.2s]   LHB vs LHP: 64/540 pitchers
 [  278.8s]   LHB vs LHP: 128/540 pitchers
@@ -71,7 +71,7 @@
 [16359.4s]   RHB vs RHP: 1408/1481 pitchers
 [16707.3s]   RHB vs RHP: 1472/1481 pitchers
 [16714.0s]   RHB vs RHP: 1481/1481 pitchers
-[16715.0s] wrote results/phase_d/d5_predictions_d10_baseline_s4.csv
+[16715.0s] wrote results/model_v1/model_v1_predictions_rebuild_baseline_s4.csv
 [16720.0s] probe LHB vs LHP: 540 pitchers
 [16821.3s] probe RHB vs LHP: 544 pitchers
 [16882.0s] probe LHB vs RHP: 1475 pitchers
@@ -81,7 +81,7 @@
 [17278.7s] probe RHB vs LHP: 544 pitchers
 [17336.5s] probe LHB vs RHP: 1475 pitchers
 [17503.2s] probe RHB vs RHP: 1481 pitchers
-arm: d10_baseline seeds: [4]
+arm: rebuild_baseline seeds: [4]
 rows: 1279
 pred_woba mean: 0.3124
 pred_woba sd: 0.0302
@@ -111,4 +111,4 @@ mass_bip_points_00: 0.0401  (seed spread 0.0000)
 fidelity: FAIL
 bip joined to a PA outcome: 948226 of 948226 (100.0%)
 contact split from: trained_head
-wrote results/phase_d/d5_predictions_d10_baseline_s4.csv
+wrote results/model_v1/model_v1_predictions_rebuild_baseline_s4.csv

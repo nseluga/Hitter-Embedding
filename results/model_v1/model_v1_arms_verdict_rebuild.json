@@ -1,5 +1,5 @@
 {
-  "stage": "d10",
+  "stage": "rebuild",
   "decisive_stratum": "all",
   "not_scored": [],
   "arms": {
@@ -127,6 +127,6 @@
     }
   },
   "seed_noise_assumption": "only baseline has per-seed runs; other arms' intervals assume their seed noise resembles baseline's",
-  "reference_column_incomparable": "sweep_log.csv `reference` is log loss over the quality bins, which the D5-R17 rebuild moved and which nospray factorizes differently; it is not comparable across arms or against d9",
+  "reference_column_incomparable": "sweep_log.csv `reference` is log loss over the quality bins, which the D5-R17 rebuild moved and which nospray factorizes differently; it is not comparable across arms or against splithead",
   "any_arm_beats_baseline": true
 }

@@ -4,7 +4,7 @@ The Phase D training loop, transcribing docs/phase-d-spec.md §5.
 Four failures here are silent, and every one of them produces a trained model.
 
 1. THE FROZEN TEST SEASON. `assert_not_test_season` runs immediately after
-   `parse_args`, mirroring `c_report.py`. Validation defaults to 2024; 2025 is
+   `parse_args`, mirroring `baseline_ladder_report.py`. Validation defaults to 2024; 2025 is
    reachable only through `--final-run`, which is the deliberate act of spending
    the season, not a convenience. Nothing downstream re-checks this.
 
@@ -22,7 +22,7 @@ Four failures here are silent, and every one of them produces a trained model.
 
 `--benchmark` runs one epoch, times it, and exits before validation. That number is
 the deliverable D.6's compute decision rests on, so it is written to
-`results/phase_d/d3_benchmark.csv` as well as to MLflow, which is gitignored.
+`results/model_v1/benchmark.csv` as well as to MLflow, which is gitignored.
 """
 
 import csv
@@ -51,9 +51,9 @@ from src.model.v1 import (DEFAULT_EMBEDDING_DIM, HitterEmbeddingV1, LOSS_RULES,
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRACKING_URI = (REPO_ROOT / "mlruns").as_uri()
 DATA_DIR = Path("data/processed/phase_d")
-OUT_DIR = Path("results/phase_d")
+OUT_DIR = Path("results/model_v1")
 CHECKPOINT_DIR = Path("results/checkpoints")
-EXPERIMENT = "phase_d"
+EXPERIMENT = "model_v1"
 
 LEARNING_RATE = 1e-3
 # Phase O tunes lr and warmup and nothing else. WEIGHT_DECAY and BATCH_SIZE are
@@ -215,7 +215,7 @@ def benchmark(model, tensors, indices, optimizer, generator, args):
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "d3_benchmark.csv"
+    path = out_dir / "benchmark.csv"
     path.touch()
     with path.open("a", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(row))

@@ -2,6 +2,14 @@
 .claude/
 docs/research-manifest.md
 
+# Internal working docs — phase-lettered specs, decision log, lab notebook (not public cleanup)
+docs/pass-*-spec.md
+docs/phase-*-spec.md
+docs/phase-*-review.md
+docs/decision-log.md
+docs/lab-notebook.md
+.DS_Store
+
 # Python environment
 .venv/
 __pycache__/
@@ -17,4 +25,4 @@ data/processed/phase_d/
 mlruns/
 mlflow.db
 results/checkpoints/
-results/phase_d/STOP
+results/model_v1/STOP

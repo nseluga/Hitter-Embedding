@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 
 from src.analysis import claim1_eval
-from src.analysis.e_price_draw import league_chain, to_aggregates, SWING_MISS, FOUL, STRIKE_LIKE
+from src.analysis.model_evaluation_price_draw import league_chain, to_aggregates, SWING_MISS, FOUL, STRIKE_LIKE
 from src.model import query, query_tables as qt
 
 CHANNELS = ("ball", "strike", "hbp", "foul", "bip")
@@ -104,7 +104,7 @@ def main():
     parser.add_argument("--data-dir", default="data/processed/phase_d")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
-    parser.add_argument("--out-dir", default="results/phase_e")
+    parser.add_argument("--out-dir", default="results/model_evaluation")
     args = parser.parse_args()
 
     claim1_eval.assert_not_test_season(args.eval_season, final_run=args.final_run)
@@ -143,7 +143,7 @@ def main():
             for key in query.ABSORBING_KEYS}}
         for name, rates in (("observed", observed), ("pooled_chain", pooled),
                             ("per_pitcher_chain", averaged))])
-    table.to_csv(out_dir / "e10_structure.csv", index=False)
+    table.to_csv(out_dir / "structure.csv", index=False)
 
     residual = 0.08538 - 0.08312     # E.1's population-matched walk excess
     summary = {
@@ -158,7 +158,7 @@ def main():
         "share_of_residual_explained": (averaged["bb"] - observed["bb"]) / residual,
         "structural_k_bias_relative": averaged["k"] / observed["k"] - 1.0,
     }
-    (out_dir / "e10_structure_summary.json").write_text(json.dumps(summary, indent=2))
+    (out_dir / "structure_summary.json").write_text(json.dumps(summary, indent=2))
 
     print("\n-- observed vs a chain built from perfectly observed transitions --")
     print(table.to_string(index=False))

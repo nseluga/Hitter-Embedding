@@ -31,7 +31,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.analysis import c2_bivariate_eb, claim1_eval
+from src.analysis import baseline_ladder_bivariate_eb, claim1_eval
 from src.model import query_tables as qt
 
 # Buckets for the HBP diagnosis, in grid cells from the nearest boundary. 0 is the outer ring,
@@ -148,8 +148,8 @@ def gradient_a(eval_frame, pa_df, eval_season, n_boot=2000, seed=0):
     and vs RHP) driven by the same talent, health and home park, so resampling rows would
     count them as independent and understate every interval.
     """
-    proxy = c2_bivariate_eb.predict(pa_df, eval_season)[claim1_eval.KEY + ["pred_woba"]]
-    frame = eval_frame.merge(proxy.rename(columns={"pred_woba": "c2_prior"}),
+    proxy = eb_bivariate_eb.predict(pa_df, eval_season)[claim1_eval.KEY + ["pred_woba"]]
+    frame = eval_frame.merge(proxy.rename(columns={"pred_woba": "eb_prior"}),
                              on=claim1_eval.KEY, how="inner")
     assert len(frame) > 0, "no rows survived the join to the C.2 posterior"
 
@@ -157,11 +157,11 @@ def gradient_a(eval_frame, pa_df, eval_season, n_boot=2000, seed=0):
     # prior_pa in hundreds, so the coefficient reads as wOBA per 100 prior PA rather than as
     # a number with four leading zeros
     exposure = frame["prior_pa"].to_numpy(dtype="float64") / 100.0
-    talent = frame["c2_prior"].to_numpy(dtype="float64")
+    talent = frame["eb_prior"].to_numpy(dtype="float64")
     y = frame["excess"].to_numpy(dtype="float64")
     weights = frame["denominator"].to_numpy(dtype="float64")
 
-    names = ("intercept", "prior_pa_per_100", "c2_prior")
+    names = ("intercept", "prior_pa_per_100", "eb_prior")
     design = np.column_stack([np.ones(len(frame)), exposure, talent])
     point = _ols(design, y, weights)
 
@@ -437,9 +437,9 @@ def _self_check():
 def main():
     parser = argparse.ArgumentParser(description="D.5 level-bias attribution and gradient tests.")
     parser.add_argument("--predictions", default=None,
-                        help="baseline d5_predictions_*.csv; gradient (a) needs it")
+                        help="baseline model_v1_predictions_*.csv; gradient (a) needs it")
     parser.add_argument("--perturbed", default=None,
-                        help="a second d5_predictions_*.csv from the same arm with one knob "
+                        help="a second model_v1_predictions_*.csv from the same arm with one knob "
                              "flipped; enables gradient test (c)")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
@@ -447,16 +447,16 @@ def main():
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
     parser.add_argument("--gradient-b-arm", default=None,
-                        help="checkpoint stem for test (b), e.g. d10_baseline. Reads "
-                             "<arm>_s<seed>.pt beside <out-dir>/d5_predictions_<arm>_s<seed>.csv, "
+                        help="checkpoint stem for test (b), e.g. rebuild_baseline. Reads "
+                             "<arm>_s<seed>.pt beside <out-dir>/model_v1_predictions_<arm>_s<seed>.csv, "
                              "which is what the step 5 driver writes")
     parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     parser.add_argument("--checkpoint-dir", default="results/checkpoints")
     parser.add_argument("--skip-hbp", action="store_true",
                         help="the HBP diagnosis reads the aligned pitch frame, which is the "
                              "expensive part of this module")
-    parser.add_argument("--out-dir", default="results/phase_d")
-    parser.add_argument("--out-name", default="d5_level_attribution.json")
+    parser.add_argument("--out-dir", default="results/model_v1")
+    parser.add_argument("--out-name", default="model_v1_level_attribution.json")
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args()
 
@@ -530,7 +530,7 @@ def main():
               "exposure, row 0 excluded --")
         for seed in args.seeds:
             checkpoint = Path(args.checkpoint_dir) / f"{args.gradient_b_arm}_s{seed}.pt"
-            csv = out_dir / f"d5_predictions_{args.gradient_b_arm}_s{seed}.csv"
+            csv = out_dir / f"model_v1_predictions_{args.gradient_b_arm}_s{seed}.csv"
             if not (checkpoint.exists() and csv.exists()):
                 print(f"  seed {seed}: skipped (missing "
                       f"{checkpoint if not checkpoint.exists() else csv})")

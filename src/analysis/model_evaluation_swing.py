@@ -30,7 +30,7 @@ from src.analysis import claim1_eval
 from src.model import query, query_tables as qt
 from src.model.v1 import HitterEmbeddingV1
 
-DEFAULT_OUT_DIR = "results/phase_e"
+DEFAULT_OUT_DIR = "results/model_evaluation"
 DEFAULT_BATCH = 65536
 
 
@@ -91,7 +91,7 @@ def calibration_table(frame, by, label):
 def main():
     parser = argparse.ArgumentParser(
         description="Phase E.6 — swing-head calibration on real held-out pitches.")
-    parser.add_argument("--arm", default="d10_baseline")
+    parser.add_argument("--arm", default="rebuild_baseline")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
@@ -153,7 +153,7 @@ def main():
                           "trained_hitters"),
     ]
     table = pd.concat(tables, ignore_index=True)
-    table.to_csv(out_dir / "e6_swing_calibration.csv", index=False)
+    table.to_csv(out_dir / "swing_calibration_swing_calibration.csv", index=False)
 
     overall = table[table["grouping"] == "overall"].iloc[0]
     three_ball = frame[frame["balls"] == 3]
@@ -173,14 +173,14 @@ def main():
         "max_abs_count_relative_gap": float(
             table[table["grouping"] == "count"]["relative_gap"].abs().max()),
     }
-    (out_dir / "e6_swing_summary.json").write_text(json.dumps(summary, indent=2))
+    (out_dir / "swing_calibration_swing_summary.json").write_text(json.dumps(summary, indent=2))
 
     print("\n-- swing calibration by count (predicted minus observed) --")
     print(table[table["grouping"] == "count"].to_string(index=False))
     print("\n-- by zone and handedness --")
     print(table[table["grouping"].isin(("zone", "handedness", "overall",
                                         "trained_hitters"))].to_string(index=False))
-    print(f"\nwrote {out_dir / 'e6_swing_calibration.csv'}")
+    print(f"\nwrote {out_dir / 'swing_calibration_swing_calibration.csv'}")
 
 
 if __name__ == "__main__":

@@ -12,4 +12,4 @@ epoch  10  train 1.00543  val 1.02707  ref 1.02707  lr 3.00e-04  82s (719 steps)
 epoch  11  train 1.00509  val 1.02695  ref 1.02695  lr 9.00e-05  60s (719 steps)
 epoch  12  train 1.00390  val 1.02695  ref 1.02695  lr 9.00e-05  49s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.02675 at epoch 9; reference 1.02675; checkpoint results/checkpoints/d9_dim64_s1.pt
+best val loss 1.02675 at epoch 9; reference 1.02675; checkpoint results/checkpoints/splithead_dim64_s1.pt

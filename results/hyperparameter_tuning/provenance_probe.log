@@ -1,4 +1,4 @@
-### phase_d
+### model_v1
 Traceback (most recent call last):
   File "<frozen runpy>", line 198, in _run_module_as_main
   File "<frozen runpy>", line 88, in _run_code
@@ -29,6 +29,6 @@ Traceback (most recent call last):
     parts[name] = _quality_loss(outputs[name], labels[name], masks[name], rule)
                                                ~~~~~~^^^^^^
 KeyError: 'split'
-### phase_d5
+### model_v1_rebuild
 epoch   0  train 1.05990  val 1.04681  ref 1.04681  lr 1.00e-03  41s (719 steps)
-best val loss 1.04681 at epoch 0; reference 1.04681; checkpoint results/checkpoints/probe_phase_d5_s0.pt
+best val loss 1.04681 at epoch 0; reference 1.04681; checkpoint results/checkpoints/probe_model_v1_rebuild_s0.pt

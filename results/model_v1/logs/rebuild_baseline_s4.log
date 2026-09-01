@@ -14,4 +14,4 @@ epoch  12  train 0.99537  val 1.02621  ref 1.02621  lr 9.00e-05  29s (719 steps)
 epoch  13  train 0.99527  val 1.02602  ref 1.02602  lr 2.70e-05  30s (719 steps)
 epoch  14  train 0.99493  val 1.02593  ref 1.02593  lr 2.70e-05  30s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.02590 at epoch 11; reference 1.02590; checkpoint results/checkpoints/d10_baseline_s4.pt
+best val loss 1.02590 at epoch 11; reference 1.02590; checkpoint results/checkpoints/rebuild_baseline_s4.pt

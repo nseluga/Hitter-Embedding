@@ -23,4 +23,4 @@ epoch  21  train 0.79469  val 0.81500  ref 0.81500  lr 8.10e-06  38s (719 steps)
 epoch  22  train 0.79469  val 0.81498  ref 0.81498  lr 2.43e-06  38s (719 steps)
 epoch  23  train 0.79468  val 0.81496  ref 0.81496  lr 2.43e-06  37s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 0.81492 at epoch 20; reference 0.81492; checkpoint results/checkpoints/d9_nospray_s1.pt
+best val loss 0.81492 at epoch 20; reference 0.81492; checkpoint results/checkpoints/splithead_nospray_s1.pt

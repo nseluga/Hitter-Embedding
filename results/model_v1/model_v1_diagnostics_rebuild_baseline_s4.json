@@ -846,7 +846,7 @@
       "bip": 0.02
     }
   },
-  "arm": "d10_baseline",
+  "arm": "rebuild_baseline",
   "seeds": [
     4
   ],

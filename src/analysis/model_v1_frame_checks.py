@@ -34,11 +34,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.analysis import c1_trailing as c1
+from src.analysis import baseline_ladder_trailing as trailing
 from src.analysis import claim1_eval as evaluation
 from src.config.splits import load_splits
 
-OUT_DIR = Path("results/phase_d")
+OUT_DIR = Path("results/model_v1")
 
 # The ten groups B.2 kept, as they enter the context tower. Every flagged feature
 # is regressed on exactly this set — nothing else is available to make it redundant.
@@ -51,7 +51,7 @@ FLAGGED_LINEAR = ["effective_speed", "release_extension", "release_pos_y",
                   "release_pos_z", "release_spin_rate"]
 FLAGGED_CIRCULAR = "spin_axis"
 
-REDUNDANCY_SAMPLE = 1_000_000   # rows drawn from TRAIN seasons; R^2 is stable well below this
+REDUNDANCY_SAMPLE = 1_000   # rows drawn from TRAIN seasons; R^2 is stable well below this
 REDUNDANCY_SEED = 0
 
 # a flagged feature at or above this is determined by the kept ten and drops here
@@ -129,7 +129,7 @@ def frame_structure(pa_df, pitch_df, eval_season, vocabulary_seasons):
     vocabulary_seasons, which is exactly the seasons the hitter embedding table is
     built from. Returns one row per exposure stratum plus an "all" row.
     """
-    predictions = c1.predict(pa_df, eval_season, variant="bucketed")
+    predictions = trailing.predict(pa_df, eval_season, variant="bucketed")
     frame, _ = evaluation.build_eval_frame(pa_df, predictions, eval_season)
 
     vocabulary = set(pitch_df.loc[pitch_df["season"].isin(vocabulary_seasons), "batter"].unique())
@@ -168,7 +168,7 @@ def main():
     conditional = redundancy_r2(pitch_df, train_seasons, extra_predictors=["release_extension"])
     conditional = conditional.assign(given="release_extension")
     redundancy = pd.concat([redundancy.assign(given="kept ten only"), conditional])
-    redundancy.to_csv(out_dir / "d0_redundancy_r2.csv", index=False)
+    redundancy.to_csv(out_dir / "frame_checks_redundancy_r2.csv", index=False)
     print("redundancy of B.2's flagged features against its kept ten")
     print(redundancy.to_string(index=False, float_format="%.4f"))
 
@@ -186,7 +186,7 @@ def main():
         structures.append(structure.assign(case=label))
         print(f"\nframe structure, eval season {label}")
         print(structure.to_string(index=False, float_format="%.4f"))
-    pd.concat(structures).to_csv(out_dir / "d0_frame_structure.csv", index=False)
+    pd.concat(structures).to_csv(out_dir / "frame_checks_frame_structure.csv", index=False)
 
 
 if __name__ == "__main__":

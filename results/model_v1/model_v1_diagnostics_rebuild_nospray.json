@@ -902,7 +902,7 @@
       "bip": 0.02
     }
   },
-  "arm": "d10_nospray",
+  "arm": "rebuild_nospray",
   "seeds": [
     0,
     1,

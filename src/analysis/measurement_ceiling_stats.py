@@ -6,9 +6,9 @@ WHAT THIS FILE IS
 The pure statistics and the simulations behind Phase M. No file reads, no artifacts, no
 argparse — everything here is a function of numbers, so §9's planted-recovery self-checks
 can drive it directly. The driver that reads Phase C/E/F artifacts and writes
-`results/phase_m/` is `m_report.py`.
+`results/measurement_ceiling/` is `measurement_ceiling_report.py`.
 
-E.15 (`e_platoon_ceiling.py`) already owns the primitives — `reliability_from_variances`,
+E.15 (`model_evaluation_platoon_ceiling.py`) already owns the primitives — `reliability_from_variances`,
 `noise_corrected_variance`, `spearman_brown`, `weighted_variance`. They are imported, not
 reimplemented, so the two phases cannot drift apart.
 
@@ -52,7 +52,7 @@ import numpy as np
 import pandas as pd
 
 from src.analysis import claim1_eval
-from src.analysis.e_platoon_ceiling import (
+from src.analysis.model_evaluation_platoon_ceiling import (
     noise_corrected_variance,
     reliability_from_variances,
     spearman_brown,
@@ -224,7 +224,7 @@ def split_half_from_halves(delta_a, delta_b):
     Route C's estimator, isolated from its data plumbing: Spearman across hitters between
     the two halves' differentials, stepped up to full length by Spearman-Brown.
 
-    Kept separate from `e_platoon_ceiling.split_half_reliability` (which builds the halves
+    Kept separate from `model_evaluation_platoon_ceiling.split_half_reliability` (which builds the halves
     from PA rows) precisely so the simulation can feed it synthetic halves and check the
     ESTIMATOR rather than the pipeline.
     """
@@ -310,9 +310,9 @@ def within_stand_rank_correlation(delta_obs, delta_pred, weight, stand):
     """
     E.5's within-stand weighted Spearman, as a pure array function.
 
-    `e_eval.platoon_decomposition` is the reference implementation and stays the one the
+    `model_evaluation_eval.platoon_decomposition` is the reference implementation and stays the one the
     committed artifacts are produced by. This is the same arithmetic without the pandas
-    frame rebuild, because the bootstrap calls it thousands of times. `tests/test_m_ceiling`
+    frame rebuild, because the bootstrap calls it thousands of times. `tests/test_measurement_ceiling`
     asserts the two agree to floating point on the real frame — a translation check, not a
     second estimator.
     """

@@ -4,7 +4,7 @@ E.11b — the committed MIN_EVAL_PA sweep, applied to the Phase D/E headline.
 Architecture plan §5 item 2 requires the eval-season censoring threshold to be varied and the
 result committed, "so the claim is shown to hold across a 3x swing in censoring rather than
 resting on the chosen frame". That sweep was built for the PHASE C headline
-(`c_report.min_eval_pa_sensitivity`, committed at `results/phase_c/c_min_eval_pa_sensitivity.csv`)
+(`baseline_ladder_report.min_eval_pa_sensitivity`, committed at `results/baseline_ladder/baseline_ladder_min_eval_pa_sensitivity.csv`)
 and hard-codes C.3-full against C.2. The headline is now E.11's gate verdict, and it had no sweep.
 This module supplies it.
 
@@ -19,7 +19,7 @@ Cheap by construction: predictions do not depend on the threshold, so nothing is
 model is re-run. Only the eval frame is rebuilt.
 
 READ-ONLY with respect to the model, and read-only with respect to every prior lane: this module
-imports `d5_report.compare` rather than reimplementing the paired comparison, so the sweep and
+imports `model_v1_ablation_report.compare` rather than reimplementing the paired comparison, so the sweep and
 the headline cannot drift apart in their sign conventions or their clustering.
 """
 
@@ -29,10 +29,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.analysis import c3_gbm as c3
-from src.analysis import c_report, claim1_eval as evaluation, d5_report
+from src.analysis import baseline_ladder_gbm as gbm
+from src.analysis import baseline_ladder_report, claim1_eval as evaluation, model_v1_ablation_report
 
-OUT_DIR = Path("results/phase_e")
+OUT_DIR = Path("results/model_evaluation")
 
 
 def sweep(pa_df, predictions, eval_season, label, seed=0,
@@ -50,27 +50,27 @@ def sweep(pa_df, predictions, eval_season, label, seed=0,
                                                     min_eval_pa=threshold)[0]
                   for name, prediction in predictions.items()}
         assert label in frames, f"the scored arm {label!r} is missing from the eval frames"
-        comparisons = d5_report.compare(frames, name=label, seed=seed)
+        comparisons = model_v1_ablation_report.compare(frames, name=label, seed=seed)
         comparisons.insert(0, "min_eval_pa", threshold)
         rows.append(comparisons)
 
         per_stratum = {}
         for stratum in sorted(comparisons["stratum"].unique()):
             gate = comparisons[comparisons["stratum"] == stratum]
-            against_c3 = gate[gate["opponent"] == "c3_gbm_full"]["rmse_favours_phase_d"]
+            against_gbm = gate[gate["opponent"] == "gbm_full"]["rmse_favours_model_v1"]
             per_stratum[stratum] = {
-                "rmse_gate_vs_c3_full": bool(against_c3.all()) if len(against_c3) else None,
-                "ordering_gate_vs_both": bool(gate["rank_favours_phase_d"].all()),
+                "rmse_gate_vs_gbm_full": bool(against_gbm.all()) if len(against_gbm) else None,
+                "ordering_gate_vs_both": bool(gate["rank_favours_model_v1"].all()),
                 "n_hitters": int(gate["n_hitters"].iloc[0]),
                 "n_batters": int(gate["n_batters"].iloc[0]),
                 # the low-stratum ordering margin is the number the thesis turns on, so it is
                 # surfaced per threshold rather than left inside the table
-                "rank_difference_vs_c3_full": float(
-                    gate[gate["opponent"] == "c3_gbm_full"]["rank_difference"].iloc[0]),
-                "rank_ci_low_vs_c3_full": float(
-                    gate[gate["opponent"] == "c3_gbm_full"]["ci_low_rank"].iloc[0]),
-                "rank_ci_high_vs_c3_full": float(
-                    gate[gate["opponent"] == "c3_gbm_full"]["ci_high_rank"].iloc[0]),
+                "rank_difference_vs_gbm_full": float(
+                    gate[gate["opponent"] == "gbm_full"]["rank_difference"].iloc[0]),
+                "rank_ci_low_vs_gbm_full": float(
+                    gate[gate["opponent"] == "gbm_full"]["ci_low_rank"].iloc[0]),
+                "rank_ci_high_vs_gbm_full": float(
+                    gate[gate["opponent"] == "gbm_full"]["ci_high_rank"].iloc[0]),
             }
         verdicts[str(threshold)] = per_stratum
 
@@ -79,10 +79,10 @@ def sweep(pa_df, predictions, eval_season, label, seed=0,
     # A verdict that flips is not a weaker claim, it is a claim about the filter.
     decisive = [verdicts[str(t)]["low"] for t in thresholds]
     stable = {
-        "rmse_gate_stable": len({v["rmse_gate_vs_c3_full"] for v in decisive}) == 1,
+        "rmse_gate_stable": len({v["rmse_gate_vs_gbm_full"] for v in decisive}) == 1,
         "ordering_gate_stable": len({v["ordering_gate_vs_both"] for v in decisive}) == 1,
         "low_stratum_n_hitters": [v["n_hitters"] for v in decisive],
-        "low_stratum_rank_difference": [v["rank_difference_vs_c3_full"] for v in decisive],
+        "low_stratum_rank_difference": [v["rank_difference_vs_gbm_full"] for v in decisive],
     }
     return table, {"thresholds": list(thresholds), "decisive_stratum": "low",
                    "by_threshold": verdicts, "stability": stable}
@@ -91,8 +91,8 @@ def sweep(pa_df, predictions, eval_season, label, seed=0,
 def main():
     parser = argparse.ArgumentParser(description="E.11b — MIN_EVAL_PA sweep on the D/E headline.")
     parser.add_argument("--predictions",
-                        default="results/phase_d/d5_predictions_d10_baseline.csv")
-    parser.add_argument("--label", default="e11_d10_baseline")
+                        default="results/model_v1/model_v1_predictions_rebuild_baseline.csv")
+    parser.add_argument("--label", default="min_pa_sweep_rebuild_baseline")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-season", type=int, default=2024)
@@ -102,27 +102,27 @@ def main():
     args = parser.parse_args()
 
     evaluation.assert_not_test_season(args.eval_season, final_run=args.final_run)
-    pa_df = c_report.load_targets(args.eval_targets)
-    params, _, _ = c_report.fit_and_describe(pa_df, args.eval_season, args.seed)
-    process_seasons = c3.season_process(
-        pd.read_parquet(args.pitch_events, columns=c_report.PITCH_COLUMNS))
-    predictions, _ = c_report.build_predictions(pa_df, args.eval_season, params,
+    pa_df = baseline_ladder_report.load_targets(args.eval_targets)
+    params, _, _ = baseline_ladder_report.fit_and_describe(pa_df, args.eval_season, args.seed)
+    process_seasons = gbm.season_process(
+        pd.read_parquet(args.pitch_events, columns=baseline_ladder_report.PITCH_COLUMNS))
+    predictions, _ = baseline_ladder_report.build_predictions(pa_df, args.eval_season, params,
                                                 process_seasons, seed=args.seed)
-    predictions[args.label] = d5_report.load_predictions(args.predictions)
+    predictions[args.label] = model_v1_ablation_report.load_predictions(args.predictions)
 
     table, verdict = sweep(pa_df, predictions, args.eval_season, args.label, seed=args.seed)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    table.to_csv(out_dir / "e11b_min_pa_sweep.csv", index=False)
-    (out_dir / "e11b_min_pa_sweep.json").write_text(json.dumps(verdict, indent=2))
+    table.to_csv(out_dir / "min_pa_sweep_b_min_pa_sweep.csv", index=False)
+    (out_dir / "min_pa_sweep_b_min_pa_sweep.json").write_text(json.dumps(verdict, indent=2))
     print(table[["min_eval_pa", "opponent", "stratum", "n_hitters", "rmse_difference",
                  "ci_low_rmse", "ci_high_rmse", "rank_difference", "ci_low_rank",
-                 "ci_high_rank", "rmse_favours_phase_d", "rank_favours_phase_d"]]
+                 "ci_high_rank", "rmse_favours_model_v1", "rank_favours_model_v1"]]
           .to_string(index=False, float_format="%.4f"))
     print()
     print(json.dumps(verdict["stability"], indent=2))
-    print(f"\nwrote {out_dir / 'e11b_min_pa_sweep.json'}")
+    print(f"\nwrote {out_dir / 'min_pa_sweep_b_min_pa_sweep.json'}")
 
 
 if __name__ == "__main__":

@@ -902,7 +902,7 @@
       "bip": 0.02
     }
   },
-  "arm": "d10_bilinear",
+  "arm": "rebuild_bilinear",
   "seeds": [
     0,
     1,

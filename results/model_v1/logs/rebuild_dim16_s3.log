@@ -22,4 +22,4 @@ epoch  20  train 0.99716  val 1.02673  ref 1.02673  lr 2.43e-06  318s (719 steps
 epoch  21  train 0.99708  val 1.02671  ref 1.02671  lr 2.43e-06  324s (719 steps)
 epoch  22  train 0.99709  val 1.02672  ref 1.02672  lr 7.29e-07  317s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.02669 at epoch 19; reference 1.02669; checkpoint results/checkpoints/d10_dim16_s3.pt
+best val loss 1.02669 at epoch 19; reference 1.02669; checkpoint results/checkpoints/rebuild_dim16_s3.pt

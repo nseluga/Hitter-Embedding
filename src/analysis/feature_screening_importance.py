@@ -309,14 +309,14 @@ def run_screen(labeled_path, params_path, out_dir, splits, seed=0, max_rows=None
     for head in HEADS:
         res = screen_head(df, X, params, splits, head, seed=seed)
         results.append(res)
-        importance_frame(res).to_csv(out / f"b2_{head}_importance.csv", index=False)
+        importance_frame(res).to_csv(out / f"feature_screening_{head}_importance.csv", index=False)
         beat = "beats" if res["val_metric"] < res["base_rate_metric"] else "FAILS"
         print(f"{head:6s} n_tr={res['n_train']:>8} n_val={res['n_val']:>8} "
               f"val={res['val_metric']:.4f} base={res['base_rate_metric']:.4f} [{beat} base rate]")
 
     table = decision_table(results)
-    table.to_csv(out / "b2_feature_decisions.csv", index=False)
-    (out / "b2_screen_summary.json").write_text(json.dumps(
+    table.to_csv(out / "feature_screening_feature_decisions.csv", index=False)
+    (out / "feature_screening_screen_summary.json").write_text(json.dumps(
         {r["head"]: {k: r[k] for k in ("task", "n_train", "n_val", "val_metric",
                                        "base_rate_metric", "best_iteration")} for r in results},
         indent=2))
@@ -333,7 +333,7 @@ def main():
     parser = argparse.ArgumentParser(description="Phase B.2 GBM feature screen (XGBoost + permutation + SHAP).")
     parser.add_argument("--labeled", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--params", default="src/features/context_vectorizer_params.json")
-    parser.add_argument("--out-dir", default="results/phase_b")
+    parser.add_argument("--out-dir", default="results/feature_screening")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-rows", type=int, default=None, help="subsample for a fast smoke run; omit for the real screen")
     args = parser.parse_args()

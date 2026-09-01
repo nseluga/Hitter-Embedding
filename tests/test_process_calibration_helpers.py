@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from src.analysis import provenance
-from src.analysis.f5_pooled import POOLED_HAND, pool_predictions, pooling_weights
+from src.analysis.process_calibration_pooled import POOLED_HAND, pool_predictions, pooling_weights
 
 
 def write_build(tmp_path, name, edges):
@@ -28,11 +28,11 @@ def test_manifest_digest_is_stable_and_content_sensitive(tmp_path):
 
 
 def test_stamp_carries_the_fields_a_reader_needs(tmp_path):
-    build = write_build(tmp_path, "d5", {"ev": [0, 1], "la": [0, 1], "spray": [0, 1]})
-    stamp = provenance.stamp(build, arm="d10_baseline", seeds=[0, 1], eval_season=2024)
+    build = write_build(tmp_path, "model_v1", {"ev": [0, 1], "la": [0, 1], "spray": [0, 1]})
+    stamp = provenance.stamp(build, arm="rebuild_baseline", seeds=[0, 1], eval_season=2024)
     assert stamp["train_seasons"] == [2015, 2016]
     assert stamp["quality_bin_edges_present"] == ["ev", "la", "spray"]
-    assert stamp["arm"] == "d10_baseline"
+    assert stamp["arm"] == "rebuild_baseline"
     assert stamp["eval_season"] == 2024
     assert len(stamp["manifest_sha256"]) == 64
 

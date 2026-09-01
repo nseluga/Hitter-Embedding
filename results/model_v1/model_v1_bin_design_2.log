@@ -5,7 +5,7 @@ equal_mass         within-cell var 0.143116  explained 0.5783  top EV span  15.1
 top_decile_split   within-cell var 0.145093  explained 0.5725  top EV span  12.80 mph  min cell     1  occupied  13049
 variance_min       within-cell var 0.148714  explained 0.5619  top EV span  11.80 mph  min cell     1  occupied  11344
 
-wrote results/phase_d/d5_bin_design.json
+wrote results/model_v1/model_v1_bin_design.json
 
 backoff exposure (share of in-play mass in cells below 30)
   equal_mass         4.2481%  cells   2322  vs shipped equal-mass +0.0000%

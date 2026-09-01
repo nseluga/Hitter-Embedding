@@ -1,13 +1,13 @@
 {
-  "arm": "d10_baseline",
+  "arm": "rebuild_baseline",
   "eval_season": 2024,
   "sources": {
     "per_seed_predictions": [
-      "results/phase_d/d5_predictions_d10_baseline_s0.csv",
-      "results/phase_d/d5_predictions_d10_baseline_s1.csv",
-      "results/phase_d/d5_predictions_d10_baseline_s2.csv",
-      "results/phase_d/d5_predictions_d10_baseline_s3.csv",
-      "results/phase_d/d5_predictions_d10_baseline_s4.csv"
+      "results/model_v1/model_v1_predictions_rebuild_baseline_s0.csv",
+      "results/model_v1/model_v1_predictions_rebuild_baseline_s1.csv",
+      "results/model_v1/model_v1_predictions_rebuild_baseline_s2.csv",
+      "results/model_v1/model_v1_predictions_rebuild_baseline_s3.csv",
+      "results/model_v1/model_v1_predictions_rebuild_baseline_s4.csv"
     ],
     "prediction_column": "pred_woba",
     "eval_targets": "data/processed/eval_targets_pa.parquet",
@@ -520,7 +520,7 @@
     "note": "architecture \u00a7243: a large share of the low stratum sits on the shared cold-start row, so the low-stratum number is substantially a statement about the context tower, not about the hitter embedding",
     "not_a_fix": "architecture \u00a72.1 line 124 \u2014 if calibration fails that is a reported limitation, not a rebuild. No remedy is proposed here."
   },
-  "not_e4": "E.4 measured the SLOPE of observed on predicted (0.529 low / 0.664 medium / 0.998 high / 0.841 pooled). This step measures INTERVAL HONESTY. They are different properties and can pass or fail independently.",
+  "not_calibration": "E.4 measured the SLOPE of observed on predicted (0.529 low / 0.664 medium / 0.998 high / 0.841 pooled). This step measures INTERVAL HONESTY. They are different properties and can pass or fail independently.",
   "assumptions": [
     "The C.2 posterior mean split is treated as the hitter's TRUE split. It is an estimate, shrunk toward the league split, so it is smoother than the truth; the probe therefore measures agreement with a shrunk target and is conservative about idiosyncratic hitters and generous about the league-average component.",
     "A LINEAR read-out is taken as the test of whether platoon information is present. A non-linear probe could find structure a ridge cannot, so a null probe bounds LINEARLY DECODABLE information only.",

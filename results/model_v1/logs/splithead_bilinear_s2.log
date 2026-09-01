@@ -15,4 +15,4 @@ epoch  13  train 1.00450  val 1.02706  ref 1.02706  lr 9.00e-05  57s (719 steps)
 epoch  14  train 1.00441  val 1.02744  ref 1.02744  lr 2.70e-05  50s (719 steps)
 epoch  15  train 1.00405  val 1.02701  ref 1.02701  lr 2.70e-05  51s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.02691 at epoch 12; reference 1.02691; checkpoint results/checkpoints/d9_bilinear_s2.pt
+best val loss 1.02691 at epoch 12; reference 1.02691; checkpoint results/checkpoints/splithead_bilinear_s2.pt

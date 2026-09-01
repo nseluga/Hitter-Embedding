@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.analysis import claim1_eval as ce, d5_report
+from src.analysis import claim1_eval as ce, model_v1_ablation_report
 
 
 def _frame(pred, woba, denominator, xwoba=None):
@@ -44,13 +44,13 @@ def test_removed_excess_is_pa_weighted():
     The heavy rows carry the bias. An unweighted mean would remove 0.035 here; the weighted
     one removes 0.049, and the difference is the whole tie-versus-loss reading.
     """
-    phase_d = _frame(pred=[0.31, 0.34, 0.33, 0.36], woba=[0.30, 0.30, 0.30, 0.30],
+    model_v1 = _frame(pred=[0.31, 0.34, 0.33, 0.36], woba=[0.30, 0.30, 0.30, 0.30],
                      denominator=[10, 500, 10, 500])
-    frames = {"d": phase_d, "c3_gbm_full": _frame(
+    frames = {"d": model_v1, "gbm_full": _frame(
         pred=[0.30, 0.30, 0.30, 0.30], woba=[0.30, 0.30, 0.30, 0.30],
         denominator=[10, 500, 10, 500])}
 
-    excess, table = d5_report.debiased_diagnostic(frames, "d")
+    excess, table = model_v1_ablation_report.debiased_diagnostic(frames, "d")
 
     # (10*.01 + 500*.04 + 10*.03 + 500*.06) / 1020
     assert np.isclose(excess, 0.0494117647), excess
@@ -60,13 +60,13 @@ def test_removed_excess_is_pa_weighted():
 
 def test_debiasing_zeroes_the_weighted_bias():
     """After the shift the weighted mean excess is zero -- that is what 'debiased' means."""
-    phase_d = _frame(pred=[0.32, 0.35, 0.34, 0.37], woba=[0.30, 0.31, 0.29, 0.33],
+    model_v1 = _frame(pred=[0.32, 0.35, 0.34, 0.37], woba=[0.30, 0.31, 0.29, 0.33],
                      denominator=[20, 300, 40, 600])
-    frames = {"d": phase_d, "c3_gbm_full": phase_d.assign(pred_woba=phase_d["woba"])}
+    frames = {"d": model_v1, "gbm_full": model_v1.assign(pred_woba=model_v1["woba"])}
 
-    excess, _ = d5_report.debiased_diagnostic(frames, "d")
-    shifted = phase_d["pred_woba"] - excess
-    residual = np.average(shifted - phase_d["woba"], weights=phase_d["denominator"])
+    excess, _ = model_v1_ablation_report.debiased_diagnostic(frames, "d")
+    shifted = model_v1["pred_woba"] - excess
+    residual = np.average(shifted - model_v1["woba"], weights=model_v1["denominator"])
 
     assert abs(residual) < 1e-12, residual
 
@@ -81,7 +81,7 @@ def test_second_target_scores_both_keys_and_drops_unestimated_groups():
                           denominator=[10, 500, 10, 500], xwoba=[0.30, 0.32, 0.28, 0.34])
     unestimated = _frame(pred=[0.31, 0.34], woba=[0.30, 0.31], denominator=[10, 500])
 
-    table = d5_report.second_target_table({"has_xwoba": scored_frame, "none": unestimated})
+    table = model_v1_ablation_report.second_target_table({"has_xwoba": scored_frame, "none": unestimated})
 
     assert set(table["target"]) == set(ce.TARGETS), "a target went unscored"
     with_key = table[(table["model"] == "has_xwoba") & (table["target"] == "xwoba")]
@@ -95,11 +95,11 @@ def test_second_target_scores_both_keys_and_drops_unestimated_groups():
 
 def test_caller_frame_is_not_mutated():
     """`frames` is read again by the gate verdicts; a shifted column there would poison them."""
-    phase_d = _frame(pred=[0.33, 0.36], woba=[0.30, 0.30], denominator=[50, 400])
-    frames = {"d": phase_d, "c3_gbm_full": phase_d.assign(pred_woba=phase_d["woba"])}
-    before = phase_d["pred_woba"].copy()
+    model_v1 = _frame(pred=[0.33, 0.36], woba=[0.30, 0.30], denominator=[50, 400])
+    frames = {"d": model_v1, "gbm_full": model_v1.assign(pred_woba=model_v1["woba"])}
+    before = model_v1["pred_woba"].copy()
 
-    d5_report.debiased_diagnostic(frames, "d")
+    model_v1_ablation_report.debiased_diagnostic(frames, "d")
 
     pd.testing.assert_series_equal(frames["d"]["pred_woba"], before)
 
@@ -111,13 +111,13 @@ def test_power_restatement_recovers_the_shipped_arms_factor():
     a formula would drop the batter clustering and shrink the factor.
     """
     comparisons = pd.DataFrame([
-        {"opponent": "c3_gbm_full", "stratum": "low", "n_batters": 239,
+        {"opponent": "gbm_full", "stratum": "low", "n_batters": 239,
          "rank_difference": 0.09080980514283296,
          "ci_low_rank": -0.045614429019148604, "ci_high_rank": 0.2236977794028661},
-        {"opponent": "c2_bivariate", "stratum": "low", "n_batters": 239,
+        {"opponent": "eb_bivariate", "stratum": "low", "n_batters": 239,
          "rank_difference": 0.1184, "ci_low_rank": -0.0375, "ci_high_rank": 0.2716},
     ])
-    table = d5_report.power_restatement(comparisons)
+    table = model_v1_ablation_report.power_restatement(comparisons)
 
     assert list(table["stratum"]) == ["low"], "the other opponent must not be pooled in"
     row = table.iloc[0]
@@ -139,7 +139,7 @@ def test_trained_row_spread_reverses_when_cold_start_rows_come_out():
                                       categories=list(ce.STRATUM_NAMES))
     vocabulary = {0, 2, 4, 5}  # batters 1 and 3 are cold start, and sit in the low stratum
 
-    table = d5_report.trained_row_spread(frame, vocabulary).set_index("stratum")
+    table = model_v1_ablation_report.trained_row_spread(frame, vocabulary).set_index("stratum")
     low = table.loc["low"]
     assert low["n_cold_start"] == 2 and low["cold_start_share"] == pytest.approx(0.5)
     assert low["sd_trained"] > low["sd_pooled"], \

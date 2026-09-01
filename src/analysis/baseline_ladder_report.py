@@ -1,9 +1,9 @@
 """
 Phase C report — every Phase C number in one committed, seeded command.
 
-Follows the b1_report.py pattern and exists for the same reason: until now Phase C
+Follows the feature_screening_report.py pattern and exists for the same reason: until now Phase C
 figures lived in transcripts, which is not a reproducible record (§6 — numbers are
-seeded, config-driven, with the config committed). Writes results/phase_c/.
+seeded, config-driven, with the config committed). Writes results/baseline_ladder/.
 
 What it produces:
   1. the fitted C.2 prior per batter type, with a bootstrap CI on rho
@@ -12,7 +12,7 @@ What it produces:
   4. the paired bootstraps that are the actual head-to-head claims — C.2 vs C.1 in
      both variants (raw and bucketed), C.3 vs C.2, and C.3's process ablation — on
      BOTH frozen metrics: RMSE per comparison, and rank correlation in one table
-     (`c_rank_paired.csv`)
+     (`baseline_ladder_rank_paired.csv`)
   5. the diagnostics that keep those claims honest: a label-shuffle null, per-stratum
      prediction bias, an oracle level-corrected bound, exposure-talent correlation,
      and a decode-one-hitter table for eyeballing against the source
@@ -24,18 +24,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.analysis import c1_trailing as c1
-from src.analysis import c2_bivariate_eb as c2
-from src.analysis import c3_gbm as c3
+from src.analysis import baseline_ladder_trailing as trailing
+from src.analysis import baseline_ladder_bivariate_eb as eb
+from src.analysis import baseline_ladder_gbm as gbm
 from src.analysis import claim1_eval as evaluation
 
-# the only columns c3.season_process reads; the labeled table is 340MB and the
+# the only columns gbm.season_process reads; the labeled table is 340MB and the
 # rest of it is context the hitter-level baselines have no use for
 PITCH_COLUMNS = ["batter", "season", "p_throws", "pitch_type", "strikes",
                  "swing", "contact", "ev", "la", "spray"]
 
 DEFAULT_EVAL_SEASON = 2024
-OUT_DIR = Path("results/phase_c")
+OUT_DIR = Path("results/baseline_ladder")
 
 # The Book p. 157 (via Tango, insidethebook.com 2009), converted to the rho it is
 # equivalent to via n*_d = n*_side / (2(1 - rho)) with n*_side = 226 (B.1, hitters
@@ -46,7 +46,7 @@ OUT_DIR = Path("results/phase_c")
 # cannot be reproduced faithfully and a head-to-head against it would be a comparison
 # with a reconstruction, not with the source. The check that remains is in parameter
 # space — our rho and implied split constant against the published ones, printed below
-# and committed in c2_prior_parameters.csv — which answers "are we in the right
+# and committed in eb_prior_parameters.csv — which answers "are we in the right
 # ballpark" without claiming to have run their model. The paired bootstrap that used
 # to score this row was removed for that reason.
 BOOK_IMPLIED_RHO = {"R": 0.949, "L": 0.887, "S": 0.949}
@@ -63,14 +63,14 @@ def load_targets(path):
 
 def fit_and_describe(pa_df, eval_season, seed):
     """Fit the C.2 prior and return (params, parameter table, rho CIs)."""
-    params = c2.fit(pa_df, eval_season)
-    rho_ci = c2.bootstrap_rho(pa_df, eval_season, seed=seed)
+    params = eb.fit(pa_df, eval_season)
+    rho_ci = eb.bootstrap_rho(pa_df, eval_season, seed=seed)
 
     rows = []
     for batter_type, record in params.items():
-        n_star_split, tau2_split = c2.implied_split_constant(record)
+        n_star_split, tau2_split = eb.implied_split_constant(record)
         point, low, high, at_bound = rho_ci.get(batter_type, (record["rho"], np.nan, np.nan, np.nan))
-        for side_index, hand in enumerate(c2.SIDES):
+        for side_index, hand in enumerate(eb.SIDES):
             tau2 = record["tau2"][side_index]
             rows.append({
                 "batter_type": batter_type,
@@ -90,7 +90,7 @@ def fit_and_describe(pa_df, eval_season, seed):
                 "rho_unclipped": record["rho_unclipped"],
                 "tau2_split_derived": tau2_split,
                 "n_star_split_implied": n_star_split,
-                "book_split_constant": c2.BOOK_SPLIT_CONSTANT.get(batter_type, np.nan),
+                "book_split_constant": eb.BOOK_SPLIT_CONSTANT.get(batter_type, np.nan),
                 "book_implied_rho": BOOK_IMPLIED_RHO.get(batter_type, np.nan),
             })
     return params, pd.DataFrame(rows), rho_ci
@@ -99,28 +99,28 @@ def fit_and_describe(pa_df, eval_season, seed):
 def build_predictions(pa_df, eval_season, params, process_seasons, seed=0):
     """Every Phase C baseline, plus the two reference rows, on one eval frame."""
     predictions = {
-        "c2_bivariate": c2.predict(pa_df, eval_season, params=params),
-        "c2_book_rho_reference": c2.predict(pa_df, eval_season, params=params,
+        "eb_bivariate": eb.predict(pa_df, eval_season, params=params),
+        "eb_book_rho_reference": eb.predict(pa_df, eval_season, params=params,
                                             rho_override=BOOK_IMPLIED_RHO),
-        "c1_raw": c1.predict(pa_df, eval_season, variant="raw"),
-        "c1_bucketed": c1.predict(pa_df, eval_season, variant="bucketed"),
+        "trailing_raw": trailing.predict(pa_df, eval_season, variant="raw"),
+        "trailing_bucketed": trailing.predict(pa_df, eval_season, variant="bucketed"),
         # C.1-xwOBA (D5-R8): the same projection machinery reading Statcast's OWN xwOBA field
         # rather than `V` marginalised over spray. A rung built from `V` would inherit `V`'s
         # defects and stop being an external incumbent, which is the only thing a baseline is
         # for. Scored against realized wOBA like every other rung -- only the trailing record
         # it projects from differs.
-        "c1_xwoba": c1.predict(pa_df, eval_season, variant="bucketed", measure="xwoba"),
-        "no_info_league_average": c1.predict(pa_df, eval_season, variant="bucketed",
+        "trailing_xwoba": trailing.predict(pa_df, eval_season, variant="bucketed", measure="xwoba"),
+        "no_info_league_average": trailing.predict(pa_df, eval_season, variant="bucketed",
                                              buckets=NO_INFO_BUCKETS),
     }
     # C.3 in both feature sets: "outcome" sees exactly what C.1/C.2 saw, "full"
     # adds process and its context slices. The pair is the ablation.
     models = {}
     for feature_set in ("outcome", "full"):
-        prediction, model, n_rounds = c3.predict(pa_df, process_seasons, eval_season,
+        prediction, model, n_rounds = gbm.predict(pa_df, process_seasons, eval_season,
                                                  feature_set=feature_set, seed=seed,
                                                  return_model=True)
-        predictions[f"c3_gbm_{feature_set}"] = prediction
+        predictions[f"gbm_{feature_set}"] = prediction
         models[feature_set] = (model, n_rounds)
     return predictions, models
 
@@ -153,7 +153,7 @@ def shuffle_null_table(pa_df, process_seasons, reference_frame, eval_season, see
     and scores each against the same reference, giving the real margin a null to
     be judged against rather than an eyeballed "that looks big".
     """
-    nulls = c3.shuffle_null(pa_df, process_seasons, eval_season)
+    nulls = gbm.shuffle_null(pa_df, process_seasons, eval_season)
     differences = []
     for null_seed, prediction in nulls.items():
         frame, _ = evaluation.build_eval_frame(pa_df, prediction, eval_season)
@@ -196,12 +196,12 @@ def min_eval_pa_sensitivity(pa_df, predictions, eval_season, seed,
         frames = {name: evaluation.build_eval_frame(pa_df, prediction, eval_season,
                                                     min_eval_pa=threshold)[0]
                   for name, prediction in predictions.items()}
-        c3, c2 = frames["c3_gbm_full"], frames["c2_bivariate"]
-        rmse = evaluation.paired_rmse_difference(c3, c2, seed=seed).set_index("stratum")
-        rank = evaluation.paired_rank_difference(c3, c2, seed=seed).set_index("stratum")
-        oracle = evaluation.paired_rmse_difference(oracle_debias(c3), oracle_debias(c2),
+        gbm, eb = frames["gbm_full"], frames["eb_bivariate"]
+        rmse = evaluation.paired_rmse_difference(gbm, eb, seed=seed).set_index("stratum")
+        rank = evaluation.paired_rank_difference(gbm, eb, seed=seed).set_index("stratum")
+        oracle = evaluation.paired_rmse_difference(oracle_debias(gbm), oracle_debias(eb),
                                                   seed=seed).set_index("stratum")
-        bias = prediction_bias({k: frames[k] for k in ("c3_gbm_full", "c2_bivariate")})
+        bias = prediction_bias({k: frames[k] for k in ("gbm_full", "eb_bivariate")})
         bias = bias.set_index(["model", "stratum"])["bias"]
 
         for stratum in rmse.index:
@@ -213,12 +213,12 @@ def min_eval_pa_sensitivity(pa_df, predictions, eval_season, seed,
                 "rmse_difference": reported,
                 "rmse_ci_low": rmse.loc[stratum, "ci_low"],
                 "rmse_ci_high": rmse.loc[stratum, "ci_high"],
-                "rmse_favours_c3": rmse.loc[stratum, "favours_a_share"],
+                "rmse_favours_gbm": rmse.loc[stratum, "favours_a_share"],
                 "rank_difference": rank.loc[stratum, "rank_difference"],
                 "rank_ci_low": rank.loc[stratum, "ci_low"],
                 "rank_ci_high": rank.loc[stratum, "ci_high"],
-                "bias_c2": bias.get(("c2_bivariate", stratum), np.nan),
-                "bias_c3": bias.get(("c3_gbm_full", stratum), np.nan),
+                "bias_eb": bias.get(("eb_bivariate", stratum), np.nan),
+                "bias_gbm": bias.get(("gbm_full", stratum), np.nan),
                 "oracle_share_level": 1 - debiased / reported if reported else np.nan,
             })
     return pd.DataFrame(rows)
@@ -295,7 +295,7 @@ def exposure_talent_correlation(frame):
     how far the assumption is from holding. Reported, not corrected for.
     """
     rows = []
-    for hand in c2.SIDES:
+    for hand in eb.SIDES:
         part = frame[frame["p_throws"] == hand]
         rows.append({
             "vs_hand": hand,
@@ -312,13 +312,13 @@ def decode_sample(frames, pa_df, eval_season, n_each=2, seed=0):
     join and alignment bugs where every column is individually well formed but
     describes the wrong hitter.
     """
-    base = frames["c2_bivariate"][evaluation.KEY + ["prior_pa", "stratum", "pa", "woba"]].copy()
+    base = frames["eb_bivariate"][evaluation.KEY + ["prior_pa", "stratum", "pa", "woba"]].copy()
     for name, frame in frames.items():
         base = base.merge(frame[evaluation.KEY + ["pred_woba"]].rename(columns={"pred_woba": name}),
                           on=evaluation.KEY, how="left")
 
-    window = c2._fitting_window(pa_df, eval_season, c2.TRAILING_SEASONS)
-    pairs = c2.to_pairs(c2.side_observations(window))
+    window = eb._fitting_window(pa_df, eval_season, eb.TRAILING_SEASONS)
+    pairs = eb.to_pairs(eb.side_observations(window))
     base = base.merge(pairs, on="batter", how="left")
 
     rng = np.random.default_rng(seed)
@@ -361,11 +361,11 @@ def main():
         print(f"  type {batter_type}: rho {point:.3f} 95% CI [{low:.3f}, {high:.3f}] "
               f"vs Book-implied {book:.3f} -> {verdict}  [{at_bound:.0%} of resamples at bound]")
 
-    process_seasons = c3.season_process(
+    process_seasons = gbm.season_process(
         pd.read_parquet(args.pitch_events, columns=PITCH_COLUMNS))
-    predictions, c3_models = build_predictions(pa_df, args.eval_season, params,
+    predictions, gbm_models = build_predictions(pa_df, args.eval_season, params,
                                                process_seasons, seed=args.seed)
-    for feature_set, (_, n_rounds) in c3_models.items():
+    for feature_set, (_, n_rounds) in gbm_models.items():
         print(f"C.3 [{feature_set}]: {n_rounds} boosting rounds "
               f"(early-stopped on target season {args.eval_season - 1})")
 
@@ -375,35 +375,35 @@ def main():
 
     print(f"\ncoverage: {json.dumps(coverage)}")
 
-    paired = evaluation.paired_rmse_difference(frames["c2_bivariate"], frames["c1_bucketed"],
+    paired = evaluation.paired_rmse_difference(frames["eb_bivariate"], frames["trailing_bucketed"],
                                                seed=args.seed)
     print("\npaired bootstrap: C.2 bivariate minus C.1 bucketed (negative favours C.2)")
     print(paired.to_string(index=False, float_format="%.5f"))
 
     # C.1 raw is the same trailing record with no shrinkage at all, so this pair prices
     # regularization itself rather than the quality of it — the step C.1 bucketed splits in half
-    paired_raw = evaluation.paired_rmse_difference(frames["c2_bivariate"], frames["c1_raw"],
+    paired_raw = evaluation.paired_rmse_difference(frames["eb_bivariate"], frames["trailing_raw"],
                                                    seed=args.seed)
     print("\npaired bootstrap: C.2 bivariate minus C.1 raw (negative favours C.2)")
     print(paired_raw.to_string(index=False, float_format="%.5f"))
 
     # the two head-to-heads C.3 exists to settle: does a GBM beat the EB incumbent,
     # and does giving it process features (rather than the same inputs C.2 had) help
-    paired_c3 = evaluation.paired_rmse_difference(frames["c3_gbm_full"],
-                                                  frames["c2_bivariate"], seed=args.seed)
+    paired_gbm = evaluation.paired_rmse_difference(frames["gbm_full"],
+                                                  frames["eb_bivariate"], seed=args.seed)
     print("\npaired bootstrap: C.3 full minus C.2 bivariate (negative favours C.3)")
-    print(paired_c3.to_string(index=False, float_format="%.5f"))
+    print(paired_gbm.to_string(index=False, float_format="%.5f"))
 
-    paired_c3_ablation = evaluation.paired_rmse_difference(frames["c3_gbm_full"],
-                                                           frames["c3_gbm_outcome"], seed=args.seed)
+    paired_gbm_ablation = evaluation.paired_rmse_difference(frames["gbm_full"],
+                                                           frames["gbm_outcome"], seed=args.seed)
     print("\npaired bootstrap: C.3 full minus C.3 outcome-only (negative favours process features)")
-    print(paired_c3_ablation.to_string(index=False, float_format="%.5f"))
+    print(paired_gbm_ablation.to_string(index=False, float_format="%.5f"))
 
-    shuffle = shuffle_null_table(pa_df, process_seasons, frames["c2_bivariate"],
-                                 args.eval_season, args.seed, paired_c3)
+    shuffle = shuffle_null_table(pa_df, process_seasons, frames["eb_bivariate"],
+                                 args.eval_season, args.seed, paired_gbm)
     print("\nlabel-shuffle null: same fitting procedure, hitter->target link destroyed")
     print(shuffle.to_string(index=False, float_format="%.5f"))
-    real_low = paired_c3[paired_c3["stratum"] == "low"]["rmse_difference"].iat[0]
+    real_low = paired_gbm[paired_gbm["stratum"] == "low"]["rmse_difference"].iat[0]
     null_low = shuffle[shuffle["stratum"] == "low"]
     print(f"  C.3 full's low-stratum margin {real_low:+.5f} vs a null of "
           f"{null_low['mean_difference'].iat[0]:+.5f} "
@@ -413,27 +413,27 @@ def main():
 
     # how much of C.3's margin is the exposure-conditional level C.2 cannot express?
     # (decision log 2026-07-28 — the confound is reported, not corrected)
-    debiased = evaluation.paired_rmse_difference(oracle_debias(frames["c3_gbm_full"]),
-                                                 oracle_debias(frames["c2_bivariate"]),
+    debiased = evaluation.paired_rmse_difference(oracle_debias(frames["gbm_full"]),
+                                                 oracle_debias(frames["eb_bivariate"]),
                                                  seed=args.seed)
     print("\nORACLE bound (peeks at actuals, never a baseline): C.3 full minus C.2, "
           "both level-corrected")
     print(debiased.to_string(index=False, float_format="%.5f"))
-    reported_low = paired_c3[paired_c3["stratum"] == "low"]["rmse_difference"].iat[0]
+    reported_low = paired_gbm[paired_gbm["stratum"] == "low"]["rmse_difference"].iat[0]
     debiased_low = debiased[debiased["stratum"] == "low"]["rmse_difference"].iat[0]
     print(f"  low stratum: {1 - debiased_low / reported_low:.0%} of C.3's reported margin "
           "is the level correction, not ordering")
 
     # the same head-to-heads on the ORDERING metric, which Layer 2 actually consumes
     rank_paired = rank_paired_table(frames, {
-        "c3_full_vs_c2": ("c3_gbm_full", "c2_bivariate"),
-        "c3_full_vs_c3_outcome": ("c3_gbm_full", "c3_gbm_outcome"),
-        "c2_vs_c1_bucketed": ("c2_bivariate", "c1_bucketed"),
-        "c2_vs_c1_raw": ("c2_bivariate", "c1_raw"),
+        "gbm_full_vs_eb": ("gbm_full", "eb_bivariate"),
+        "gbm_full_vs_gbm_outcome": ("gbm_full", "gbm_outcome"),
+        "eb_vs_trailing_bucketed": ("eb_bivariate", "trailing_bucketed"),
+        "eb_vs_trailing_raw": ("eb_bivariate", "trailing_raw"),
     }, args.seed)
     print("\npaired bootstrap on RANK CORRELATION (positive favours A; batters resampled)")
     print(rank_paired.to_string(index=False, float_format="%.4f"))
-    headline = rank_paired[(rank_paired["comparison"] == "c3_full_vs_c2")
+    headline = rank_paired[(rank_paired["comparison"] == "gbm_full_vs_eb")
                            & (rank_paired["stratum"] == "low")].iloc[0]
     print(f"  low stratum ordering: C.3 full {headline['rank_a']:.3f} vs C.2 "
           f"{headline['rank_b']:.3f}, difference {headline['rank_difference']:+.3f} "
@@ -456,11 +456,11 @@ def main():
     print("\nprediction bias by stratum (mean predicted minus mean actual, PA-weighted)")
     print(bias.pivot(index="model", columns="stratum", values="bias").to_string(float_format="%.4f"))
 
-    importance = c3.feature_importance(c3_models["full"][0], "full")
+    importance = gbm.feature_importance(gbm_models["full"][0], "full")
     print("\nC.3 gain importance (in-sample, interpretation only — the ablation is the evidence)")
     print(importance.head(12).to_string(index=False, float_format="%.4f"))
 
-    exposure = exposure_talent_correlation(frames["c2_bivariate"])
+    exposure = exposure_talent_correlation(frames["eb_bivariate"])
     print("\nexposure-talent correlation (EB exchangeability check, reported not corrected)")
     print(exposure.to_string(index=False, float_format="%.4f"))
 
@@ -470,21 +470,21 @@ def main():
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    parameter_table.to_csv(out_dir / "c2_prior_parameters.csv", index=False)
-    scored.to_csv(out_dir / "c_claim1_scores.csv", index=False)
-    paired.to_csv(out_dir / "c2_vs_c1_bucketed_paired.csv", index=False)
-    paired_raw.to_csv(out_dir / "c2_vs_c1_raw_paired.csv", index=False)
-    exposure.to_csv(out_dir / "c2_exposure_talent_correlation.csv", index=False)
-    decoded.to_csv(out_dir / "c_decode_sample.csv", index=False)
-    paired_c3.to_csv(out_dir / "c3_vs_c2_paired.csv", index=False)
-    paired_c3_ablation.to_csv(out_dir / "c3_process_ablation_paired.csv", index=False)
-    rank_paired.to_csv(out_dir / "c_rank_paired.csv", index=False)
-    sensitivity.to_csv(out_dir / "c_min_eval_pa_sensitivity.csv", index=False)
-    importance.to_csv(out_dir / "c3_feature_importance.csv", index=False)
-    shuffle.to_csv(out_dir / "c3_shuffle_null.csv", index=False)
-    bias.to_csv(out_dir / "c_prediction_bias.csv", index=False)
-    debiased.to_csv(out_dir / "c3_vs_c2_oracle_debiased.csv", index=False)
-    (out_dir / "c_coverage.json").write_text(json.dumps(coverage, indent=2))
+    parameter_table.to_csv(out_dir / "eb_prior_parameters.csv", index=False)
+    scored.to_csv(out_dir / "baseline_ladder_claim1_scores.csv", index=False)
+    paired.to_csv(out_dir / "eb_vs_trailing_bucketed_paired.csv", index=False)
+    paired_raw.to_csv(out_dir / "eb_vs_trailing_raw_paired.csv", index=False)
+    exposure.to_csv(out_dir / "eb_exposure_talent_correlation.csv", index=False)
+    decoded.to_csv(out_dir / "baseline_ladder_decode_sample.csv", index=False)
+    paired_gbm.to_csv(out_dir / "gbm_vs_eb_paired.csv", index=False)
+    paired_gbm_ablation.to_csv(out_dir / "gbm_process_ablation_paired.csv", index=False)
+    rank_paired.to_csv(out_dir / "baseline_ladder_rank_paired.csv", index=False)
+    sensitivity.to_csv(out_dir / "baseline_ladder_min_eval_pa_sensitivity.csv", index=False)
+    importance.to_csv(out_dir / "gbm_feature_importance.csv", index=False)
+    shuffle.to_csv(out_dir / "gbm_shuffle_null.csv", index=False)
+    bias.to_csv(out_dir / "baseline_ladder_prediction_bias.csv", index=False)
+    debiased.to_csv(out_dir / "gbm_vs_eb_oracle_debiased.csv", index=False)
+    (out_dir / "baseline_ladder_coverage.json").write_text(json.dumps(coverage, indent=2))
     print(f"\nwrote 14 files to {out_dir}")
 
 

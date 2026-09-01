@@ -244,7 +244,7 @@ fitting tables (count-offset take surface)
 [ 1449.4s] probe LHB vs RHP: 1475 pitchers
 [ 1461.0s] probe RHB vs RHP: 1481 pitchers
 
-wrote results/phase_d/d5_step3_knobs.json
+wrote results/model_v1/model_v1_step3_knobs.json
 
 probe sweep (row 0, unscored)
              field              m6             m12             m24      offsets_m6      nosplit_m6

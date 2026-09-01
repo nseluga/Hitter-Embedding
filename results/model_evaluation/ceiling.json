@@ -4,14 +4,14 @@
   "eval_season": 2024,
   "read_only": true,
   "sources": {
-    "e5_frame": "results/phase_e/e5_platoon_frame.csv",
-    "e5_frame_producer": "src/analysis/e_eval.py:platoon_frame",
-    "c2_prior_parameters": "results/phase_c/c2_prior_parameters.csv",
+    "platoon_frame": "results/model_evaluation/platoon_frame.csv",
+    "platoon_frame_producer": "src/analysis/model_evaluation_eval.py:platoon_frame",
+    "eb_prior_parameters": "results/baseline_ladder/eb_prior_parameters.csv",
     "pa_level_eval_targets": "data/processed/eval_targets_pa.parquet",
-    "e5_reported_within_stand_rank_corr": "results/phase_e/e_report.json -> e5_platoon.decomposition",
+    "platoon_reported_within_stand_rank_corr": "results/model_evaluation/model_evaluation_report.json -> platoon.decomposition",
     "withdrawn_claim": "docs/decision-log.md 2026-08-18 (81.7% vs 10.9%), withdrawn 2026-08-19 and corrected in Part 2 here"
   },
-  "c2_components_used": {
+  "eb_components_used": {
     "L": {
       "tau2_split": 0.0007322758887773,
       "tau_split": 0.027060596607933463,
@@ -52,22 +52,22 @@
   "per_pa_variance_cross_check": {
     "L_vs_L": {
       "realized_2024": 0.24080449889830827,
-      "c2_sigma2_within_pa": 0.234807028315911,
+      "eb_sigma2_within_pa": 0.234807028315911,
       "ratio": 1.0255421254866708
     },
     "L_vs_R": {
       "realized_2024": 0.2694324666129713,
-      "c2_sigma2_within_pa": 0.2688982792863081,
+      "eb_sigma2_within_pa": 0.2688982792863081,
       "ratio": 1.0019865777054469
     },
     "R_vs_L": {
       "realized_2024": 0.26628528803612195,
-      "c2_sigma2_within_pa": 0.2768593527887524,
+      "eb_sigma2_within_pa": 0.2768593527887524,
       "ratio": 0.9618070885230356
     },
     "R_vs_R": {
       "realized_2024": 0.25660370396681237,
-      "c2_sigma2_within_pa": 0.2602648778769718,
+      "eb_sigma2_within_pa": 0.2602648778769718,
       "ratio": 0.9859328929050117
     }
   },
@@ -129,10 +129,10 @@
         "ceiling_rank_corr_unweighted": 0.2646763883268086
       }
     ],
-    "e5_within_stand_rank_corr_recomputed": 0.14626474805407283,
-    "e5_within_stand_rank_corr_reported": 0.14626474805407289,
+    "platoon_within_stand_rank_corr_recomputed": 0.14626474805407283,
+    "platoon_within_stand_rank_corr_reported": 0.14626474805407289,
     "recomputation_matches_report": true,
-    "e5_within_stand_rank_corr_by_stand": {
+    "platoon_within_stand_rank_corr_by_stand": {
       "L": 0.22570916212303577,
       "R": 0.039417885242445196
     },
@@ -184,19 +184,19 @@
     ],
     "reliability_route_agreement": {
       "L": {
-        "c2_derived_reliability": 0.15731782286346405,
+        "eb_derived_reliability": 0.15731782286346405,
         "split_half_reliability": -0.36621057399509377,
         "disagreement_factor": NaN,
         "agree_within_1_5x": false
       },
       "R": {
-        "c2_derived_reliability": 0.1051117498440746,
+        "eb_derived_reliability": 0.1051117498440746,
         "split_half_reliability": 0.1017869188076163,
         "disagreement_factor": 1.0326646201241483,
         "agree_within_1_5x": true
       },
       "pooled": {
-        "c2_derived_reliability": 0.12644230777528392,
+        "eb_derived_reliability": 0.12644230777528392,
         "split_half_reliability": -0.07543232469070198,
         "disagreement_factor": NaN,
         "agree_within_1_5x": false
@@ -204,7 +204,7 @@
     },
     "adopt_a_single_reliability": false,
     "adoption_note": "the two routes DISAGREE by more than 1.5x. Both are reported and NEITHER is adopted, per spec \u00a712.5. Any downstream reading of E.5 must carry both ceilings.",
-    "decomposition_from_e_eval": {
+    "decomposition_from_model_evaluation_eval": {
       "delta_obs": {
         "variance": 0.00470881178875325,
         "between_stand": 0.0005131826955664018,
@@ -254,8 +254,8 @@
         "noise_corrected_variance_is_positive": false,
         "sd_obs_within_stand_true": NaN,
         "mean_sampling_var_weighted": 0.003922478896463031,
-        "tau_split_c2": 0.027060596607933463,
-        "ratio_vs_c2": 0.5683014529458912,
+        "tau_split_eb": 0.027060596607933463,
+        "ratio_vs_eb": 0.5683014529458912,
         "ratio_vs_realized_true": NaN,
         "sd_obs_within_stand_raw_aweights": 0.0625352786371206,
         "sd_pred_within_stand_aweights": 0.015429417477553513,
@@ -271,8 +271,8 @@
         "noise_corrected_variance_is_positive": true,
         "sd_obs_within_stand_true": 0.014985788272095407,
         "mean_sampling_var_weighted": 0.0041868010431916,
-        "tau_split_c2": 0.022175958079054894,
-        "ratio_vs_c2": 0.15517229936636187,
+        "tau_split_eb": 0.022175958079054894,
+        "ratio_vs_eb": 0.15517229936636187,
         "ratio_vs_realized_true": 0.22962385049751152,
         "sd_obs_within_stand_raw_aweights": 0.06656075264821511,
         "sd_pred_within_stand_aweights": 0.003448480925904214,
@@ -280,7 +280,7 @@
         "ratio_vs_realized_true_aweights": 0.22097805252022032
       }
     ],
-    "asymmetry_vs_c2": 3.662389841914575,
+    "asymmetry_vs_eb": 3.662389841914575,
     "asymmetry_vs_realized_true": NaN,
     "asymmetry_vs_realized_true_aweights": NaN,
     "in_session_uncorrected": {
@@ -313,7 +313,7 @@
       "held": true,
       "rule": "held if each ceiling is within 0.10 of its expectation"
     },
-    "part1_e5_is_40_to_55_percent_of_ceiling": {
+    "part1_platoon_is_40_to_55_percent_of_ceiling": {
       "expected": [
         0.4,
         0.55
@@ -332,7 +332,7 @@
     "part3_asymmetry_survives_correction": {
       "expected": "the LHB/RHB recovery ratio stays near 3x after noise correction",
       "observed": {
-        "asymmetry_vs_c2": 3.662389841914575,
+        "asymmetry_vs_eb": 3.662389841914575,
         "asymmetry_vs_realized_true": NaN,
         "asymmetry_vs_realized_true_aweights": NaN
       },
@@ -349,7 +349,7 @@
     "ceiling ~= sqrt(reliability) is the Pearson attenuation bound; it is applied to a WEIGHTED SPEARMAN correlation, which it bounds only approximately. Rank correlations are typically slightly lower than Pearson for the same signal, so using it as the ceiling is mildly conservative against the model.",
     "delta_pred is treated as noise-free (it is a deterministic model output), so all attenuation is charged to the observed side.",
     "Stand in the E.5 frame is the modal batting side in 2024, so switch hitters are assigned to whichever C.2 batter_type they batted from more often; C.2's separate S row is not used. 2024 switch hitters are a small minority of the 545.",
-    "All weighted variances use the POPULATION form (np.average of squared deviations), matching e_eval.platoon_decomposition, so the corrected share in Part 2 is directly comparable to the 10.9% it supersedes. np.cov's aweights bias-corrected form is reported alongside in Part 3; within a stand the two differ by well under 1% and the LHB negative sign holds under both.",
+    "All weighted variances use the POPULATION form (np.average of squared deviations), matching model_evaluation_eval.platoon_decomposition, so the corrected share in Part 2 is directly comparable to the 10.9% it supersedes. np.cov's aweights bias-corrected form is reported alongside in Part 3; within a stand the two differ by well under 1% and the LHB negative sign holds under both.",
     "The between-stand main effect's own sampling variance is treated as negligible (two cells of 221 and 324 hitters) and is not subtracted in Part 2.",
     "The split-half route splits on game_pk parity, which keeps within-game correlation inside a half; Spearman-Brown assumes the two halves are parallel measurements of equal length, which odd/even games approximately are."
   ]

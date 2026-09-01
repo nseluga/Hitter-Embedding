@@ -7,7 +7,7 @@ would pick the WRONG one silently: a flipped sign promotes the worst arm to firs
 produce a confident table -- so they need asserting rather than inspection.
 
 The frames here are synthetic on purpose. A fixture built from real predictions would be a
-regression test on `d10`'s numbers, which do not exist until the overnight lands, and would then
+regression test on `rebuild`'s numbers, which do not exist until the overnight lands, and would then
 have to be rewritten every rebuild. What is being tested is the plumbing's arithmetic.
 """
 
@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.analysis import claim1_eval as ce, d5_arms
+from src.analysis import claim1_eval as ce, model_v1_ablation_arms
 
 
 def _frames(seed=0, n=240):
@@ -46,8 +46,8 @@ def _frames(seed=0, n=240):
 
 def test_sign_convention_and_resolution():
     frames = _frames()
-    comparisons = d5_arms.compare_arms(frames, n_boot=200)
-    table = d5_arms.rank_arms(frames, comparisons).set_index("arm")
+    comparisons = model_v1_ablation_arms.compare_arms(frames, n_boot=200)
+    table = model_v1_ablation_arms.rank_arms(frames, comparisons).set_index("arm")
 
     # negative rmse_difference favours the ARM; the arm is always side A
     assert table.loc["better", "rmse_difference"] < 0
@@ -65,7 +65,7 @@ def test_every_stratum_is_compared_not_just_the_decisive_one():
     from the decisive stratum could not tell an arm that helps low-exposure hitters from one that
     helps nobody.
     """
-    comparisons = d5_arms.compare_arms(_frames(), n_boot=200)
+    comparisons = model_v1_ablation_arms.compare_arms(_frames(), n_boot=200)
     for arm in ("better", "tied"):
         strata = set(comparisons[comparisons["arm"] == arm]["stratum"])
         assert {"all", "low"} <= strata, strata
@@ -78,7 +78,7 @@ def test_missing_arm_is_reported_not_defaulted(tmp_path):
     """
     pa_df = pd.DataFrame({"batter": [1], "season": [2024], "p_throws": ["R"],
                           "woba": [0.3], "denominator": [100.0]})
-    frames, missing = d5_arms.load_arm_frames(tmp_path, "d10", ["baseline", "ghost"],
+    frames, missing = model_v1_ablation_arms.load_arm_frames(tmp_path, "rebuild", ["baseline", "ghost"],
                                              pa_df, 2024)
     assert missing == ["baseline", "ghost"] and frames == {}
 
@@ -87,7 +87,7 @@ def test_baseline_is_required():
     frames = _frames()
     del frames["baseline"]
     with pytest.raises(AssertionError):
-        d5_arms.compare_arms(frames, n_boot=50)
+        model_v1_ablation_arms.compare_arms(frames, n_boot=50)
 
 
 def test_seed_spread_reports_sd_beside_the_retired_range():
@@ -95,6 +95,6 @@ def test_seed_spread_reports_sd_beside_the_retired_range():
     Both statistics, on purpose. The retired "x noise floor" was max-min, which grows with seed
     count; printing it next to the sd is what makes that visible instead of arguable.
     """
-    _, spread = d5_arms.seed_spread("results/phase_d", "nonexistent_stage", "baseline",
+    _, spread = model_v1_ablation_arms.seed_spread("results/model_v1", "nonexistent_stage", "baseline",
                                     pd.DataFrame(), 2024)
     assert spread is None, "no per-seed files must yield no spread, not a one-row table"

@@ -7,13 +7,13 @@
   ],
   "post_selection_descriptive": "post-selection descriptive: computed on 2024 after the pre-registered platoon gate ran and failed (docs/research-manifest.md, 2026-08-20). Not a test of a hypothesis.",
   "population": {
-    "n_e5": 545,
-    "n_f5": 617,
+    "n_platoon": 545,
+    "n_pooled": 617,
     "n_intersection": 545,
-    "n_e5_only": 0,
-    "n_f5_only": 72,
-    "e5_is_subset_of_f5": true,
-    "f5_rebuilt_coverage": {
+    "n_platoon_only": 0,
+    "n_pooled_only": 72,
+    "platoon_is_subset_of_pooled": true,
+    "pooled_rebuilt_coverage": {
       "eval_season": 2024,
       "actual_groups": 649,
       "dropped_below_min_eval_pa": 32,
@@ -69,16 +69,16 @@
     "level_fraction": 0.6534578209413344
   },
   "fallback_rules_fired": [],
-  "m4_coverage": {
+  "coverage_labels_coverage": {
     "nominal": 0.95,
     "interval": "seed_plus_target_noise (the fair test \u2014 seed spread convolved with the target's own sampling noise)",
-    "measured_coverage_e14_all_groups": 0.855526544821584,
+    "measured_coverage_all_groups": 0.855526544821584,
     "measured_coverage_m6_intersection": 0.8660550458715597,
-    "committed_e14_value": 0.855527,
+    "committed_coverage_value": 0.855527,
     "reproduces_committed": true,
     "label_for_notebook": "every displayed interval carries its MEASURED coverage, not the nominal level \u2014 the plan's own fallback, already fired. No further attempt is made to close the gap."
   },
-  "route_c_verdict": "uninformative_inside_both_nulls",
+  "route_baseline_ladder_verdict": "uninformative_inside_both_nulls",
   "precision_clause": {
     "rule": "a stratum whose 95% bootstrap CI on the ceiling includes zero cannot carry the illustration; it moves to the stratum with the narrowest CI relative to its point estimate",
     "frozen": "docs/phase-m-spec.md \u00a7M.2, from the 2026-08-20 revisit condition",
@@ -100,16 +100,16 @@
     "note": "'low' is the stratum the thesis is graded on, so a move away from it is reported as a limitation on the illustration, not as a change of subject."
   },
   "artifacts": [
-    "m0_route_c_diagnostic.json",
-    "m0_routes.json",
-    "m1_c3_full_predictions.csv",
-    "m1_differential_scores.csv",
-    "m1_fraction_of_ceiling.csv",
-    "m1_min_eval_pa_sensitivity.csv",
-    "m2_stratum_ceiling.csv",
-    "m3_level_ceiling.json",
-    "m4_coverage_labels.csv",
-    "m_summary.json",
+    "routes_route_baseline_ladder_diagnostic.json",
+    "routes.json",
+    "differential_gbm_full_predictions.csv",
+    "differential_scores.csv",
+    "differential_fraction_of_ceiling.csv",
+    "differential_min_eval_pa_sensitivity.csv",
+    "stratum_ceiling_stratum_ceiling.csv",
+    "level_ceiling_level_ceiling.json",
+    "coverage_labels_coverage_labels.csv",
+    "measurement_ceiling_summary.json",
     "population.csv"
   ]
 }

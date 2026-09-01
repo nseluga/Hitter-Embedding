@@ -114,7 +114,7 @@ def main():
     parser.add_argument("--data-dir", default="data/processed/phase_d")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
-    parser.add_argument("--out-dir", default="results/phase_e")
+    parser.add_argument("--out-dir", default="results/model_evaluation")
     args = parser.parse_args()
 
     claim1_eval.assert_not_test_season(args.eval_season, final_run=args.final_run)
@@ -125,7 +125,7 @@ def main():
     pa_df = pd.read_parquet(args.eval_targets)
     shares = query.handedness_shares(pa_df, manifest["train_seasons"])
 
-    audit = pd.read_csv(out_dir / "e7_resampler_audit.csv")
+    audit = pd.read_csv(out_dir / "resampler_audit_resampler_audit.csv")
     audit["share"] = [shares[(row.stand, row.p_throws)] for row in audit.itertuples()]
     by_count = audit.groupby(["balls", "strikes"]).apply(
         lambda part: pd.Series({
@@ -149,10 +149,10 @@ def main():
                           "delta_bb": float(alone["bb"][0, 0] - base["bb"][0, 0]),
                           "delta_k": float(alone["k"][0, 0] - base["k"][0, 0])})
     per_count = pd.DataFrame(per_count).sort_values("delta_bb", ascending=False)
-    per_count.to_csv(out_dir / "e8_draw_price_by_count.csv", index=False)
+    per_count.to_csv(out_dir / "draw_price_draw_price_by_count.csv", index=False)
 
     matched = 0.08312   # E.1's population-matched observed walk rate
-    modelled = 0.08538  # the shipped d10_baseline composition
+    modelled = 0.08538  # the shipped rebuild_baseline composition
     total_delta = float(shifted["bb"][0, 0] - base["bb"][0, 0])
     summary = {
         "league_chain_bb": float(base["bb"][0, 0]), "league_chain_k": float(base["k"][0, 0]),
@@ -163,7 +163,7 @@ def main():
         "residual_walk_excess": modelled - matched,
         "share_of_residual_explained": total_delta / (modelled - matched),
     }
-    (out_dir / "e8_draw_price_summary.json").write_text(json.dumps(summary, indent=2))
+    (out_dir / "draw_price_draw_price_summary.json").write_text(json.dumps(summary, indent=2))
 
     print("\n-- what one count's draw gap is worth in walks --")
     print(per_count.to_string(index=False))

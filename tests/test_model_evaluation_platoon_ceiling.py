@@ -1,5 +1,5 @@
 """
-Unit tests for E.15's pure statistics (src/analysis/e_platoon_ceiling.py).
+Unit tests for E.15's pure statistics (src/analysis/model_evaluation_platoon_ceiling.py).
 
 These test the ARITHMETIC only -- reliability, Spearman-Brown, noise subtraction, and
 the between/within variance decomposition -- against hand-computable cases. Nothing here
@@ -10,7 +10,7 @@ in a test would make the test a transcription of the answer rather than a check 
 import numpy as np
 import pytest
 
-from src.analysis import e_platoon_ceiling as ceiling
+from src.analysis import model_evaluation_platoon_ceiling as ceiling
 
 
 def test_reliability_is_signal_over_total_and_refuses_negative_variance():

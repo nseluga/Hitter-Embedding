@@ -23,4 +23,4 @@ epoch  21  train 0.95871  val 0.99101  ref 1.05157  lr 2.70e-05  37s (719 steps)
 epoch  22  train 0.95869  val 0.99098  ref 1.05193  lr 8.10e-06  34s (719 steps)
 epoch  23  train 0.95856  val 0.99091  ref 1.05168  lr 8.10e-06  38s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 0.99086 at epoch 20; reference 1.05130; checkpoint results/checkpoints/d10_invfreq_s2.pt
+best val loss 0.99086 at epoch 20; reference 1.05130; checkpoint results/checkpoints/rebuild_invfreq_s2.pt

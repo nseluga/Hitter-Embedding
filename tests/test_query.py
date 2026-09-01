@@ -550,21 +550,21 @@ def test_compare_returns_one_row_per_opponent_and_stratum():
     resample inside a stratum and silently narrow every interval — a tighter, wrong
     answer that nothing downstream would flag.
     """
-    from src.analysis import d5_report
+    from src.analysis import model_v1_ablation_report
 
     rng = np.random.default_rng(1)
     n = 120
     truth = rng.normal(0.32, 0.05, n)
     frames = {
-        "phase_d_v1": synthetic_eval_frame(truth + rng.normal(0, 0.01, n)),
-        "c3_gbm_full": synthetic_eval_frame(truth + rng.normal(0, 0.03, n), seed=0),
-        "c2_bivariate": synthetic_eval_frame(truth + rng.normal(0, 0.04, n), seed=0),
+        "model_v1": synthetic_eval_frame(truth + rng.normal(0, 0.01, n)),
+        "gbm_full": synthetic_eval_frame(truth + rng.normal(0, 0.03, n), seed=0),
+        "eb_bivariate": synthetic_eval_frame(truth + rng.normal(0, 0.04, n), seed=0),
     }
-    table = d5_report.compare(frames, name="phase_d_v1", seed=0)
+    table = model_v1_ablation_report.compare(frames, name="model_v1", seed=0)
 
-    assert set(table["opponent"]) == set(d5_report.GATE_OPPONENTS)
+    assert set(table["opponent"]) == set(model_v1_ablation_report.GATE_OPPONENTS)
     for column in ("stratum", "rmse_difference", "rank_difference",
-                   "rmse_favours_phase_d", "rank_favours_phase_d",
+                   "rmse_favours_model_v1", "rank_favours_model_v1",
                    "ci_low_rmse", "ci_high_rmse", "ci_low_rank", "ci_high_rank"):
         assert column in table.columns, f"compare() dropped {column}"
     assert (table.groupby("opponent")["stratum"].nunique() == 4).all(), \
@@ -576,22 +576,22 @@ def test_compare_reads_the_interval_not_the_point_estimate():
     The pre-registered gate is an interval excluding zero (2026-07-30). A table that
     flagged a favourable point estimate would pass models the gate rejects.
     """
-    from src.analysis import d5_report
+    from src.analysis import model_v1_ablation_report
 
     rng = np.random.default_rng(2)
     n = 120
     truth = rng.normal(0.32, 0.05, n)
     # a model that is barely better: the point estimate favours it, the interval will not
     frames = {
-        "phase_d_v1": synthetic_eval_frame(truth + rng.normal(0, 0.0299, n)),
-        "c3_gbm_full": synthetic_eval_frame(truth + rng.normal(0, 0.03, n), seed=0),
-        "c2_bivariate": synthetic_eval_frame(truth + rng.normal(0, 0.03, n), seed=0),
+        "model_v1": synthetic_eval_frame(truth + rng.normal(0, 0.0299, n)),
+        "gbm_full": synthetic_eval_frame(truth + rng.normal(0, 0.03, n), seed=0),
+        "eb_bivariate": synthetic_eval_frame(truth + rng.normal(0, 0.03, n), seed=0),
     }
-    table = d5_report.compare(frames, name="phase_d_v1", seed=0)
-    flagged = table["rmse_favours_phase_d"]
+    table = model_v1_ablation_report.compare(frames, name="model_v1", seed=0)
+    flagged = table["rmse_favours_model_v1"]
     assert (flagged == (table["ci_high_rmse"] < 0)).all(), \
         "the RMSE verdict is not reading the upper interval bound"
-    assert (table["rank_favours_phase_d"] == (table["ci_low_rank"] > 0)).all(), \
+    assert (table["rank_favours_model_v1"] == (table["ci_low_rank"] > 0)).all(), \
         "the ordering verdict is not reading the lower interval bound"
 
 

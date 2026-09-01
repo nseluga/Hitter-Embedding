@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.analysis import c3_gbm as c3
+from src.analysis import baseline_ladder_gbm as gbm
 
 BATTER_ID_BASE = 100_000
 PITCHER_ID_BASE = 900_000
@@ -94,7 +94,7 @@ def synthetic_pitches(pa_frame, seed=0):
 def training_stub(n_rows=40, n_features=None, seed=0):
     """A tiny training frame with a deterministic target — used by the overfit gate."""
     rng = np.random.default_rng(seed)
-    columns = c3.FEATURE_SETS["full"]
+    columns = gbm.FEATURE_SETS["full"]
     frame = pd.DataFrame(rng.normal(size=(n_rows, len(columns))), columns=columns)
     frame["season"] = np.repeat([2021, 2022, 2023], np.ceil(n_rows / 3).astype(int))[:n_rows]
     frame["pa"] = 100.0
@@ -115,16 +115,16 @@ def test_g1_features_ignore_the_target_season_entirely():
     poisoned.loc[mask, "woba_points"] = 9.0  # every 2023 PA a grand slam
 
     groups = pa[["batter", "p_throws"]].drop_duplicates()
-    base = c3.window_features(groups, c3.season_outcome(pa), c3.season_process(pitches), 2023)
-    after = c3.window_features(groups, c3.season_outcome(poisoned),
-                               c3.season_process(pitches), 2023)
+    base = gbm.window_features(groups, gbm.season_outcome(pa), gbm.season_process(pitches), 2023)
+    after = gbm.window_features(groups, gbm.season_outcome(poisoned),
+                               gbm.season_process(pitches), 2023)
     pd.testing.assert_frame_equal(base, after)
 
 
 def test_g1_training_frame_excludes_the_evaluated_season():
     pa = synthetic_pa(n_hitters=20, seasons=(2020, 2021, 2022, 2023, 2024), n_pa=25)
-    training = c3.build_training_frame(pa, c3.season_outcome(pa),
-                                       c3.season_process(synthetic_pitches(pa)),
+    training = gbm.build_training_frame(pa, gbm.season_outcome(pa),
+                                       gbm.season_process(synthetic_pitches(pa)),
                                        eval_season=2024, min_target_season=2021)
     assert training["season"].max() == 2023
     assert 2024 not in set(training["season"])
@@ -133,8 +133,8 @@ def test_g1_training_frame_excludes_the_evaluated_season():
 def test_g1_window_excludes_seasons_before_the_trailing_span():
     pa = synthetic_pa(n_hitters=15, seasons=(2018, 2022, 2023), n_pa=30)
     groups = pa[["batter", "p_throws"]].drop_duplicates()
-    features = c3.window_features(groups, c3.season_outcome(pa),
-                                  c3.season_process(synthetic_pitches(pa)), 2024,
+    features = gbm.window_features(groups, gbm.season_outcome(pa),
+                                  gbm.season_process(synthetic_pitches(pa)), 2024,
                                   n_seasons=2)
     # only 2022-2023 are inside a 2-season window ending at 2024; 2018 must not count
     assert features["seasons_seen"].max() == 2
@@ -146,12 +146,12 @@ def test_g1_window_excludes_seasons_before_the_trailing_span():
 
 def test_g2_overfits_a_tiny_batch():
     training = training_stub(n_rows=40)
-    unregularized = dict(c3.PARAMS, max_depth=8, learning_rate=0.3, subsample=1.0,
+    unregularized = dict(gbm.PARAMS, max_depth=8, learning_rate=0.3, subsample=1.0,
                          colsample_bytree=1.0, min_child_weight=0.0, reg_lambda=0.0,
                          n_estimators=400)
-    model, _ = c3.fit(training, feature_set="full", inner_val_season=2023,
+    model, _ = gbm.fit(training, feature_set="full", inner_val_season=2023,
                       params=unregularized, n_rounds=400)
-    predicted = model.predict(training[c3.FEATURE_SETS["full"]].astype(float))
+    predicted = model.predict(training[gbm.FEATURE_SETS["full"]].astype(float))
     assert np.sqrt(np.mean((predicted - training["target_woba"]) ** 2)) < 1e-3
 
 
@@ -161,18 +161,18 @@ def test_g2_overfits_a_tiny_batch():
 
 def test_g3_predictions_are_deterministic():
     pa = synthetic_pa(n_hitters=40, n_pa=20)
-    process = c3.season_process(synthetic_pitches(pa))
-    first = c3.predict(pa, process, 2024, seed=0)
-    second = c3.predict(pa, process, 2024, seed=0)
+    process = gbm.season_process(synthetic_pitches(pa))
+    first = gbm.predict(pa, process, 2024, seed=0)
+    second = gbm.predict(pa, process, 2024, seed=0)
     pd.testing.assert_frame_equal(first, second)
 
 
 def test_g3_a_different_seed_is_allowed_to_differ():
     """Guard against a seed that is silently ignored — subsampling must respond to it."""
     pa = synthetic_pa(n_hitters=40, n_pa=20)
-    process = c3.season_process(synthetic_pitches(pa))
-    first = c3.predict(pa, process, 2024, seed=0)
-    second = c3.predict(pa, process, 2024, seed=17)
+    process = gbm.season_process(synthetic_pitches(pa))
+    first = gbm.predict(pa, process, 2024, seed=0)
+    second = gbm.predict(pa, process, 2024, seed=17)
     assert not np.allclose(first["pred_woba"], second["pred_woba"])
 
 
@@ -193,8 +193,8 @@ def test_g4_constant_prediction_scores_the_weighted_sd():
 
 def test_g4_fitted_model_beats_the_constant_on_a_learnable_target():
     training = training_stub(n_rows=300)
-    model, _ = c3.fit(training, feature_set="full", inner_val_season=2023)
-    predicted = model.predict(training[c3.FEATURE_SETS["full"]].astype(float))
+    model, _ = gbm.fit(training, feature_set="full", inner_val_season=2023)
+    predicted = model.predict(training[gbm.FEATURE_SETS["full"]].astype(float))
     actual = training["target_woba"].to_numpy()
     assert np.sqrt(np.mean((predicted - actual) ** 2)) < np.std(actual)
 
@@ -222,7 +222,7 @@ def test_g5_feature_row_matches_hand_computation():
          "swing": False, "contact": False},
     ])
     groups = pd.DataFrame({"batter": [BATTER_ID_BASE], "p_throws": ["R"]})
-    row = c3.window_features(groups, c3.season_outcome(pa), c3.season_process(pitches), 2024).iloc[0]
+    row = gbm.window_features(groups, gbm.season_outcome(pa), gbm.season_process(pitches), 2024).iloc[0]
 
     assert row["own_pa"] == 10 and row["own_woba"] == pytest.approx(0.9)
     assert row["own_pitches"] == 6
@@ -250,7 +250,7 @@ def test_g5_window_rate_is_pooled_not_a_mean_of_season_rates():
     pa = pa_table([(BATTER_ID_BASE, 2022, "R", "R", 0.3),
                    (BATTER_ID_BASE, 2023, "R", "R", 0.3)])
     groups = pd.DataFrame({"batter": [BATTER_ID_BASE], "p_throws": ["R"]})
-    row = c3.window_features(groups, c3.season_outcome(pa), c3.season_process(pitches), 2024).iloc[0]
+    row = gbm.window_features(groups, gbm.season_outcome(pa), gbm.season_process(pitches), 2024).iloc[0]
     assert row["whiff_rate"] == pytest.approx(2 / 101)   # pooled
     assert row["whiff_rate"] != pytest.approx(0.505)     # mean of 0.01 and 1.00
 
@@ -264,7 +264,7 @@ def test_g5_intentional_balls_are_excluded_from_process_rates():
     )
     pa = pa_table([(BATTER_ID_BASE, 2023, "R", "R", 0.3)])
     groups = pd.DataFrame({"batter": [BATTER_ID_BASE], "p_throws": ["R"]})
-    row = c3.window_features(groups, c3.season_outcome(pa), c3.season_process(pitches), 2024).iloc[0]
+    row = gbm.window_features(groups, gbm.season_outcome(pa), gbm.season_process(pitches), 2024).iloc[0]
     assert row["own_pitches"] == 4 and row["swing_rate"] == pytest.approx(1.0)
 
 
@@ -276,8 +276,8 @@ def test_g6_a_hitter_with_no_history_gets_nan_features_not_zero_rates():
     pa = pa_table([(BATTER_ID_BASE, 2023, "R", "R", 0.3)] * 5
                   + [(BATTER_ID_BASE + 1, 2024, "R", "R", 0.3)] * 5)
     groups = pd.DataFrame({"batter": [BATTER_ID_BASE + 1], "p_throws": ["R"]})
-    row = c3.window_features(groups, c3.season_outcome(pa),
-                             c3.season_process(pitch_table([
+    row = gbm.window_features(groups, gbm.season_outcome(pa),
+                             gbm.season_process(pitch_table([
                                  {"batter": BATTER_ID_BASE, "season": 2023, "p_throws": "R"}])),
                              2024).iloc[0]
     assert row["own_pa"] == 0 and np.isnan(row["own_woba"])
@@ -290,9 +290,9 @@ def test_g6_every_active_group_receives_a_finite_prediction():
     # a debutant with no prior seasons at all — the low-exposure population
     debut = pa_table([(BATTER_ID_BASE + 999, 2024, "R", "R", 0.4)] * 30)
     pa = pd.concat([pa, debut], ignore_index=True)
-    process = c3.season_process(synthetic_pitches(pa))
+    process = gbm.season_process(synthetic_pitches(pa))
 
-    predictions = c3.predict(pa, process, 2024)
+    predictions = gbm.predict(pa, process, 2024)
     active = pa[pa["season"] == 2024][["batter", "p_throws"]].drop_duplicates()
     assert len(predictions) == len(active)
     assert np.isfinite(predictions["pred_woba"]).all()
@@ -305,19 +305,19 @@ def test_g6_every_active_group_receives_a_finite_prediction():
 
 def test_g7_predict_emits_the_claim1_contract():
     pa = synthetic_pa(n_hitters=30, n_pa=20)
-    predictions = c3.predict(pa, c3.season_process(synthetic_pitches(pa)), 2024)
-    assert list(predictions.columns) == c3.KEY + ["pred_woba"]
+    predictions = gbm.predict(pa, gbm.season_process(synthetic_pitches(pa)), 2024)
+    assert list(predictions.columns) == gbm.KEY + ["pred_woba"]
     assert predictions["season"].nunique() == 1 and predictions["season"].iloc[0] == 2024
-    assert not predictions.duplicated(c3.KEY).any()
+    assert not predictions.duplicated(gbm.KEY).any()
 
 
 def test_g7_feature_sets_are_nested_and_the_matrix_shape_is_asserted():
-    assert set(c3.FEATURE_SETS["outcome"]).issubset(c3.FEATURE_SETS["full"])
+    assert set(gbm.FEATURE_SETS["outcome"]).issubset(gbm.FEATURE_SETS["full"])
     training = training_stub(n_rows=20)
-    assert c3._matrix(training, "outcome").shape == (20, len(c3.FEATURE_SETS["outcome"]))
-    assert c3._matrix(training, "full").shape == (20, len(c3.FEATURE_SETS["full"]))
+    assert gbm._matrix(training, "outcome").shape == (20, len(gbm.FEATURE_SETS["outcome"]))
+    assert gbm._matrix(training, "full").shape == (20, len(gbm.FEATURE_SETS["full"]))
     with pytest.raises(AssertionError):
-        c3.fit(training, feature_set="full", inner_val_season=1999)
+        gbm.fit(training, feature_set="full", inner_val_season=1999)
 
 
 def test_inner_val_season_defaults_to_the_latest_training_season():
@@ -328,15 +328,15 @@ def test_inner_val_season_defaults_to_the_latest_training_season():
     """
     training = training_stub(n_rows=60)
     latest = int(training["season"].max())
-    _, derived_rounds = c3.fit(training, feature_set="outcome", seed=0)
-    _, latest_rounds = c3.fit(training, feature_set="outcome",
+    _, derived_rounds = gbm.fit(training, feature_set="outcome", seed=0)
+    _, latest_rounds = gbm.fit(training, feature_set="outcome",
                               inner_val_season=latest, seed=0)
     assert derived_rounds == latest_rounds
 
     # and it must track the frame: drop the last season and the default moves with it
     earlier = training[training["season"] < latest]
-    _, earlier_rounds = c3.fit(earlier, feature_set="outcome", seed=0)
-    _, explicit_rounds = c3.fit(earlier, feature_set="outcome",
+    _, earlier_rounds = gbm.fit(earlier, feature_set="outcome", seed=0)
+    _, explicit_rounds = gbm.fit(earlier, feature_set="outcome",
                                 inner_val_season=int(earlier["season"].max()), seed=0)
     assert earlier_rounds == explicit_rounds
 
@@ -359,7 +359,7 @@ def test_g8_shuffle_preserves_the_intercept():
     training["pa"] = np.linspace(10, 600, len(training))  # weights must vary to bite
     training["target_woba"] = 0.25 + 0.0001 * training["pa"]  # ...and correlate with the target
 
-    shuffled = c3.shuffled_training(training, seed=0)
+    shuffled = gbm.shuffled_training(training, seed=0)
     weighted = lambda f: np.average(f["target_woba"], weights=f["pa"])
     assert weighted(shuffled) == pytest.approx(weighted(training))
     assert not np.allclose(shuffled["target_woba"], training["target_woba"]), "nothing was shuffled"
@@ -367,7 +367,7 @@ def test_g8_shuffle_preserves_the_intercept():
 
 def test_g8_shuffle_destroys_the_feature_target_link():
     training = training_stub(n_rows=300)
-    shuffled = c3.shuffled_training(training, seed=0)
+    shuffled = gbm.shuffled_training(training, seed=0)
     real_corr = abs(training["own_woba"].corr(training["target_woba"]))
     shuffled_corr = abs(shuffled["own_woba"].corr(shuffled["target_woba"]))
     assert real_corr > 0.5 and shuffled_corr < 0.2
@@ -384,8 +384,8 @@ def test_g9_switch_hitters_are_flagged_not_folded_into_right_handers():
                + [(BATTER_ID_BASE + 1, 2023, "R", "L", 0.3)] * 50)
     pa = pa_table(records)
     groups = pa[["batter", "p_throws"]].drop_duplicates()
-    features = c3.window_features(groups, c3.season_outcome(pa),
-                                  c3.season_process(synthetic_pitches(pa)), 2024)
+    features = gbm.window_features(groups, gbm.season_outcome(pa),
+                                  gbm.season_process(synthetic_pitches(pa)), 2024)
     switch = features[features["batter"] == BATTER_ID_BASE]
     pure_lefty = features[features["batter"] == BATTER_ID_BASE + 1]
     assert (switch["bats_switch"] == 1.0).all()

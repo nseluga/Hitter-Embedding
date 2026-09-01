@@ -18,7 +18,7 @@
       "la",
       "spray"
     ],
-    "arm": "d10_baseline",
+    "arm": "rebuild_baseline",
     "seeds": [
       0,
       1,

@@ -19,7 +19,7 @@ from one architecture into the next.
 macOS sleeps the machine out from under this. Launch it under caffeinate, plugged
 in, lid open:
 
-    caffeinate -i -s .venv/bin/python -m src.model.sweep --stage d6 --hours 9
+    caffeinate -i -s .venv/bin/python -m src.model.sweep --stage early --hours 9
 """
 
 import argparse
@@ -35,7 +35,7 @@ from pathlib import Path
 from src.analysis import provenance
 from src.model.train import LEARNING_RATE
 
-OUT_DIR = Path("results/phase_d")
+OUT_DIR = Path("results/model_v1")
 LEDGER = OUT_DIR / "sweep_log.csv"
 LOG_DIR = OUT_DIR / "logs"
 STOP_FLAG = OUT_DIR / "STOP"
@@ -49,17 +49,17 @@ STOP_FLAG = OUT_DIR / "STOP"
 # knob was pinned at for all 119 of them, which is itself the Phase O finding.
 # data_dir was added at the same time and for the same reason `reference` carries the
 # warning above: log loss over quality bins is only comparable within one tensor build, and
-# until now the build a run used was recoverable only from shell history. The d9/d10 rows are
-# backfilled to `phase_d5`, established 2026-08-20 by re-running d10 baseline seed 0 on each
+# until now the build a run used was recoverable only from shell history. The splithead/rebuild rows are
+# backfilled to `phase_d5`, established 2026-08-20 by re-running rebuild baseline seed 0 on each
 # candidate build: phase_d5 reproduces its epoch-0 train/val (1.05990/1.04681) exactly, and
-# the older phase_d build raises KeyError('split') because it predates the contact split, so
+# the older model_v1 build raises KeyError('split') because it predates the contact split, so
 # no --split run could ever have used it.
 LEDGER_FIELDS = ("stage", "config", "seed", "status", "seconds", "best_val_loss",
                  "reference", "best_epoch", "lr", "warmup_steps", "data_dir",
                  "finished_at")
 
-# `d9` is the retrain carrying the three-class contact split (2026-08-08). Every arm moves
-# to it together, on purpose: the split head changes the loss, so a d8 `reference` and a d9
+# `splithead` is the retrain carrying the three-class contact split (2026-08-08). Every arm moves
+# to it together, on purpose: the split head changes the loss, so a presplit `reference` and a splithead
 # `reference` are in different units and must never be read down the same column. It is
 # also the first stage where §7's last two items exist in code -- B.2's flagged five (a
 # dataset rebuilt without the block) and spray as a quality dimension (a head removed) --
@@ -67,25 +67,25 @@ LEDGER_FIELDS = ("stage", "config", "seed", "status", "seconds", "best_val_loss"
 # an architecture that is not the one shipping.
 NOBLOCK_DATA_DIR = "data/processed/phase_d_split_noblock"
 
-# `d10` is `d9`'s eight arms on the D5-R17 rebuild: the Statcast placeholder rows are gone from
+# `rebuild` is `splithead`'s eight arms on the D5-R17 rebuild: the Statcast placeholder rows are gone from
 # the quantile-edge fit AND from all three quality targets, so the 24 bins per dimension are
-# different bins. That makes it a new stage rather than a relaunch of `d9`, for two reasons that
-# both bite. The ledger keys on (stage, config, seed) and every `d9` row is `ok`, so a relaunch
-# would silently skip all forty runs. And `reference` is log loss over the quality bins, so a d9
-# and a d10 `reference` are in different units for exactly the reason the d8 -> d9 note gives.
-# `block` gets its own rebuilt no-block dataset: leaving it on the d9 one would train seven arms
+# different bins. That makes it a new stage rather than a relaunch of `splithead`, for two reasons that
+# both bite. The ledger keys on (stage, config, seed) and every `splithead` row is `ok`, so a relaunch
+# would silently skip all forty runs. And `reference` is log loss over the quality bins, so a splithead
+# and a rebuild `reference` are in different units for exactly the reason the presplit -> splithead note gives.
+# `block` gets its own rebuilt no-block dataset: leaving it on the splithead one would train seven arms
 # on the new edges and one on the old, turning the block contrast into block + edges.
 D10_NOBLOCK_DATA_DIR = "data/processed/phase_d5_noblock"
 STAGES = {
     "screen": [("log", []), ("rps", ["--loss-rule", "rps"])],
-    "d6": [("baseline", [])],
-    "d8": [("baseline", []),
+    "early": [("baseline", [])],
+    "presplit": [("baseline", []),
            ("dim16", ["--embedding-dim", "16"]),
            ("dim64", ["--embedding-dim", "64"]),
            ("bilinear", ["--bilinear"]),
            ("meanweight", ["--loss-weighting", "mean"]),
            ("invfreq", ["--contact-inverse-frequency"])],
-    "d9": [("baseline", ["--split"]),
+    "splithead": [("baseline", ["--split"]),
            ("dim16", ["--split", "--embedding-dim", "16"]),
            ("dim64", ["--split", "--embedding-dim", "64"]),
            ("bilinear", ["--split", "--bilinear"]),
@@ -93,7 +93,7 @@ STAGES = {
            ("invfreq", ["--split", "--contact-inverse-frequency"]),
            ("nospray", ["--split", "--no-spray"]),
            ("block", ["--split", "--data-dir", NOBLOCK_DATA_DIR])],
-    "d10": [("baseline", ["--split"]),
+    "rebuild": [("baseline", ["--split"]),
             ("dim16", ["--split", "--embedding-dim", "16"]),
             ("dim64", ["--split", "--embedding-dim", "64"]),
             ("bilinear", ["--split", "--bilinear"]),
@@ -102,21 +102,21 @@ STAGES = {
             ("nospray", ["--split", "--no-spray"]),
             ("block", ["--split", "--data-dir", D10_NOBLOCK_DATA_DIR])],
 }
-# Phase O. A 3x2 factorial on the two knobs that were never varied, on the d10 baseline
+# Phase O. A 3x2 factorial on the two knobs that were never varied, on the rebuild baseline
 # architecture with everything else frozen. `lr1e3` is the incumbent control and must stay
 # in the grid: without it the tuned build has nothing to be tuned RELATIVE TO, and a
-# ledger `reference` from a different stage is not comparable (see the d8->d9 note above).
+# ledger `reference` from a different stage is not comparable (see the presplit->splithead note above).
 # Warmup is one epoch of optimizer steps: ceil(5.88M train rows / 8,192) = 719, which is the
-# step count every d10 log reports. Not 718 -- an off-by-one here would be invisible.
+# step count every rebuild log reports. Not 718 -- an off-by-one here would be invisible.
 O1_WARMUP_STEPS = "719"
-# Pinned, not inherited. This module's --data-dir DEFAULT is `phase_d`, but d10 trained on
+# Pinned, not inherited. This module's --data-dir DEFAULT is `model_v1`, but rebuild trained on
 # `phase_d5` (different quality-bin edges, different manifest sha), and `reference` is log
-# loss over those bins. Inheriting the default would put o1 and its own d10 incumbent in
+# loss over those bins. Inheriting the default would put selection and its own rebuild incumbent in
 # different units while every column still lined up, which is the failure mode the
-# d8->d9 and d9->d10 notes above exist to prevent. Pin it to the build d10 shipped on.
+# presplit->splithead and splithead->rebuild notes above exist to prevent. Pin it to the build rebuild shipped on.
 O1_DATA_DIR = provenance.CANONICAL_DATA_DIR
 O1_BASE = ["--split", "--data-dir", O1_DATA_DIR]
-STAGES["o1"] = [
+STAGES["selection"] = [
     ("lr3e4", [*O1_BASE, "--lr", "3e-4"]),
     ("lr1e3", [*O1_BASE, "--lr", "1e-3"]),
     ("lr3e3", [*O1_BASE, "--lr", "3e-3"]),
@@ -125,7 +125,7 @@ STAGES["o1"] = [
     ("lr3e3_warm", [*O1_BASE, "--lr", "3e-3", "--warmup-steps", O1_WARMUP_STEPS]),
 ]
 
-DEFAULT_SEEDS = {"screen": 2, "d6": 5, "d8": 5, "d9": 5, "d10": 5, "o1": 2}
+DEFAULT_SEEDS = {"screen": 2, "early": 5, "presplit": 5, "splithead": 5, "rebuild": 5, "selection": 2}
 
 
 # The ledger is keyed and read as text, so `1e-3` and `0.001` are two different values in a
@@ -233,12 +233,12 @@ def main_argv(argv=None):
 
     # Phase O quarantines batch size and weight decay: they are one setting (the
     # decay-to-gradient ratio), the ratio is 23.9:1 at the 10th exposure percentile, and
-    # moving either mid-phase would change what every earlier o1 arm's `reference` means.
+    # moving either mid-phase would change what every earlier selection arm's `reference` means.
     # train.py still exposes --batch-size, and --train-args is forwarded verbatim, so the
     # quarantine is only real if it is enforced here. Batch size also silently rescales
     # `warmup_for`'s per-epoch cap, so a change would move a knob Phase O IS tuning.
     smuggled = [f for f in QUARANTINED_FLAGS if f in args.train_args]
-    if smuggled and args.stage.startswith("o"):
+    if smuggled and args.stage == "selection":
         parser.error(f"{', '.join(smuggled)} is quarantined for Phase O and is not recorded "
                      f"in the ledger. Unpin it in train.py and open a new stage instead.")
     return args

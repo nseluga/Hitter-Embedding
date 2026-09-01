@@ -20,4 +20,4 @@ epoch  18  train 1.01054  val 1.03457  ref 1.10637  lr 2.70e-05  185s (719 steps
 epoch  19  train 1.01051  val 1.03458  ref 1.10641  lr 8.10e-06  178s (719 steps)
 epoch  20  train 1.01038  val 1.03454  ref 1.10638  lr 8.10e-06  186s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.03447 at epoch 17; reference 1.10640; checkpoint results/checkpoints/d8_invfreq_s0.pt
+best val loss 1.03447 at epoch 17; reference 1.10640; checkpoint results/checkpoints/presplit_invfreq_s0.pt

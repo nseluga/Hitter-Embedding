@@ -5,14 +5,14 @@ Fast synthetic checks: the feature grouping partitions the 48 columns, permutati
 importance separates a signal group from noise, a fitted head beats its base rate,
 label-shuffle collapses signal to chance, and the screen is deterministic under a
 fixed seed. The heavy real-data gates (split-boundary, decode, base-rate on the
-7.35M table) run in b2_screen.main().
+7.35M table) run in feature_screening_screen.main().
 """
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.analysis import b2_screen as b2
+from src.analysis import feature_screening_importance as feature_screening
 from src.features import context_features as cf
 
 
@@ -46,7 +46,7 @@ def fitted_params():
 
 def test_feature_groups_partition_all_columns():
     params = fitted_params()
-    groups = b2.feature_groups(params)
+    groups = feature_screening.feature_groups(params)
     covered = sorted(i for cols in groups.values() for i in cols)
     assert covered == list(range(len(cf.feature_names(params))))
 
@@ -54,7 +54,7 @@ def test_feature_groups_partition_all_columns():
 def test_optional_feature_travels_with_its_missing_flag():
     params = fitted_params()
     names = cf.feature_names(params)
-    groups = b2.feature_groups(params)
+    groups = feature_screening.feature_groups(params)
     assert names.index("release_spin_rate_missing") in groups["release_spin_rate"]
 
 
@@ -68,12 +68,12 @@ def test_head_target_nesting():
         "la": [10.0, np.nan, np.nan, 20.0],
         "spray": [15.0, np.nan, np.nan, np.nan],  # one in-play ball clip-nulled
     })
-    swing_mask, y_swing = b2.head_target(df, "swing")
+    swing_mask, y_swing = feature_screening.head_target(df, "swing")
     assert swing_mask.sum() == 4 and set(y_swing) == {0.0, 1.0}
-    whiff_mask, y_whiff = b2.head_target(df, "whiff")
+    whiff_mask, y_whiff = feature_screening.head_target(df, "whiff")
     assert whiff_mask.sum() == 3                      # swings only
     assert y_whiff.tolist() == [0.0, 1.0, 0.0]        # row 1 is the miss
-    spray_mask, y_spray = b2.head_target(df, "spray")
+    spray_mask, y_spray = feature_screening.head_target(df, "spray")
     assert spray_mask.sum() == 1                      # clip-nulled row excluded
 
 
@@ -95,7 +95,7 @@ def test_permutation_importance_isolates_the_signal_group():
     p = 1 / (1 + np.exp(-4 * X[:, 0]))
     y = (rng.uniform(size=2000) < p).astype("float32")
     groups = {"sig": [0], "noise": [1, 2, 3]}
-    _, imp = b2.permutation_importance(_Col0Model(), X, y, groups, "clf", seed=0)
+    _, imp = feature_screening.permutation_importance(_Col0Model(), X, y, groups, "clf", seed=0)
     assert imp["sig"][0] > 0.05
     assert abs(imp["noise"][0]) < imp["sig"][0] / 5
 
@@ -105,8 +105,8 @@ def test_permutation_importance_is_deterministic():
     X = rng.normal(0, 1, (1000, 4)).astype("float32")
     y = (X[:, 0] > 0).astype("float32")
     groups = {"sig": [0], "noise": [1, 2, 3]}
-    a = b2.permutation_importance(_Col0Model(), X, y, groups, "clf", seed=7)
-    b = b2.permutation_importance(_Col0Model(), X, y, groups, "clf", seed=7)
+    a = feature_screening.permutation_importance(_Col0Model(), X, y, groups, "clf", seed=7)
+    b = feature_screening.permutation_importance(_Col0Model(), X, y, groups, "clf", seed=7)
     assert a == b
 
 
@@ -120,14 +120,14 @@ def test_fitted_head_beats_base_rate_and_shuffle_collapses():
     y = (rng.uniform(size=n) < p).astype("float32")
     tr, va = slice(0, 4000), slice(4000, n)
 
-    model = b2.fit_head(X[tr], y[tr], X[va], y[va], "clf", seed=0)
-    val = b2._metric(model, X[va], y[va], "clf")
-    base = b2.base_rate_metric(y[va], "clf")
+    model = feature_screening.fit_head(X[tr], y[tr], X[va], y[va], "clf", seed=0)
+    val = feature_screening._metric(model, X[va], y[va], "clf")
+    base = feature_screening.base_rate_metric(y[va], "clf")
     assert val < base                                 # loss-scale sanity
 
     y_shuf = rng.permutation(y)
-    shuf_model = b2.fit_head(X[tr], y_shuf[tr], X[va], y_shuf[va], "clf", seed=0)
-    shuf_val = b2._metric(shuf_model, X[va], y_shuf[va], "clf")
+    shuf_model = feature_screening.fit_head(X[tr], y_shuf[tr], X[va], y_shuf[va], "clf", seed=0)
+    shuf_val = feature_screening._metric(shuf_model, X[va], y_shuf[va], "clf")
     # signal gone: shuffled labels give no real edge over the base rate...
-    assert shuf_val >= b2.base_rate_metric(y_shuf[va], "clf") - 0.02
+    assert shuf_val >= feature_screening.base_rate_metric(y_shuf[va], "clf") - 0.02
     assert shuf_val > val                             # ...and are far worse than the true model

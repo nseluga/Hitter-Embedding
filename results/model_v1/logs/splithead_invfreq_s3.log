@@ -14,4 +14,4 @@ epoch  12  train 0.97210  val 0.99206  ref 1.05208  lr 3.00e-04  35s (719 steps)
 epoch  13  train 0.97189  val 0.99230  ref 1.05401  lr 9.00e-05  38s (719 steps)
 epoch  14  train 0.97091  val 0.99176  ref 1.05314  lr 9.00e-05  39s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 0.99176 at epoch 11; reference 1.05083; checkpoint results/checkpoints/d9_invfreq_s3.pt
+best val loss 0.99176 at epoch 11; reference 1.05083; checkpoint results/checkpoints/splithead_invfreq_s3.pt

@@ -30,4 +30,4 @@ epoch  28  train 0.96848  val 0.99171  ref 1.05245  lr 7.29e-07  85s (719 steps)
 epoch  29  train 0.96851  val 0.99172  ref 1.05253  lr 2.19e-07  34s (719 steps)
 epoch  30  train 0.96847  val 0.99172  ref 1.05253  lr 2.19e-07  36s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 0.99168 at epoch 27; reference 1.05223; checkpoint results/checkpoints/d9_invfreq_s1.pt
+best val loss 0.99168 at epoch 27; reference 1.05223; checkpoint results/checkpoints/splithead_invfreq_s1.pt

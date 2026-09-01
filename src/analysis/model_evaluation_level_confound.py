@@ -23,8 +23,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-PHASE_D = Path("results/phase_d")
-OUT_DIR = Path("results/phase_e")
+PHASE_D = Path("results/model_v1")
+OUT_DIR = Path("results/model_evaluation")
 # `invfreq` is degenerate and is reported but excluded from the correlations: its level moved
 # -0.050 against a between-arm spread of 0.008, and its RMSE blew out from 0.0479 to 0.0607.
 # Leaving it in would manufacture the correlation this module is testing for. Excluding it is
@@ -36,14 +36,14 @@ SEEDS = tuple(f"baseline_s{i}" for i in range(5))
 def arm_mean(arm):
     """Mean predicted wOBA over an arm's prediction table. Unweighted: the question is where the
     arm's output distribution sits, not what the PA-weighted population average is."""
-    frame = pd.read_csv(PHASE_D / f"d5_predictions_d10_{arm}.csv")
+    frame = pd.read_csv(PHASE_D / f"model_v1_predictions_rebuild_{arm}.csv")
     assert "pred_woba" in frame, f"{arm} has no pred_woba"
     return float(frame["pred_woba"].mean()), int(len(frame))
 
 
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    verdict = json.loads((PHASE_D / "d5_arms_verdict_d10.json").read_text())
+    verdict = json.loads((PHASE_D / "model_v1_arms_verdict_rebuild.json").read_text())
     rows = []
     for arm, scores in verdict["arms"].items():
         mean, n = arm_mean(arm)
@@ -98,12 +98,12 @@ def main():
                           "rank_decisive_range": float(fit["rank_decisive"].max()
                                                        - fit["rank_decisive"].min())}
 
-    table.to_csv(OUT_DIR / "e12_level_confound.csv", index=False)
-    (OUT_DIR / "e12_level_confound.json").write_text(json.dumps(out, indent=2))
+    table.to_csv(OUT_DIR / "level_confound_level_confound.csv", index=False)
+    (OUT_DIR / "level_confound_level_confound.json").write_text(json.dumps(out, indent=2))
     print(table.to_string(index=False, float_format="%.5f"))
     print()
     print(json.dumps(out, indent=2))
-    print(f"\nwrote {OUT_DIR / 'e12_level_confound.json'}")
+    print(f"\nwrote {OUT_DIR / 'level_confound_level_confound.json'}")
 
 
 if __name__ == "__main__":

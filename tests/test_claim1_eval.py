@@ -335,7 +335,7 @@ def test_skill_score_rejects_zero_reference():
 
 # ---- gate: the test season is refused ----
 
-def test_test_season_is_guarded():
+def test_season_is_guarded():
     with pytest.raises(AssertionError, match="frozen TEST season"):
         ce.assert_not_test_season(2025)
     ce.assert_not_test_season(2024)  # val is fine
@@ -423,7 +423,7 @@ def test_paired_rank_sign_is_opposite_to_rmse():
     assert rank.loc["all", "ci_low"] > 0
 
 
-def test_test_season_guard_blocks_by_default_and_opens_only_when_asked():
+def test_season_guard_blocks_by_default_and_opens_only_when_asked():
     """
     The guard must stay closed for every ordinary call and open only on an explicit
     final_run. A guard that could be satisfied by any other argument would not be a

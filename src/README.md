@@ -7,11 +7,11 @@ Model implementation, training pipeline, and evaluation code.
 Organize by phase as the project develops:
 
 - `phase_a/` — Data foundation (Statcast loading, feature engineering, split config)
-- `phase_b/` — Feature-value analysis (reliability, GBM screening, bat-tracking ablations)
-- `phase_c/` — Baseline models (bucketed averages, empirical Bayes, XGBoost)
-- `phase_d/` — v1 model (conditional-query architecture, training, ensembles)
-- `phase_e/` — Evaluation (probe checkpoint, claim-1 metrics, calibration)
-- `phase_f/` — v2 upgrades (history encoder, pitcher-ID residual)
+- `feature_screening/` — Feature-value analysis (reliability, GBM screening, bat-tracking ablations)
+- `baseline_ladder/` — Baseline models (bucketed averages, empirical Bayes, XGBoost)
+- `model_v1/` — v1 model (conditional-query architecture, training, ensembles)
+- `model_evaluation/` — Evaluation (probe checkpoint, claim-1 metrics, calibration)
+- `process_calibration/` — v2 upgrades (history encoder, pitcher-ID residual)
 - `phase_g/` — Query library (Monte Carlo, Markov composition)
 
 - `config/` — Training config, split definitions, frozen decision paths

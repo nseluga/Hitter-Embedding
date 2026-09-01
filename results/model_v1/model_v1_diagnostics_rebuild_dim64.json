@@ -902,7 +902,7 @@
       "bip": 0.02
     }
   },
-  "arm": "d10_dim64",
+  "arm": "rebuild_dim64",
   "seeds": [
     0,
     1,

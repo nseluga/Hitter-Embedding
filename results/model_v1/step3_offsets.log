@@ -13,4 +13,4 @@ classes ('ball', 'called_strike', 'hit_by_pitch')
   3-0            0.6745          1.2745          0.3304
   3-1            0.9461          1.0991          0.7651
   3-2            1.0217          0.9030          1.5332
-wrote results/phase_d/d5_take_count_offsets.json
+wrote results/model_v1/model_v1_take_count_offsets.json

@@ -15,4 +15,4 @@ epoch  13  train 0.99746  val 1.02675  ref 1.02675  lr 9.00e-05  177s (719 steps
 epoch  14  train 0.99739  val 1.02705  ref 1.02705  lr 2.70e-05  178s (719 steps)
 epoch  15  train 0.99708  val 1.02664  ref 1.02664  lr 2.70e-05  225s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.02661 at epoch 12; reference 1.02661; checkpoint results/checkpoints/d10_dim16_s2.pt
+best val loss 1.02661 at epoch 12; reference 1.02661; checkpoint results/checkpoints/rebuild_dim16_s2.pt

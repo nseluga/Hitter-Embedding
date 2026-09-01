@@ -14,4 +14,4 @@ epoch  12  train 1.05157  val 1.07640  ref 1.07640  lr 9.00e-05  133s (719 steps
 epoch  13  train 1.05144  val 1.07615  ref 1.07615  lr 2.70e-05  116s (719 steps)
 epoch  14  train 1.05100  val 1.07604  ref 1.07604  lr 2.70e-05  123s (719 steps)
 early stop: 3 epochs without improvement
-best val loss 1.07602 at epoch 11; reference 1.07602; checkpoint results/checkpoints/d8_bilinear_s4.pt
+best val loss 1.07602 at epoch 11; reference 1.07602; checkpoint results/checkpoints/presplit_bilinear_s4.pt

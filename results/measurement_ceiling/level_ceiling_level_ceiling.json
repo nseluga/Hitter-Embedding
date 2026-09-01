@@ -14,8 +14,8 @@
     "fraction_of_ceiling": 0.6534578209413344,
     "post_selection_descriptive": true
   },
-  "committed_f5_population": {
-    "f5_committed_617": {
+  "committed_pooled_population": {
+    "pooled_committed_617": {
       "n_hitters": 617,
       "observed_between_hitter_variance": 0.001816371029620449,
       "E_var_noise": 0.0008197678076759383,
@@ -29,7 +29,7 @@
       "post_selection_descriptive": true
     }
   },
-  "cross_check_c2_composition": {
+  "cross_check_eb_composition": {
     "route": "C.2 variance composition on the M.6 population (level-side Route B')",
     "n_hitters": 473,
     "true_talent_variance": 0.0007132608654266474,
@@ -47,7 +47,7 @@
     "ceiling_rank_corr": 0.6743736922665016
   },
   "term_provenance": {
-    "E_var_noise": "f5/claim1_eval noise_floor squared (noise_floor is an RMSE)",
+    "E_var_noise": "pooled/claim1_eval noise_floor squared (noise_floor is an RMSE)",
     "observed_between_hitter_variance": "no_info rung pa_weighted_rmse squared",
     "true_talent_variance": "observed minus noise; equals the no_info rung's model_rmse squared, which claim1_eval.deconvolve had already computed"
   },
@@ -57,7 +57,7 @@
     "caveat": "reported descriptively only. The asymmetry's supporting statistic is broken (E.15's LHB split-half reliability is negative) and the L-vs-R difference was never tested."
   },
   "coverage": {
-    "phase_d_coverage": {
+    "model_v1_coverage": {
       "eval_season": 2024,
       "actual_groups": 545,
       "dropped_below_min_eval_pa": 0,
