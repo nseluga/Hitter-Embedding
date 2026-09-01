@@ -52,6 +52,19 @@
       "margin_in_ses": 0.8160261132524335,
       "promotable": false
     },
+    "lr1e3_warm2k": {
+      "n_seeds": 2,
+      "reference_mean": 1.0258,
+      "reference_sd": 0.00022627416997960748,
+      "reference_values": [
+        1.02564,
+        1.02596
+      ],
+      "margin_vs_incumbent": 4.4999999999850715e-05,
+      "standard_error": 0.00010416333327999322,
+      "margin_in_ses": 0.43201382466217525,
+      "promotable": false
+    },
     "lr3e3": {
       "n_seeds": 2,
       "reference_mean": 1.02613,
@@ -109,6 +122,7 @@
     "expected_arms": [
       "lr1e3",
       "lr1e3_warm",
+      "lr1e3_warm2k",
       "lr3e3",
       "lr3e3_warm",
       "lr3e4",
@@ -121,7 +135,7 @@
     "complete": true
   },
   "winner": "lr1e3",
-  "n_challengers_tested": 5,
+  "n_challengers_tested": 6,
   "requires_confirmation": false,
   "confirmation_seeds": 5,
   "verdict": "incumbent_stands"

@@ -1,0 +1,26 @@
+2026/09/01 12:32:36 INFO mlflow.tracking.fluent: Experiment with name 'model_v1' does not exist. Creating a new experiment.
+warmup: linear over 2000 steps to lr 1.00e-03 (first step at lr 5.00e-07)
+epoch   0  train 1.13750  val 1.08393  ref 1.08393  lr 3.60e-04  131s (719 steps)
+epoch   1  train 1.04584  val 1.05190  ref 1.05190  lr 7.19e-04  75s (719 steps)
+warmup: complete after 2000 steps
+epoch   2  train 1.02203  val 1.03875  ref 1.03875  lr 1.00e-03  86s (719 steps)
+epoch   3  train 1.01250  val 1.03407  ref 1.03407  lr 1.00e-03  90s (719 steps)
+epoch   4  train 1.00791  val 1.03169  ref 1.03169  lr 1.00e-03  66s (719 steps)
+epoch   5  train 1.00531  val 1.03090  ref 1.03090  lr 1.00e-03  139s (719 steps)
+epoch   6  train 1.00350  val 1.02930  ref 1.02930  lr 1.00e-03  56s (719 steps)
+epoch   7  train 1.00215  val 1.02851  ref 1.02851  lr 1.00e-03  51s (719 steps)
+epoch   8  train 1.00100  val 1.02830  ref 1.02830  lr 1.00e-03  46s (719 steps)
+epoch   9  train 1.00003  val 1.02684  ref 1.02684  lr 1.00e-03  46s (719 steps)
+epoch  10  train 0.99920  val 1.02722  ref 1.02722  lr 1.00e-03  41s (719 steps)
+epoch  11  train 0.99842  val 1.02755  ref 1.02755  lr 3.00e-04  57s (719 steps)
+epoch  12  train 0.99562  val 1.02654  ref 1.02654  lr 3.00e-04  44s (719 steps)
+epoch  13  train 0.99514  val 1.02620  ref 1.02620  lr 3.00e-04  57s (719 steps)
+epoch  14  train 0.99493  val 1.02595  ref 1.02595  lr 3.00e-04  61s (719 steps)
+epoch  15  train 0.99468  val 1.02613  ref 1.02613  lr 3.00e-04  65s (719 steps)
+epoch  16  train 0.99446  val 1.02598  ref 1.02598  lr 9.00e-05  76s (719 steps)
+epoch  17  train 0.99337  val 1.02564  ref 1.02564  lr 9.00e-05  86s (719 steps)
+epoch  18  train 0.99324  val 1.02591  ref 1.02591  lr 9.00e-05  140s (719 steps)
+epoch  19  train 0.99316  val 1.02574  ref 1.02574  lr 2.70e-05  93s (719 steps)
+epoch  20  train 0.99278  val 1.02578  ref 1.02578  lr 2.70e-05  165s (719 steps)
+early stop: 3 epochs without improvement
+best val loss 1.02564 at epoch 17; reference 1.02564; checkpoint results/checkpoints/selection_lr1e3_warm2k_s0.pt

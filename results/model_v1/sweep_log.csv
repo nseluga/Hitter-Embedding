@@ -130,3 +130,5 @@ selection,lr1e3_warm,0,ok,1203.9,1.02567,1.02567,17,0.001,719,data/processed/pha
 selection,lr1e3_warm,1,ok,1258.6,1.02585,1.02585,18,0.001,719,data/processed/phase_d5,2026-08-24 22:17
 selection,lr3e3_warm,0,ok,705.8,1.02629,1.02629,9,0.003,719,data/processed/phase_d5,2026-08-24 22:29
 selection,lr3e3_warm,1,ok,653.0,1.02571,1.02571,9,0.003,719,data/processed/phase_d5,2026-08-24 22:40
+selection,lr1e3_warm2k,0,ok,1701.7,1.02564,1.02564,17,0.001,2000,data/processed/phase_d5,2026-09-01 13:00
+selection,lr1e3_warm2k,1,ok,7360.0,1.02596,1.02596,18,0.001,2000,data/processed/phase_d5,2026-09-01 15:03
