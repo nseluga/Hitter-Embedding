@@ -388,3 +388,88 @@ def paired_contrast(draws, columns, a, b, point_a, point_b, ci=(2.5, 97.5)):
         "favours_a_share": float(np.mean(difference > 0)),
         "n_draws": int(len(difference)),
     }
+
+
+# ------------------------------------------------------------------ the exhibit
+
+def differential_noise_floor(sampling_var, weight):
+    """
+    Weight-weighted irreducible RMSE in the OBSERVED platoon differential.
+
+    The exact analogue of `claim1_eval.noise_floor`, one level up. That function reads
+    `noise_var`, the sampling variance of a hitter's realized wOBA against one hand, off
+    the level eval frame. The differential's own sampling variance is Var[e] = s2_L/n_L +
+    s2_R/n_R, already attached to the M.1 frame as `sampling_var` by
+    `platoon_ceiling.attach_sampling_variance`, and it is the SAME quantity the ceiling's
+    reliability is built from -- so the RMSE denominator and the rank denominator come
+    from one noise model rather than two.
+
+    Pass A2 adds this because the spec's premise ("`noise_floor`/`deconvolve` already
+    compute it") is true of the level frame and false of the differential: no differential
+    RMSE or differential floor existed anywhere in `results/measurement_ceiling/`.
+    """
+    sampling_var = np.asarray(sampling_var, dtype="float64")
+    weight = np.asarray(weight, dtype="float64")
+    assert (sampling_var > 0).all(), "a hitter has non-positive differential sampling variance"
+    assert weight.sum() > 0, "total weight is zero"
+    return float(np.sqrt(np.average(sampling_var, weights=weight)))
+
+
+def paired_differential_bootstrap(frame, columns, n_boot=2000, seed=0, ci=(2.5, 97.5)):
+    """
+    One resample of hitters per replicate, scored on BOTH claim-1 metrics at once.
+
+    Same contract as `paired_rank_bootstrap` and deliberately the same RNG consumption --
+    one `rng.integers(0, n, n)` per replicate, in the same order -- so at a shared seed the
+    resample indices are identical and the rank draws are bit-identical to that function's.
+    `tests/test_measurement_ceiling_stats.py` asserts it, which makes this a translation of
+    the committed bootstrap rather than a second one.
+
+    Returns (rank_draws, rmse_draws, table), both draw matrices shaped (n_boot, len(columns))
+    on the SAME replicates, so a paired contrast may be formed on either metric from the
+    same resampled hitters.
+
+    RMSE is scored on the raw differential, NOT the within-stand residual. The rank ceiling
+    is a ceiling on the within-stand true differential variance, so its numerator has to be
+    residualised; the RMSE bound is an error floor on the observation itself, which the
+    between-stand main effect does not move. Residualising the numerator alone would charge
+    each model for a main effect its prediction is entitled to carry.
+    """
+    assert frame["batter"].is_unique, \
+        "paired_differential_bootstrap resamples ROWS as hitters; this frame has repeated batters"
+    obs = frame["delta_obs"].to_numpy(dtype="float64")
+    weight = frame["weight"].to_numpy(dtype="float64")
+    stand = frame["stand"].to_numpy()
+    predictions = {name: frame[name].to_numpy(dtype="float64") for name in columns}
+    n = len(frame)
+    rng = np.random.default_rng(seed)
+
+    rank_draws = np.empty((int(n_boot), len(columns)), dtype="float64")
+    rmse_draws = np.empty((int(n_boot), len(columns)), dtype="float64")
+    for b in range(int(n_boot)):
+        pick = rng.integers(0, n, n)
+        for j, name in enumerate(columns):
+            rank_draws[b, j] = within_stand_rank_correlation(
+                obs[pick], predictions[name][pick], weight[pick], stand[pick])
+            rmse_draws[b, j] = claim1_eval.pa_weighted_rmse(
+                obs[pick], predictions[name][pick], weight[pick])
+
+    rows = []
+    for j, name in enumerate(columns):
+        rank_column = rank_draws[:, j][np.isfinite(rank_draws[:, j])]
+        rmse_column = rmse_draws[:, j][np.isfinite(rmse_draws[:, j])]
+        assert len(rank_column) > n_boot // 2, f"{name}: most rank replicates degenerated"
+        assert len(rmse_column) > n_boot // 2, f"{name}: most RMSE replicates degenerated"
+        rows.append({
+            "column": name,
+            "n_hitters": int(n),
+            "n_rank_draws": int(len(rank_column)),
+            "n_rmse_draws": int(len(rmse_column)),
+            "rank_point": within_stand_rank_correlation(obs, predictions[name], weight, stand),
+            "rank_ci_low": float(np.percentile(rank_column, ci[0])),
+            "rank_ci_high": float(np.percentile(rank_column, ci[1])),
+            "rmse_point": claim1_eval.pa_weighted_rmse(obs, predictions[name], weight),
+            "rmse_ci_low": float(np.percentile(rmse_column, ci[0])),
+            "rmse_ci_high": float(np.percentile(rmse_column, ci[1])),
+        })
+    return rank_draws, rmse_draws, pd.DataFrame(rows)

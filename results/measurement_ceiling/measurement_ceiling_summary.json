@@ -78,7 +78,7 @@
     "reproduces_committed": true,
     "label_for_notebook": "every displayed interval carries its MEASURED coverage, not the nominal level \u2014 the plan's own fallback, already fired. No further attempt is made to close the gap."
   },
-  "route_baseline_ladder_verdict": "uninformative_inside_both_nulls",
+  "route_c_verdict": "uninformative_inside_both_nulls",
   "precision_clause": {
     "rule": "a stratum whose 95% bootstrap CI on the ceiling includes zero cannot carry the illustration; it moves to the stratum with the narrowest CI relative to its point estimate",
     "frozen": "docs/phase-m-spec.md \u00a7M.2, from the 2026-08-20 revisit condition",
@@ -100,16 +100,17 @@
     "note": "'low' is the stratum the thesis is graded on, so a move away from it is reported as a limitation on the illustration, not as a change of subject."
   },
   "artifacts": [
-    "routes_route_baseline_ladder_diagnostic.json",
-    "routes.json",
-    "differential_gbm_full_predictions.csv",
-    "differential_scores.csv",
-    "differential_fraction_of_ceiling.csv",
-    "differential_min_eval_pa_sensitivity.csv",
-    "stratum_ceiling_stratum_ceiling.csv",
-    "level_ceiling_level_ceiling.json",
     "coverage_labels_coverage_labels.csv",
+    "differential_exhibit.csv",
+    "differential_exhibit_denominators.csv",
+    "differential_fraction_of_ceiling.csv",
+    "differential_gbm_full_predictions.csv",
+    "differential_min_eval_pa_sensitivity.csv",
+    "differential_route_diagnostics.csv",
+    "level_ceiling_level_ceiling.json",
     "measurement_ceiling_summary.json",
-    "population.csv"
+    "population.csv",
+    "routes.json",
+    "routes_route_c_diagnostic.json"
   ]
 }

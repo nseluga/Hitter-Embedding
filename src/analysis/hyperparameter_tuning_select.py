@@ -32,11 +32,13 @@ THE RULE.
 3. `lr1e3` (lr 1e-3, no warmup) is the incumbent -- the setting all 119 pre-O runs used.
    An arm is PROMOTED only if it beats the incumbent's mean by more than `MARGIN_SES`
    standard errors of the difference in means (the noise floor supplies the per-run sd). Otherwise the incumbent stands and Phase O reports
-   that the untuned setting was already the best of the six.
+   that the untuned setting was already the best of the seven.
 4. Lower `reference` is better (it is a loss).
-5. Five challengers are tested against one incumbent at the same threshold, so a promoted
+5. Six challengers are tested against one incumbent at the same threshold, so a promoted
    arm carries `requires_confirmation` until it has CONFIRMATION_SEEDS seeds. A two-seed
-   screen selects; it never concludes.
+   screen selects; it never concludes. The sixth, `lr1e3_warm2k`, was pre-registered on
+   2026-08-31 after the first five had run; MARGIN_SES is unchanged, so it is one more
+   chance to clear the same bar.
 
 GRID COMPLETENESS. `sweep.py` queues config-major, so a night that runs short drops whole
 arms off the END of the grid rather than thinning every arm evenly -- and a mean over the
@@ -73,7 +75,8 @@ MIN_SEEDS_PER_ARM = 2
 # 1 cannot reach it -- a firewall that holds only until someone adds a convenient import is
 # not a firewall. `test_selection_select.py` asserts this list still matches sweep.STAGES["selection"]; a
 # test may import both, because a test is not the thing being firewalled.
-EXPECTED_ARMS = ("lr1e3", "lr1e3_warm", "lr3e3", "lr3e3_warm", "lr3e4", "lr3e4_warm")
+EXPECTED_ARMS = ("lr1e3", "lr1e3_warm", "lr1e3_warm2k", "lr3e3", "lr3e3_warm",
+                 "lr3e4", "lr3e4_warm")
 
 
 def ledger_rows(path=LEDGER):

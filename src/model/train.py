@@ -64,11 +64,13 @@ LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-2
 BATCH_SIZE = 8192
 # Linear warmup over optimizer steps, off by default so every pre-Phase-O run is
-# reproduced exactly. Warmup must finish before ReduceLROnPlateau can first fire
-# (patience 1 => epoch 2 at the earliest), or the two would fight over param_group lr;
-# WARMUP_MAX_EPOCHS enforces that.
+# reproduced exactly. Warmup must finish before ReduceLROnPlateau can first fire, or the
+# two would fight over param_group lr; WARMUP_MAX_EPOCHS enforces that. Patience 1 puts
+# the first possible cut at the END of epoch index 2, i.e. after three full epochs have
+# run -- so the count of epochs warmup may occupy is 3, not 2. The old value of 2 encoded
+# the epoch index instead of the epoch count.
 WARMUP_STEPS = 0
-WARMUP_MAX_EPOCHS = 2
+WARMUP_MAX_EPOCHS = 3
 PLATEAU_FACTOR = 0.3
 PLATEAU_PATIENCE = 1
 EARLY_STOPPING_PATIENCE = 3
@@ -244,6 +246,9 @@ def fit(model, tensors, indices, optimizer, generator, args):
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
     checkpoint = CHECKPOINT_DIR / f"{run_name(args)}.pt"
     best, best_epoch, since_best, best_reference = float("inf"), -1, 0, float("nan")
+    # `warmup.done` latches, so it needs its own once-guard: the old `epoch == 0` was
+    # serving as one, and dropping it alone would print the line on every later epoch.
+    warmup_reported = False
 
     for epoch in range(args.max_epochs):
         def log_step(step, loss_per_row, epoch=epoch):
@@ -271,7 +276,8 @@ def fit(model, tensors, indices, optimizer, generator, args):
                             "val_reference_epoch": reference,
                             "lr": optimizer.param_groups[0]["lr"],
                             "epoch_seconds": seconds}, step=epoch)
-        if warmup is not None and warmup.done and epoch == 0:
+        if warmup is not None and warmup.done and not warmup_reported:
+            warmup_reported = True
             print(f"warmup: complete after {warmup.step_count} steps", flush=True)
         print(f"epoch {epoch:>3d}  train {train_loss:.5f}  val {val_loss:.5f}  "
               f"ref {reference:.5f}  lr {optimizer.param_groups[0]['lr']:.2e}  "

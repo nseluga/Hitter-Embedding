@@ -102,7 +102,7 @@ STAGES = {
             ("nospray", ["--split", "--no-spray"]),
             ("block", ["--split", "--data-dir", D10_NOBLOCK_DATA_DIR])],
 }
-# Phase O. A 3x2 factorial on the two knobs that were never varied, on the rebuild baseline
+# Phase O. Three learning rates crossed with warmup, on the rebuild baseline
 # architecture with everything else frozen. `lr1e3` is the incumbent control and must stay
 # in the grid: without it the tuned build has nothing to be tuned RELATIVE TO, and a
 # ledger `reference` from a different stage is not comparable (see the presplit->splithead note above).
@@ -123,6 +123,12 @@ STAGES["selection"] = [
     ("lr3e4_warm", [*O1_BASE, "--lr", "3e-4", "--warmup-steps", O1_WARMUP_STEPS]),
     ("lr1e3_warm", [*O1_BASE, "--lr", "1e-3", "--warmup-steps", O1_WARMUP_STEPS]),
     ("lr3e3_warm", [*O1_BASE, "--lr", "3e-3", "--warmup-steps", O1_WARMUP_STEPS]),
+    # Added after the 3x2 grid ran, so the grid is no longer a clean factorial: 719 steps
+    # is one epoch, not a value chosen against beta2, and 2,000 is the literature default
+    # at beta2 = 0.999 (Ma & Yarats 2021). Same stage on purpose -- the ledger keys on
+    # (stage, config, seed) and skips completed triples, so `reference` stays in the
+    # incumbent's units instead of being compared across stages.
+    ("lr1e3_warm2k", [*O1_BASE, "--lr", "1e-3", "--warmup-steps", "2000"]),
 ]
 
 DEFAULT_SEEDS = {"screen": 2, "early": 5, "presplit": 5, "splithead": 5, "rebuild": 5, "selection": 2}

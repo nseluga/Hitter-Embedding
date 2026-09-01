@@ -378,3 +378,78 @@ def test_the_paired_contrast_sign_favours_the_first_named_model(differential_fra
     assert forward["difference"] == pytest.approx(-backward["difference"], abs=1e-15)
     assert forward["favours_a_share"] + backward["favours_a_share"] == pytest.approx(1.0,
                                                                                      abs=0.02)
+
+
+# ---------------------------------------------------------------- the exhibit (Pass A2)
+
+def test_the_exhibit_bootstrap_reproduces_the_committed_rank_draws_exactly(differential_frame):
+    """
+    TRANSLATION FIDELITY, blocking. `paired_differential_bootstrap` adds RMSE to the
+    committed rank bootstrap. It is only an extension if it resamples the SAME hitters in
+    the same order: both draw one `rng.integers(0, n, n)` per replicate off a default_rng
+    at the shared seed, so at equal seeds the rank matrices must be bit-identical. A drift
+    here means the exhibit's rank cells are a second estimator wearing the first one's name.
+    """
+    columns = ["delta_pred", "delta_eb", "delta_c3full"]
+    committed, _ = measurement_ceiling_stats.paired_rank_bootstrap(
+        differential_frame, columns, n_boot=60, seed=0)
+    rank_draws, _, _ = measurement_ceiling_stats.paired_differential_bootstrap(
+        differential_frame, columns, n_boot=60, seed=0)
+    assert np.array_equal(committed, rank_draws, equal_nan=True)
+
+
+def test_the_exhibit_bootstrap_is_deterministic_under_a_seed(differential_frame):
+    columns = ["delta_pred", "delta_eb"]
+    first = measurement_ceiling_stats.paired_differential_bootstrap(
+        differential_frame, columns, n_boot=40, seed=5)
+    second = measurement_ceiling_stats.paired_differential_bootstrap(
+        differential_frame, columns, n_boot=40, seed=5)
+    for a, b in zip(first[:2], second[:2]):
+        assert np.array_equal(a, b, equal_nan=True)
+
+
+def test_the_exhibit_bootstrap_points_are_the_full_sample_statistics(differential_frame):
+    """Both point columns come from the DATA, not from a mean over draws."""
+    from src.analysis import claim1_eval
+    columns = ["delta_pred", "delta_eb", "delta_c3full"]
+    _, _, table = measurement_ceiling_stats.paired_differential_bootstrap(
+        differential_frame, columns, n_boot=60, seed=0)
+    for _, row in table.iterrows():
+        assert row["rmse_point"] == pytest.approx(claim1_eval.pa_weighted_rmse(
+            differential_frame["delta_obs"], differential_frame[row["column"]],
+            differential_frame["weight"]), abs=1e-15)
+        assert row["rank_point"] == pytest.approx(
+            measurement_ceiling_stats.within_stand_rank_correlation(
+                differential_frame["delta_obs"], differential_frame[row["column"]],
+                differential_frame["weight"], differential_frame["stand"]), abs=1e-15)
+
+
+def test_the_exhibit_bootstrap_refuses_a_frame_with_repeated_hitters(differential_frame):
+    doubled = pd.concat([differential_frame, differential_frame], ignore_index=True)
+    with pytest.raises(AssertionError, match="repeated batters"):
+        measurement_ceiling_stats.paired_differential_bootstrap(doubled, ["delta_pred"], n_boot=5)
+
+
+def test_the_differential_noise_floor_is_the_weighted_root_mean_sampling_variance():
+    """
+    The floor's defining identity, on numbers whose answer is known by hand. It is the same
+    shape as `claim1_eval.noise_floor` -- sqrt of a weight-weighted mean variance -- one
+    level up, on the differential's Var[e] rather than a single side's.
+    """
+    floor = measurement_ceiling_stats.differential_noise_floor(
+        sampling_var=[0.01, 0.04], weight=[3.0, 1.0])
+    assert floor == pytest.approx(np.sqrt((3 * 0.01 + 1 * 0.04) / 4), abs=1e-15)
+
+
+def test_the_differential_noise_floor_refuses_a_non_positive_sampling_variance():
+    with pytest.raises(AssertionError, match="non-positive differential sampling variance"):
+        measurement_ceiling_stats.differential_noise_floor([0.01, 0.0], [1.0, 1.0])
+
+
+def test_a_constant_weight_floor_matches_the_unweighted_root_mean(differential_frame):
+    """On the real frame, with the weights removed, the floor collapses to the plain
+    root-mean sampling variance — a check that the weighting is the only thing it adds."""
+    sampling = differential_frame["sampling_var"].to_numpy()
+    floor = measurement_ceiling_stats.differential_noise_floor(
+        sampling, np.ones(len(sampling)))
+    assert floor == pytest.approx(np.sqrt(sampling.mean()), abs=1e-15)

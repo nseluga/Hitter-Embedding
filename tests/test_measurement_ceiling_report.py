@@ -81,6 +81,20 @@ def scored_frame(intersection, eb_delta, gbm_full_delta):
     return measurement_ceiling_report.attach_differentials(frame, eb_delta, gbm_full_delta)
 
 
+@pytest.fixture(scope="module")
+def exhibit_tables(pa_df, intersection, scored_frame):
+    """The main exhibit built on the real 2024 frame, at a bootstrap depth the test suite
+    can afford. The bootstrap depth moves only the interval columns, never a point."""
+    from src.analysis import baseline_ladder_bivariate_eb as eb
+    frame, by_league = intersection
+    params_b = eb.fit(pa_df, EVAL_SEASON)
+    params_b_prime = eb.fit(pa_df[pa_df["batter"].isin(set(frame["batter"]))], EVAL_SEASON)
+    routes = measurement_ceiling_report.route_tables(
+        frame, by_league, params_b, params_b_prime)["routes"]
+    return measurement_ceiling_report.differential_exhibit(
+        scored_frame, routes, params_b_prime, n_boot=200)
+
+
 # ---------------------------------------------------------------- §9.3a
 
 def test_unrestricted_eb_refit_reproduces_the_committed_route_b_tau2(pa_df):
@@ -351,3 +365,119 @@ def test_the_route_rule_names_b_prime_primary_and_never_promotes_route_c():
     assert "A" in rule["always_reported"]
     assert rule["provenance_only"] == ["B"]
     assert rule["never_primary"] == ["C"]
+
+
+# ---------------------------------------------------------------- the main exhibit (Pass A2)
+
+def test_the_exhibit_pooled_rank_ceiling_reproduces_the_committed_route_table():
+    """
+    REPRODUCTION GATE, blocking. The exhibit's rank denominator must be the SAME simulated
+    Spearman ceiling the committed route table reports, not a fresh simulation that lands a
+    Monte Carlo error away from it. Both run 300 draws from seed 7 on the pooled frame, so
+    the agreement is exact rather than approximate. A drift here silently rescales every
+    pooled rank fraction in the exhibit against a number the decision log does not name.
+    """
+    import json
+    from pathlib import Path
+    from src.analysis import measurement_ceiling_report
+
+    routes = json.loads(Path("results/measurement_ceiling/routes.json").read_text())
+    committed = routes["monte_carlo_rank_ceiling"]
+    assert committed["n_draws"] == measurement_ceiling_report.MC_CEILING_DRAWS
+    assert measurement_ceiling_report.MC_CEILING_SEED == 7
+    assert committed["mc_spearman_mean"] == pytest.approx(0.30931, abs=5e-5)
+
+
+def test_both_exhibit_fractions_point_the_same_way(exhibit_tables):
+    """
+    ORIENTATION, blocking. The table mixes a correlation (higher is better) with an error
+    (lower is better). Both are reported as a fraction of their own bound so that one sign
+    convention serves the whole exhibit and `paired_contrast` needs no metric-specific
+    variant. If either flipped, every paired contrast in that half would read backwards.
+    """
+    exhibit, _ = exhibit_tables
+    for _, row in exhibit.iterrows():
+        assert row["rank_fraction_of_ceiling"] == pytest.approx(
+            row["rank_corr_within_stand"] / row["rank_ceiling_mc_spearman"], abs=1e-12)
+        assert row["rmse_fraction_of_floor"] == pytest.approx(
+            row["rmse_noise_floor"] / row["pa_weighted_rmse"], abs=1e-12)
+        # the RMSE interval inverts under the reciprocal: the widest error is the worst cell
+        assert row["rmse_fraction_ci_low"] < row["rmse_fraction_ci_high"]
+        assert row["rank_fraction_ci_low"] < row["rank_fraction_ci_high"]
+
+
+def test_the_exhibit_rank_cells_reproduce_the_superseded_tables(exhibit_tables):
+    """
+    REPRODUCTION GATE, blocking. The exhibit replaces `differential_scores.csv` and the
+    stratum table, so its rank numerators must be those files' committed values to the last
+    digit -- a replacement that also moves the numbers is a new result wearing an old name.
+    Reference values are the Pass A2 spec's table and the committed stratum CSV.
+    """
+    exhibit, _ = exhibit_tables
+    expected = {
+        ("pooled", "model_v1_model"): 0.14626474805407283,
+        ("pooled", "eb_bivariate"): 0.14582642711091456,
+        ("pooled", "gbm_full"): 0.1412976147889645,
+        ("low", "model_v1_model"): 0.1901200387409761,
+        ("low", "eb_bivariate"): 0.19737665798869397,
+        ("low", "gbm_full"): 0.23600403635465694,
+        ("medium", "model_v1_model"): 0.14263646602311905,
+        ("high", "model_v1_model"): 0.11046510805034039,
+    }
+    indexed = exhibit.set_index(["exhibit_column", "model"])
+    for key, value in expected.items():
+        assert indexed.loc[key, "rank_corr_within_stand"] == pytest.approx(value, abs=1e-12)
+
+
+def test_the_exhibit_covers_every_model_in_every_column(exhibit_tables):
+    """Frozen rule 1 grades the LOW stratum against baselines, so a missing opponent in any
+    column is the gap the rule exists to close, not a formatting detail."""
+    from src.analysis import measurement_ceiling_report
+    exhibit, denominators = exhibit_tables
+    models = {name for name, _ in measurement_ceiling_report.DIFFERENTIAL_MODELS}
+    assert set(exhibit["exhibit_column"]) == set(measurement_ceiling_report.EXHIBIT_COLUMNS)
+    assert set(denominators["exhibit_column"]) == set(measurement_ceiling_report.EXHIBIT_COLUMNS)
+    for column, part in exhibit.groupby("exhibit_column"):
+        assert set(part["model"]) == models, f"{column} is missing an opponent"
+    assert (exhibit["build"] == measurement_ceiling_report.BUILD_STAMP).all()
+    assert exhibit["post_selection_descriptive"].all()
+
+
+def test_the_exhibit_strata_sum_to_the_pooled_population(exhibit_tables):
+    """The three strata partition the pooled column; a hitter in neither or in two would
+    make the stratum cells and the pooled cell answer different questions."""
+    exhibit, _ = exhibit_tables
+    per_column = exhibit.groupby("exhibit_column")["n_hitters"].first()
+    assert per_column[["low", "medium", "high"]].sum() == per_column["pooled"]
+
+
+def test_a_model_paired_against_itself_is_absent_from_the_contrast_columns(exhibit_tables):
+    """The reference carries no contrast against itself — an all-zero row would read as a
+    measured tie rather than as the definition it is."""
+    from src.analysis import measurement_ceiling_report
+    exhibit, _ = exhibit_tables
+    reference = exhibit[exhibit["model"] == measurement_ceiling_report.REFERENCE_MODEL]
+    assert reference["rank_paired_diff_vs_reference"].isna().all()
+    assert reference["rmse_paired_diff_vs_reference"].isna().all()
+
+
+def test_the_constant_mean_null_scores_worse_than_every_model_on_differential_rmse(intersection):
+    """
+    Pins the number the 2026-09-01 RMSE-saturation decision-log entry rests on.
+
+    The entry's claim is narrow and worth keeping honest: the three models are
+    indistinguishable FROM EACH OTHER on differential RMSE, but not from a null.
+    An earlier draft asserted the null would score about the same; it does not.
+    """
+    frame = intersection[0]
+    obs = frame["delta_obs"].to_numpy(dtype="float64")
+    weight = frame["weight"].to_numpy(dtype="float64")
+    constant = np.full_like(obs, np.average(obs, weights=weight))
+    null_rmse = claim1_eval.pa_weighted_rmse(obs, constant, weight)
+    assert null_rmse == pytest.approx(0.06862, abs=5e-5)
+
+    exhibit = pd.read_csv(
+        REPO / "results/measurement_ceiling/differential_exhibit.csv")
+    pooled = exhibit[exhibit["exhibit_column"] == "pooled"]
+    assert (pooled["pa_weighted_rmse"] < null_rmse).all(), \
+        "a model no longer beats the constant-mean null; the logged finding needs rewriting"

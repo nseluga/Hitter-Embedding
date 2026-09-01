@@ -183,8 +183,8 @@ def full_grid(*rows, seeds=2):
 
     `select` refuses a partial grid on purpose -- `sweep.queue` is config-major, so a night
     that runs short drops whole arms and a mean over the arms that finished is
-    indistinguishable from a mean over all six. Every fixture therefore has to supply six
-    arms; the padding ones sit at the incumbent's value so only the arm under test moves.
+    indistinguishable from a mean over all seven. Every fixture therefore has to supply
+    seven arms; the padding ones sit at the incumbent's value so only the arm under test moves.
 
     Fixtures put the incumbent on seeds 7-8, off the noise floor's 0-4. Sharing a seed with
     the floor puts the guard in its exact-reproduction regime, which is a separate question
@@ -209,7 +209,7 @@ def test_a_short_night_is_refused_rather_than_averaged():
     result = hyperparameter_tuning_select.select(rows)
     assert result["verdict"] == "incomplete_grid"
     assert set(result["grid"]["missing_arms"]) == {
-        "lr3e4", "lr3e4_warm", "lr1e3_warm", "lr3e3_warm"}
+        "lr3e4", "lr3e4_warm", "lr1e3_warm", "lr1e3_warm2k", "lr3e3_warm"}
 
 
 def test_a_one_seed_arm_is_refused_rather_than_meaned():

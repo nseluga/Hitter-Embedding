@@ -152,7 +152,7 @@
   "route_c": {
     "verdict": "uninformative_inside_both_nulls",
     "reading": "Route C's LHB value sits inside BOTH simulated nulls, so it discriminates nothing: the split-half estimator at these half-length exposures has too much sampling variance to separate tau2=0 from tau2=B'. The alarming -0.366 in E.15 is Spearman-Brown magnifying an ordinary null draw (the raw half correlation is at the 18th percentile of the tau2=0 null). Route C is retired as evidence in either direction, which is the bounded outcome the spec allows. It was never an estimator.",
-    "artifact": "results/measurement_ceiling/routes_route_baseline_ladder_diagnostic.json"
+    "artifact": "results/measurement_ceiling/routes_route_c_diagnostic.json"
   },
   "field_provenance": {
     "route_b_field": "tau2_split_derived (results/baseline_ladder/eb_prior_parameters.csv)",

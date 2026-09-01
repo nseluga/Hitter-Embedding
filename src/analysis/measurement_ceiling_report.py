@@ -712,6 +712,191 @@ def stratum_ceiling_stratum(frame, routes, params_b_prime, n_boot=2000, seed=0):
     return table, precision_clause(table)
 
 
+# ------------------------------------------------------------------ the main exhibit
+
+EXHIBIT_COLUMNS = ("pooled",) + tuple(claim1_eval.STRATUM_NAMES)
+BUILD_STAMP = "pre_hyperparameter_tuning"
+BUILD_STAMP_NOTE = (
+    "scored on the rebuild-baseline build that every pre-selection run used: lr 1e-3, "
+    "warmup 0. Regenerate with `PYTHONPATH=. .venv/bin/python -m "
+    "src.analysis.measurement_ceiling_report` if the selection stage ever promotes an arm.")
+# The committed route table simulates the rank ceiling at 300 draws from seed 7
+# (`route_tables`, `results/measurement_ceiling/routes.json` -> monte_carlo_rank_ceiling).
+# The exhibit reuses those settings EXACTLY so its pooled denominator reproduces the
+# committed 0.30931 rather than landing a Monte Carlo error away from it, and so the three
+# strata are simulated the same way the pooled cell is. The seed is deliberately not the
+# bootstrap's: the ceiling simulation and the hitter resample are independent.
+MC_CEILING_DRAWS = 300
+MC_CEILING_SEED = 7
+
+# What the superseded stratum table carried that no exhibit cell needs: the route A
+# fragility apparatus, the tau2 bookkeeping, and the raw-vs-within-stand gap. Kept in their
+# own artifact so replacing two files with one exhibit loses no committed diagnostic.
+ROUTE_DIAGNOSTIC_COLUMNS = (
+    "stratum", "stratum_basis", "n_hitters", "median_denom_L", "median_denom_R",
+    "observed_within_stand_var", "mean_sampling_var", "tau2_stratum_mix", "tau2_pooled",
+    "ceiling_b_prime", "ceiling_b_prime_ci_low", "ceiling_b_prime_ci_high",
+    "tau2_route_a", "route_a_degenerate", "ceiling_route_a",
+    "ceiling_route_a_ci_low_given_nondegenerate", "ceiling_route_a_ci_high_given_nondegenerate",
+    "route_a_share_degenerate_in_bootstrap", "route_a_ci_note",
+    "route_a_fragility_ceiling_range_finite_only",
+    "achieved_rank_corr_raw", "raw_note", "n_boot", "post_selection_descriptive")
+
+
+def exhibit_cell(part, columns, tau2_mix, n_boot, seed, mc_draws=MC_CEILING_DRAWS,
+                 mc_seed=MC_CEILING_SEED):
+    """
+    Every number one cell of the main exhibit carries, for one subset of hitters.
+
+    part: the M.1 frame cut to this subset. Returns (per-model rows, denominators dict).
+
+    Both fractions are oriented the SAME way -- higher is better, 1.0 means the bound is
+    reached -- so one sign convention serves both metrics and `paired_contrast` needs no
+    variant. Rank is achieved / ceiling; RMSE is floor / achieved, because a lower error is
+    a better one.
+
+    Both denominators are held FIXED across bootstrap replicates, the convention M.1
+    already reports under: the interval is the sampling error of the numerator alone and
+    understates total uncertainty by the width of the route disagreement.
+    """
+    weight = part["weight"].to_numpy(dtype="float64")
+    sampling = part["sampling_var"].to_numpy(dtype="float64")
+
+    # the rank denominator is the SIMULATED Spearman ceiling, not the analytic Pearson
+    # closed form (decision log 2026-08-31): the analytic bound is exact for Pearson and
+    # runs ~4% low against a Spearman numerator at this exposure skew. Run per subset so
+    # the pooled cell and the stratum cells share one denominator definition.
+    monte_carlo = measurement_ceiling_stats.monte_carlo_ceiling(
+        tau2_mix, sampling, weight, n_draws=mc_draws, seed=mc_seed)
+    ceiling = monte_carlo["mc_spearman_mean"]
+    floor = measurement_ceiling_stats.differential_noise_floor(sampling, weight)
+
+    rank_draws, rmse_draws, boot = measurement_ceiling_stats.paired_differential_bootstrap(
+        part, columns, n_boot=n_boot, seed=seed)
+    boot = boot.set_index("column")
+    # both draw matrices become fractions on the shared replicates, so a paired contrast on
+    # either metric is formed from the same resampled hitters
+    rank_fraction_draws = rank_draws / ceiling
+    rmse_fraction_draws = floor / rmse_draws
+    reference_column = dict(DIFFERENTIAL_MODELS)[REFERENCE_MODEL]
+
+    rows = []
+    for name, column in DIFFERENTIAL_MODELS:
+        rank_point = float(boot.loc[column, "rank_point"])
+        rmse_point = float(boot.loc[column, "rmse_point"])
+        rank_fraction = rank_point / ceiling
+        rmse_fraction = floor / rmse_point
+        row = {
+            "model": name,
+            "n_hitters": int(len(part)),
+            "rank_corr_within_stand": rank_point,
+            "rank_corr_ci_low": float(boot.loc[column, "rank_ci_low"]),
+            "rank_corr_ci_high": float(boot.loc[column, "rank_ci_high"]),
+            "rank_ceiling_mc_spearman": ceiling,
+            "rank_ceiling_mc_standard_error": (monte_carlo["mc_spearman_sd"]
+                                               / np.sqrt(monte_carlo["n_draws"])),
+            "rank_fraction_of_ceiling": rank_fraction,
+            "rank_fraction_ci_low": float(boot.loc[column, "rank_ci_low"]) / ceiling,
+            "rank_fraction_ci_high": float(boot.loc[column, "rank_ci_high"]) / ceiling,
+            "pa_weighted_rmse": rmse_point,
+            "rmse_ci_low": float(boot.loc[column, "rmse_ci_low"]),
+            "rmse_ci_high": float(boot.loc[column, "rmse_ci_high"]),
+            "rmse_noise_floor": floor,
+            "rmse_deconvolved": claim1_eval.deconvolve(rmse_point, floor),
+            "rmse_fraction_of_floor": rmse_fraction,
+            # the interval inverts: the widest RMSE draw is the smallest fraction
+            "rmse_fraction_ci_low": floor / float(boot.loc[column, "rmse_ci_high"]),
+            "rmse_fraction_ci_high": floor / float(boot.loc[column, "rmse_ci_low"]),
+        }
+        if name != REFERENCE_MODEL:
+            rank_contrast = measurement_ceiling_stats.paired_contrast(
+                rank_fraction_draws, columns, column, reference_column,
+                rank_fraction, float(boot.loc[reference_column, "rank_point"]) / ceiling)
+            rmse_contrast = measurement_ceiling_stats.paired_contrast(
+                rmse_fraction_draws, columns, column, reference_column,
+                rmse_fraction, floor / float(boot.loc[reference_column, "rmse_point"]))
+            row.update({
+                "rank_paired_diff_vs_reference": rank_contrast["difference"],
+                "rank_paired_ci_low": rank_contrast["ci_low"],
+                "rank_paired_ci_high": rank_contrast["ci_high"],
+                "rank_paired_share_favouring_this_model": rank_contrast["favours_a_share"],
+                "rmse_paired_diff_vs_reference": rmse_contrast["difference"],
+                "rmse_paired_ci_low": rmse_contrast["ci_low"],
+                "rmse_paired_ci_high": rmse_contrast["ci_high"],
+                "rmse_paired_share_favouring_this_model": rmse_contrast["favours_a_share"],
+            })
+        rows.append(row)
+    return rows, {"mc_ceiling": monte_carlo, "noise_floor": floor, "tau2_mix": tau2_mix}
+
+
+def differential_exhibit(frame, routes, params_b_prime, n_boot=2000, seed=0):
+    """
+    THE main exhibit. One table, three models by four columns, both claim-1 metrics per cell.
+
+    Rows are the model and the two Phase C opponents frozen rule 1 grades against; columns
+    are the pooled population and the three frozen exposure strata. Every cell carries the
+    fraction of the RMSE noise floor and the fraction of the Monte Carlo Spearman ceiling,
+    each with a hitter-level paired bootstrap interval, plus the paired contrast against
+    the model.
+
+    Replaces `differential_scores.csv` and `stratum_ceiling_stratum_ceiling.csv`. The route
+    and tau2 diagnostics those files carried, which no cell of this table needs, move to
+    `differential_route_diagnostics.csv` rather than being dropped.
+
+    Strata are read from the frozen `stratum` column and are never redefined here (spec §10.6).
+    """
+    per_hitter, _ = per_hitter_tau2(frame, params_b_prime)
+    frame = frame.assign(tau2_b_prime=per_hitter)
+    columns = [column for _, column in DIFFERENTIAL_MODELS]
+
+    rows, denominators = [], []
+    for name in EXHIBIT_COLUMNS:
+        part = frame if name == "pooled" else frame[frame["stratum"] == name]
+        part = part.reset_index(drop=True)
+        assert len(part) >= 3, f"exhibit column {name!r} has too few hitters to score"
+        weight = part["weight"].to_numpy(dtype="float64")
+        # tau2 is NOT refit per column -- the common B' fit is applied against the column's
+        # own sampling-variance profile, exactly as M.2 did it. Only the L/R composition moves.
+        tau2_mix = (routes["B_prime"]["tau2"] if name == "pooled"
+                    else float(np.average(part["tau2_b_prime"], weights=weight)))
+        cells, denominator = exhibit_cell(part, columns, tau2_mix, n_boot, seed)
+        for cell in cells:
+            rows.append({"exhibit_column": name, **cell,
+                         "reference_model": REFERENCE_MODEL,
+                         "n_boot": int(n_boot),
+                         "mc_ceiling_draws": denominator["mc_ceiling"]["n_draws"],
+                         "rank_ceiling_analytic_pearson":
+                             denominator["mc_ceiling"]["ceiling_rank_corr"],
+                         "build": BUILD_STAMP,
+                         "population": "M.6 intersection",
+                         "post_selection_descriptive": True})
+        denominators.append({
+            "exhibit_column": name,
+            "n_hitters": int(len(part)),
+            "tau2_b_prime_mix": tau2_mix,
+            "tau2_b_prime_pooled": routes["B_prime"]["tau2"],
+            "mean_sampling_var": float(np.average(part["sampling_var"], weights=weight)),
+            "rank_ceiling_mc_spearman": denominator["mc_ceiling"]["mc_spearman_mean"],
+            "rank_ceiling_mc_spearman_sd": denominator["mc_ceiling"]["mc_spearman_sd"],
+            "rank_ceiling_mc_standard_error": (
+                denominator["mc_ceiling"]["mc_spearman_sd"]
+                / np.sqrt(denominator["mc_ceiling"]["n_draws"])),
+            "rank_ceiling_analytic_pearson": denominator["mc_ceiling"]["ceiling_rank_corr"],
+            "rmse_noise_floor": denominator["noise_floor"],
+            "reliability": denominator["mc_ceiling"]["reliability"],
+            "denominator_note": (
+                "both denominators are held FIXED across bootstrap replicates, so every "
+                "interval is the sampling error of the NUMERATOR alone and understates "
+                "total uncertainty by the width of the route disagreement. The rank "
+                "denominator is itself simulated, and its own Monte Carlo standard error "
+                "is the column beside it -- also not in any reported interval."),
+            "build": BUILD_STAMP,
+            "build_note": BUILD_STAMP_NOTE,
+            "post_selection_descriptive": True,
+        })
+    return pd.DataFrame(rows), pd.DataFrame(denominators)
+
+
 # ------------------------------------------------------------------ min_eval_pa sensitivity
 
 MIN_EVAL_PA_FLOORS = (5, 10, 25)
@@ -1176,7 +1361,9 @@ def main():
     frame = attach_differentials(frame, eb_delta, gbm_full_delta)
     differential_scores, differential_fractions, _, _ = differential(frame, routes["routes"],
                                                     n_boot=args.n_boot)
-    differential_scores.to_csv(out_dir / "differential_scores.csv", index=False)
+    # `differential_scores.csv` is superseded by the exhibit and is no longer written; the
+    # route-by-route fraction table stays, because it is the artifact the A-to-B' bracket
+    # is read off and the exhibit reports one route only.
     differential_fractions.to_csv(out_dir / "differential_fraction_of_ceiling.csv", index=False)
     print(differential_scores[["model", "n_hitters", "rank_corr_within_stand_pooled",
                      "rank_corr_ci_low", "rank_corr_ci_high",
@@ -1194,11 +1381,27 @@ def main():
     # ---------------- M.2
     print("\nM.2 per-stratum ceiling")
     stratum_ceiling_table, clause = stratum_ceiling_stratum(frame, routes["routes"], params_b_prime, n_boot=args.n_boot)
-    stratum_ceiling_table.to_csv(out_dir / "stratum_ceiling_stratum_ceiling.csv", index=False)
+    # the achieved/fraction columns move into the exhibit; the route and tau2 diagnostics no
+    # cell of the exhibit needs are kept here rather than dropped
+    stratum_ceiling_table[[c for c in ROUTE_DIAGNOSTIC_COLUMNS
+                           if c in stratum_ceiling_table.columns]].to_csv(
+        out_dir / "differential_route_diagnostics.csv", index=False)
     print(stratum_ceiling_table[["stratum", "n_hitters", "ceiling_b_prime",
-                    "achieved_model_v1_model", "achieved_eb_bivariate", "achieved_gbm_full",
-                    "fraction_of_ceiling_b_prime"]].round(4).to_string(index=False))
+                    "tau2_route_a", "route_a_degenerate",
+                    "achieved_rank_corr_raw"]].round(4).to_string(index=False))
     print(f"  precision clause -> illustration stratum: {clause['illustration_stratum']}")
+
+    # ---------------- the main exhibit
+    print("\nMain exhibit — three models x pooled + three strata, both claim-1 metrics")
+    exhibit, exhibit_denominators = differential_exhibit(
+        frame, routes["routes"], params_b_prime, n_boot=args.n_boot)
+    exhibit.to_csv(out_dir / "differential_exhibit.csv", index=False)
+    exhibit_denominators.to_csv(out_dir / "differential_exhibit_denominators.csv", index=False)
+    print(exhibit[["exhibit_column", "model", "n_hitters", "rank_fraction_of_ceiling",
+                   "rank_fraction_ci_low", "rank_fraction_ci_high",
+                   "rmse_fraction_of_floor", "rmse_fraction_ci_low",
+                   "rmse_fraction_ci_high"]].round(4).to_string(index=False))
+    print(f"  build stamp: {BUILD_STAMP}")
 
     # ---------------- M.3
     print("\nM.3 level-side ceiling")
