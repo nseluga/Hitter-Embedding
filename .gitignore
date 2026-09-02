@@ -1,6 +1,8 @@
 # Claude Code — keep CLAUDE.md tracked, ignore everything else Claude-specific
 .claude/
 docs/research-manifest.md
+README.md
+docs/README.md
 
 # Internal working docs — phase-lettered specs, decision log, lab notebook (not public cleanup)
 docs/pass-*-spec.md
