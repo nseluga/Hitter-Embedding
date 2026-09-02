@@ -37,18 +37,26 @@ PITCH_COLUMNS = ["batter", "season", "p_throws", "pitch_type", "strikes",
 DEFAULT_EVAL_SEASON = 2024
 OUT_DIR = Path("results/baseline_ladder")
 
-# The Book p. 157 (via Tango, insidethebook.com 2009), converted to the rho it is
-# equivalent to via n*_d = n*_side / (2(1 - rho)) with n*_side = 226 (B.1, hitters
-# only). Approximate — assumes tau_L = tau_R. A REFERENCE ROW, never fitted.
+# The Book p. 157, converted to the rho it is equivalent to via
+# n*_d = n*_side / (2 (1 - rho)) with n*_side = 226 (B.1, hitters only). Approximate —
+# assumes tau_L = tau_R. A REFERENCE ROW, never fitted.
 #
-# Scope, decided 2026-07-29: this is a PLAUSIBILITY CHECK on our own fitted prior,
-# not a scored incumbent. We do not have a copy of The Book, so its functional form
-# cannot be reproduced faithfully and a head-to-head against it would be a comparison
-# with a reconstruction, not with the source. The check that remains is in parameter
-# space — our rho and implied split constant against the published ones, printed below
-# and committed in eb_prior_parameters.csv — which answers "are we in the right
-# ballpark" without claiming to have run their model. The paired bootstrap that used
-# to score this row was removed for that reason.
+# Source, verified 2026-09-01: Tangotiger, comment of 2009/10/29 on insidethebook.com,
+# quoting Dolphin's p.157 verbatim — "his platoon split is weighted by the number of
+# lefties he has faced, and the league average is weighted by 2200 ... a righty who has
+# 2200 plate appearances against left-handed pitchers will be regressed exactly halfway
+# toward the league-average. For a lefty, the number is about 1000." We have never held
+# the page; it is cited at second hand, which is what the decision log records.
+#
+# Scope, decided 2026-07-29: this is a PLAUSIBILITY CHECK on our own fitted prior, not a
+# scored incumbent, and the paired bootstrap that used to score this row was removed.
+# NOTE (2026-09-01): that decision's stated ground — that we lacked the source and so
+# could not reproduce the functional form — no longer holds; the quotation above gives
+# the functional form. It is left standing anyway because rebuilding the row faithfully
+# cannot change a conclusion: frozen rule 1's gate already ran and failed, and this row
+# already ties C.2 on claim 1 in every stratum. See the 2026-09-01 decision-log finding.
+# What this row is NOT is The Book's estimator — it is our bivariate EB with rho pinned
+# to the Book-implied value, sharing our tau2 and sigma2.
 BOOK_IMPLIED_RHO = {"R": 0.949, "L": 0.887, "S": 0.949}
 
 # no-information reference: predict the side-specific league average for everyone.

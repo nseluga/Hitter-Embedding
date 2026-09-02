@@ -125,9 +125,15 @@ ZERO_PA_VARIANCE = 1e9
 # moment estimate can land outside [-1, 1] by sampling error alone.
 RHO_CLIP = 0.999
 
-# The Book's constants (p. 157, via Tango on insidethebook.com, 2009), converted to
-# the rho they are equivalent to. Reported as a REFERENCE ROW only -- never fitted,
-# never used to set our estimate. See the module docstring for the conversion.
+# The Book's constants (p. 157), converted to the rho they are equivalent to. Reported
+# as a REFERENCE ROW only -- never fitted, never used to set our estimate. See the
+# module docstring for the conversion.
+#
+# Verified 2026-09-01 at second hand: Tangotiger quoting Dolphin's p.157 verbatim,
+# insidethebook.com comment of 2009/10/29. The quotation confirms the constants AND the
+# denomination -- "weighted by the number of lefties he has faced" -- which is the
+# assumption `implied_split_constant` below encodes (PA vs LHP, not total PA), and
+# "regressed exactly halfway", which is why n* is read as the half-shrinkage point.
 BOOK_SPLIT_CONSTANT = {"R": 2200.0, "L": 1000.0}
 
 

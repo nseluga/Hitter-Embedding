@@ -38,8 +38,10 @@ is `~/os/knowledge/frameworks/library-policy.md`; `ls` the two folders for the
 current list rather than trusting this summary.
 
 Cited but unreachable, so deliberately unshelved: Efron & Morris (1972),
-*Biometrika* 59(2); Lord & Novick (1968); *The Book* p.157. Each is flagged in
-the decision log at the entry that cites it.
+*Biometrika* 59(2); Lord & Novick (1968). Each is flagged in the decision log at
+the entry that cites it. *The Book* p.157 left this list on 2026-09-01: it is
+verified at second hand through a co-author's verbatim quotation, never held
+directly, and cited that way everywhere.
 
 ## Working Documents (Session-Specific)
 
