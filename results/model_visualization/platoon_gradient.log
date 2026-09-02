@@ -1,0 +1,446 @@
+[   23.4s] LHB vs LHP: 16 hitters x 128 pitchers
+[   25.2s]   LHB vs LHP: 64/128 pitchers
+[   26.7s]   LHB vs LHP: 128/128 pitchers
+[   26.7s] RHB vs LHP: 24 hitters x 128 pitchers
+[   29.3s]   RHB vs LHP: 64/128 pitchers
+[   30.8s]   RHB vs LHP: 128/128 pitchers
+[   30.8s] LHB vs RHP: 21 hitters x 128 pitchers
+[   32.4s]   LHB vs RHP: 64/128 pitchers
+[   33.9s]   LHB vs RHP: 128/128 pitchers
+[   34.0s] RHB vs RHP: 19 hitters x 128 pitchers
+[   35.0s]   RHB vs RHP: 64/128 pitchers
+[   36.2s]   RHB vs RHP: 128/128 pitchers
+[   38.0s] LHB vs LHP: 16 hitters x 128 pitchers
+[   39.2s]   LHB vs LHP: 64/128 pitchers
+[   40.3s]   LHB vs LHP: 128/128 pitchers
+[   40.3s] RHB vs LHP: 24 hitters x 128 pitchers
+[   42.0s]   RHB vs LHP: 64/128 pitchers
+[   43.4s]   RHB vs LHP: 128/128 pitchers
+[   43.4s] LHB vs RHP: 21 hitters x 128 pitchers
+[   44.6s]   LHB vs RHP: 64/128 pitchers
+[   46.1s]   LHB vs RHP: 128/128 pitchers
+[   46.2s] RHB vs RHP: 19 hitters x 128 pitchers
+[   48.8s]   RHB vs RHP: 64/128 pitchers
+[   51.4s]   RHB vs RHP: 128/128 pitchers
+[   53.3s] LHB vs LHP: 16 hitters x 128 pitchers
+[   54.6s]   LHB vs LHP: 64/128 pitchers
+[   56.4s]   LHB vs LHP: 128/128 pitchers
+[   56.5s] RHB vs LHP: 24 hitters x 128 pitchers
+[   58.1s]   RHB vs LHP: 64/128 pitchers
+[   59.6s]   RHB vs LHP: 128/128 pitchers
+[   59.6s] LHB vs RHP: 21 hitters x 128 pitchers
+[   60.8s]   LHB vs RHP: 64/128 pitchers
+[   62.4s]   LHB vs RHP: 128/128 pitchers
+[   62.4s] RHB vs RHP: 19 hitters x 128 pitchers
+[   64.0s]   RHB vs RHP: 64/128 pitchers
+[   65.4s]   RHB vs RHP: 128/128 pitchers
+[   67.6s] LHB vs LHP: 16 hitters x 128 pitchers
+[   68.9s]   LHB vs LHP: 64/128 pitchers
+[   70.3s]   LHB vs LHP: 128/128 pitchers
+[   70.4s] RHB vs LHP: 24 hitters x 128 pitchers
+[   73.8s]   RHB vs LHP: 64/128 pitchers
+[   76.6s]   RHB vs LHP: 128/128 pitchers
+[   76.7s] LHB vs RHP: 21 hitters x 128 pitchers
+[   81.6s]   LHB vs RHP: 64/128 pitchers
+[   87.3s]   LHB vs RHP: 128/128 pitchers
+[   87.4s] RHB vs RHP: 19 hitters x 128 pitchers
+[   91.2s]   RHB vs RHP: 64/128 pitchers
+[   95.8s]   RHB vs RHP: 128/128 pitchers
+[   98.8s] LHB vs LHP: 16 hitters x 128 pitchers
+[  101.9s]   LHB vs LHP: 64/128 pitchers
+[  103.6s]   LHB vs LHP: 128/128 pitchers
+[  103.6s] RHB vs LHP: 24 hitters x 128 pitchers
+[  105.4s]   RHB vs LHP: 64/128 pitchers
+[  107.1s]   RHB vs LHP: 128/128 pitchers
+[  107.2s] LHB vs RHP: 21 hitters x 128 pitchers
+[  108.7s]   LHB vs RHP: 64/128 pitchers
+[  110.5s]   LHB vs RHP: 128/128 pitchers
+[  110.6s] RHB vs RHP: 19 hitters x 128 pitchers
+[  113.3s]   RHB vs RHP: 64/128 pitchers
+[  114.8s]   RHB vs RHP: 128/128 pitchers
+[  116.8s] LHB vs LHP: 16 hitters x 128 pitchers
+[  118.5s]   LHB vs LHP: 64/128 pitchers
+[  120.1s]   LHB vs LHP: 128/128 pitchers
+[  120.2s] RHB vs LHP: 24 hitters x 128 pitchers
+[  122.7s]   RHB vs LHP: 64/128 pitchers
+[  125.2s]   RHB vs LHP: 128/128 pitchers
+[  125.2s] LHB vs RHP: 21 hitters x 128 pitchers
+[  127.4s]   LHB vs RHP: 64/128 pitchers
+[  129.2s]   LHB vs RHP: 128/128 pitchers
+[  129.2s] RHB vs RHP: 19 hitters x 128 pitchers
+[  130.8s]   RHB vs RHP: 64/128 pitchers
+[  133.3s]   RHB vs RHP: 128/128 pitchers
+[  136.0s] LHB vs LHP: 16 hitters x 128 pitchers
+[  140.0s]   LHB vs LHP: 64/128 pitchers
+[  142.3s]   LHB vs LHP: 128/128 pitchers
+[  142.4s] RHB vs LHP: 24 hitters x 128 pitchers
+[  144.5s]   RHB vs LHP: 64/128 pitchers
+[  146.2s]   RHB vs LHP: 128/128 pitchers
+[  146.3s] LHB vs RHP: 21 hitters x 128 pitchers
+[  147.5s]   LHB vs RHP: 64/128 pitchers
+[  149.0s]   LHB vs RHP: 128/128 pitchers
+[  149.0s] RHB vs RHP: 19 hitters x 128 pitchers
+[  150.6s]   RHB vs RHP: 64/128 pitchers
+[  152.0s]   RHB vs RHP: 128/128 pitchers
+[  153.4s] LHB vs LHP: 16 hitters x 128 pitchers
+[  155.3s]   LHB vs LHP: 64/128 pitchers
+[  156.9s]   LHB vs LHP: 128/128 pitchers
+[  156.9s] RHB vs LHP: 24 hitters x 128 pitchers
+[  158.8s]   RHB vs LHP: 64/128 pitchers
+[  160.2s]   RHB vs LHP: 128/128 pitchers
+[  160.2s] LHB vs RHP: 21 hitters x 128 pitchers
+[  161.4s]   LHB vs RHP: 64/128 pitchers
+[  162.7s]   LHB vs RHP: 128/128 pitchers
+[  162.8s] RHB vs RHP: 19 hitters x 128 pitchers
+[  163.8s]   RHB vs RHP: 64/128 pitchers
+[  164.9s]   RHB vs RHP: 128/128 pitchers
+[  166.2s] LHB vs LHP: 16 hitters x 128 pitchers
+[  167.2s]   LHB vs LHP: 64/128 pitchers
+[  168.2s]   LHB vs LHP: 128/128 pitchers
+[  168.2s] RHB vs LHP: 24 hitters x 128 pitchers
+[  169.8s]   RHB vs LHP: 64/128 pitchers
+[  171.5s]   RHB vs LHP: 128/128 pitchers
+[  171.5s] LHB vs RHP: 21 hitters x 128 pitchers
+[  173.3s]   LHB vs RHP: 64/128 pitchers
+[  175.1s]   LHB vs RHP: 128/128 pitchers
+[  175.1s] RHB vs RHP: 19 hitters x 128 pitchers
+[  176.5s]   RHB vs RHP: 64/128 pitchers
+[  178.2s]   RHB vs RHP: 128/128 pitchers
+[  180.8s] LHB vs LHP: 16 hitters x 128 pitchers
+[  182.6s]   LHB vs LHP: 64/128 pitchers
+[  184.2s]   LHB vs LHP: 128/128 pitchers
+[  184.3s] RHB vs LHP: 24 hitters x 128 pitchers
+[  186.6s]   RHB vs LHP: 64/128 pitchers
+[  188.7s]   RHB vs LHP: 128/128 pitchers
+[  188.7s] LHB vs RHP: 21 hitters x 128 pitchers
+[  189.9s]   LHB vs RHP: 64/128 pitchers
+[  191.2s]   LHB vs RHP: 128/128 pitchers
+[  191.3s] RHB vs RHP: 19 hitters x 128 pitchers
+[  192.2s]   RHB vs RHP: 64/128 pitchers
+[  193.2s]   RHB vs RHP: 128/128 pitchers
+[  194.3s] LHB vs LHP: 16 hitters x 128 pitchers
+[  195.3s]   LHB vs LHP: 64/128 pitchers
+[  196.1s]   LHB vs LHP: 128/128 pitchers
+[  196.1s] RHB vs LHP: 24 hitters x 128 pitchers
+[  197.5s]   RHB vs LHP: 64/128 pitchers
+[  198.8s]   RHB vs LHP: 128/128 pitchers
+[  198.8s] LHB vs RHP: 21 hitters x 128 pitchers
+[  199.9s]   LHB vs RHP: 64/128 pitchers
+[  201.0s]   LHB vs RHP: 128/128 pitchers
+[  201.1s] RHB vs RHP: 19 hitters x 128 pitchers
+[  202.2s]   RHB vs RHP: 64/128 pitchers
+[  203.2s]   RHB vs RHP: 128/128 pitchers
+[  204.6s] LHB vs LHP: 16 hitters x 128 pitchers
+[  205.5s]   LHB vs LHP: 64/128 pitchers
+[  206.4s]   LHB vs LHP: 128/128 pitchers
+[  206.4s] RHB vs LHP: 24 hitters x 128 pitchers
+[  207.7s]   RHB vs LHP: 64/128 pitchers
+[  209.0s]   RHB vs LHP: 128/128 pitchers
+[  209.0s] LHB vs RHP: 21 hitters x 128 pitchers
+[  210.2s]   LHB vs RHP: 64/128 pitchers
+[  211.2s]   LHB vs RHP: 128/128 pitchers
+[  211.2s] RHB vs RHP: 19 hitters x 128 pitchers
+[  212.2s]   RHB vs RHP: 64/128 pitchers
+[  213.2s]   RHB vs RHP: 128/128 pitchers
+[  214.5s] LHB vs LHP: 16 hitters x 128 pitchers
+[  215.6s]   LHB vs LHP: 64/128 pitchers
+[  216.7s]   LHB vs LHP: 128/128 pitchers
+[  216.8s] RHB vs LHP: 24 hitters x 128 pitchers
+[  218.4s]   RHB vs LHP: 64/128 pitchers
+[  219.8s]   RHB vs LHP: 128/128 pitchers
+[  219.9s] LHB vs RHP: 21 hitters x 128 pitchers
+[  221.1s]   LHB vs RHP: 64/128 pitchers
+[  222.5s]   LHB vs RHP: 128/128 pitchers
+[  222.5s] RHB vs RHP: 19 hitters x 128 pitchers
+[  223.7s]   RHB vs RHP: 64/128 pitchers
+[  224.9s]   RHB vs RHP: 128/128 pitchers
+[  226.3s] LHB vs LHP: 16 hitters x 128 pitchers
+[  227.2s]   LHB vs LHP: 64/128 pitchers
+[  228.3s]   LHB vs LHP: 128/128 pitchers
+[  228.3s] RHB vs LHP: 24 hitters x 128 pitchers
+[  229.7s]   RHB vs LHP: 64/128 pitchers
+[  231.2s]   RHB vs LHP: 128/128 pitchers
+[  231.2s] LHB vs RHP: 21 hitters x 128 pitchers
+[  232.6s]   LHB vs RHP: 64/128 pitchers
+[  234.0s]   LHB vs RHP: 128/128 pitchers
+[  234.1s] RHB vs RHP: 19 hitters x 128 pitchers
+[  235.2s]   RHB vs RHP: 64/128 pitchers
+[  236.6s]   RHB vs RHP: 128/128 pitchers
+[  238.6s] LHB vs LHP: 16 hitters x 128 pitchers
+[  240.0s]   LHB vs LHP: 64/128 pitchers
+[  241.1s]   LHB vs LHP: 128/128 pitchers
+[  241.2s] RHB vs LHP: 24 hitters x 128 pitchers
+[  242.7s]   RHB vs LHP: 64/128 pitchers
+[  244.3s]   RHB vs LHP: 128/128 pitchers
+[  244.3s] LHB vs RHP: 21 hitters x 128 pitchers
+[  245.5s]   LHB vs RHP: 64/128 pitchers
+[  246.8s]   LHB vs RHP: 128/128 pitchers
+[  246.9s] RHB vs RHP: 19 hitters x 128 pitchers
+[  248.1s]   RHB vs RHP: 64/128 pitchers
+[  249.3s]   RHB vs RHP: 128/128 pitchers
+[  250.4s] LHB vs LHP: 16 hitters x 128 pitchers
+[  251.5s]   LHB vs LHP: 64/128 pitchers
+[  252.5s]   LHB vs LHP: 128/128 pitchers
+[  252.5s] RHB vs LHP: 24 hitters x 128 pitchers
+[  253.9s]   RHB vs LHP: 64/128 pitchers
+[  255.3s]   RHB vs LHP: 128/128 pitchers
+[  255.4s] LHB vs RHP: 21 hitters x 128 pitchers
+[  256.5s]   LHB vs RHP: 64/128 pitchers
+[  257.6s]   LHB vs RHP: 128/128 pitchers
+[  257.7s] RHB vs RHP: 19 hitters x 128 pitchers
+[  259.0s]   RHB vs RHP: 64/128 pitchers
+[  260.2s]   RHB vs RHP: 128/128 pitchers
+[  261.5s] LHB vs LHP: 16 hitters x 128 pitchers
+[  262.6s]   LHB vs LHP: 64/128 pitchers
+[  263.7s]   LHB vs LHP: 128/128 pitchers
+[  263.8s] RHB vs LHP: 24 hitters x 128 pitchers
+[  265.3s]   RHB vs LHP: 64/128 pitchers
+[  267.0s]   RHB vs LHP: 128/128 pitchers
+[  267.0s] LHB vs RHP: 21 hitters x 128 pitchers
+[  268.3s]   LHB vs RHP: 64/128 pitchers
+[  269.5s]   LHB vs RHP: 128/128 pitchers
+[  269.5s] RHB vs RHP: 19 hitters x 128 pitchers
+[  270.8s]   RHB vs RHP: 64/128 pitchers
+[  272.1s]   RHB vs RHP: 128/128 pitchers
+[  273.5s] LHB vs LHP: 16 hitters x 128 pitchers
+[  274.8s]   LHB vs LHP: 64/128 pitchers
+[  275.7s]   LHB vs LHP: 128/128 pitchers
+[  275.7s] RHB vs LHP: 24 hitters x 128 pitchers
+[  277.4s]   RHB vs LHP: 64/128 pitchers
+[  279.1s]   RHB vs LHP: 128/128 pitchers
+[  279.1s] LHB vs RHP: 21 hitters x 128 pitchers
+[  280.6s]   LHB vs RHP: 64/128 pitchers
+[  282.2s]   LHB vs RHP: 128/128 pitchers
+[  282.2s] RHB vs RHP: 19 hitters x 128 pitchers
+[  283.6s]   RHB vs RHP: 64/128 pitchers
+[  284.7s]   RHB vs RHP: 128/128 pitchers
+[  286.1s] LHB vs LHP: 16 hitters x 128 pitchers
+[  287.1s]   LHB vs LHP: 64/128 pitchers
+[  288.3s]   LHB vs LHP: 128/128 pitchers
+[  288.3s] RHB vs LHP: 24 hitters x 128 pitchers
+[  289.8s]   RHB vs LHP: 64/128 pitchers
+[  291.5s]   RHB vs LHP: 128/128 pitchers
+[  291.5s] LHB vs RHP: 21 hitters x 128 pitchers
+[  292.9s]   LHB vs RHP: 64/128 pitchers
+[  294.4s]   LHB vs RHP: 128/128 pitchers
+[  294.5s] RHB vs RHP: 19 hitters x 128 pitchers
+[  295.6s]   RHB vs RHP: 64/128 pitchers
+[  296.8s]   RHB vs RHP: 128/128 pitchers
+[  298.3s] LHB vs LHP: 16 hitters x 128 pitchers
+[  299.5s]   LHB vs LHP: 64/128 pitchers
+[  300.5s]   LHB vs LHP: 128/128 pitchers
+[  300.5s] RHB vs LHP: 24 hitters x 128 pitchers
+[  302.3s]   RHB vs LHP: 64/128 pitchers
+[  304.7s]   RHB vs LHP: 128/128 pitchers
+[  304.8s] LHB vs RHP: 21 hitters x 128 pitchers
+[  307.1s]   LHB vs RHP: 64/128 pitchers
+[  308.4s]   LHB vs RHP: 128/128 pitchers
+[  308.4s] RHB vs RHP: 19 hitters x 128 pitchers
+[  309.6s]   RHB vs RHP: 64/128 pitchers
+[  310.9s]   RHB vs RHP: 128/128 pitchers
+[  312.4s] LHB vs LHP: 16 hitters x 128 pitchers
+[  313.4s]   LHB vs LHP: 64/128 pitchers
+[  314.5s]   LHB vs LHP: 128/128 pitchers
+[  314.5s] RHB vs LHP: 24 hitters x 128 pitchers
+[  316.0s]   RHB vs LHP: 64/128 pitchers
+[  317.6s]   RHB vs LHP: 128/128 pitchers
+[  317.6s] LHB vs RHP: 21 hitters x 128 pitchers
+[  319.1s]   LHB vs RHP: 64/128 pitchers
+[  320.4s]   LHB vs RHP: 128/128 pitchers
+[  320.4s] RHB vs RHP: 19 hitters x 128 pitchers
+[  322.0s]   RHB vs RHP: 64/128 pitchers
+[  323.9s]   RHB vs RHP: 128/128 pitchers
+[  325.2s] LHB vs LHP: 16 hitters x 128 pitchers
+[  326.2s]   LHB vs LHP: 64/128 pitchers
+[  327.1s]   LHB vs LHP: 128/128 pitchers
+[  327.1s] RHB vs LHP: 24 hitters x 128 pitchers
+[  330.5s]   RHB vs LHP: 64/128 pitchers
+[  332.4s]   RHB vs LHP: 128/128 pitchers
+[  332.4s] LHB vs RHP: 21 hitters x 128 pitchers
+[  333.9s]   LHB vs RHP: 64/128 pitchers
+[  335.6s]   LHB vs RHP: 128/128 pitchers
+[  335.6s] RHB vs RHP: 19 hitters x 128 pitchers
+[  337.0s]   RHB vs RHP: 64/128 pitchers
+[  338.1s]   RHB vs RHP: 128/128 pitchers
+[  339.3s] LHB vs LHP: 16 hitters x 128 pitchers
+[  340.4s]   LHB vs LHP: 64/128 pitchers
+[  341.4s]   LHB vs LHP: 128/128 pitchers
+[  341.4s] RHB vs LHP: 24 hitters x 128 pitchers
+[  343.0s]   RHB vs LHP: 64/128 pitchers
+[  344.4s]   RHB vs LHP: 128/128 pitchers
+[  344.4s] LHB vs RHP: 21 hitters x 128 pitchers
+[  345.9s]   LHB vs RHP: 64/128 pitchers
+[  347.3s]   LHB vs RHP: 128/128 pitchers
+[  347.4s] RHB vs RHP: 19 hitters x 128 pitchers
+[  350.2s]   RHB vs RHP: 64/128 pitchers
+[  353.3s]   RHB vs RHP: 128/128 pitchers
+[  355.3s] LHB vs LHP: 16 hitters x 128 pitchers
+[  356.5s]   LHB vs LHP: 64/128 pitchers
+[  357.7s]   LHB vs LHP: 128/128 pitchers
+[  357.7s] RHB vs LHP: 24 hitters x 128 pitchers
+[  359.1s]   RHB vs LHP: 64/128 pitchers
+[  360.7s]   RHB vs LHP: 128/128 pitchers
+[  360.7s] LHB vs RHP: 21 hitters x 128 pitchers
+[  362.0s]   LHB vs RHP: 64/128 pitchers
+[  363.6s]   LHB vs RHP: 128/128 pitchers
+[  363.6s] RHB vs RHP: 19 hitters x 128 pitchers
+[  365.2s]   RHB vs RHP: 64/128 pitchers
+[  367.4s]   RHB vs RHP: 128/128 pitchers
+[  369.9s] LHB vs LHP: 16 hitters x 128 pitchers
+[  371.4s]   LHB vs LHP: 64/128 pitchers
+[  372.9s]   LHB vs LHP: 128/128 pitchers
+[  373.0s] RHB vs LHP: 24 hitters x 128 pitchers
+[  374.6s]   RHB vs LHP: 64/128 pitchers
+[  377.6s]   RHB vs LHP: 128/128 pitchers
+[  377.6s] LHB vs RHP: 21 hitters x 128 pitchers
+[  379.3s]   LHB vs RHP: 64/128 pitchers
+[  380.8s]   LHB vs RHP: 128/128 pitchers
+[  380.8s] RHB vs RHP: 19 hitters x 128 pitchers
+[  382.4s]   RHB vs RHP: 64/128 pitchers
+[  384.9s]   RHB vs RHP: 128/128 pitchers
+[  388.4s] LHB vs LHP: 16 hitters x 128 pitchers
+[  391.8s]   LHB vs LHP: 64/128 pitchers
+[  396.7s]   LHB vs LHP: 128/128 pitchers
+[  396.7s] RHB vs LHP: 24 hitters x 128 pitchers
+[  409.4s]   RHB vs LHP: 64/128 pitchers
+[  425.2s]   RHB vs LHP: 128/128 pitchers
+[  425.3s] LHB vs RHP: 21 hitters x 128 pitchers
+[  444.2s]   LHB vs RHP: 64/128 pitchers
+[  465.4s]   LHB vs RHP: 128/128 pitchers
+[  465.5s] RHB vs RHP: 19 hitters x 128 pitchers
+[  466.7s]   RHB vs RHP: 64/128 pitchers
+[  468.5s]   RHB vs RHP: 128/128 pitchers
+[  470.0s] LHB vs LHP: 16 hitters x 128 pitchers
+[  471.2s]   LHB vs LHP: 64/128 pitchers
+[  472.2s]   LHB vs LHP: 128/128 pitchers
+[  472.2s] RHB vs LHP: 24 hitters x 128 pitchers
+[  473.6s]   RHB vs LHP: 64/128 pitchers
+[  475.6s]   RHB vs LHP: 128/128 pitchers
+[  475.6s] LHB vs RHP: 21 hitters x 128 pitchers
+[  477.2s]   LHB vs RHP: 64/128 pitchers
+[  478.7s]   LHB vs RHP: 128/128 pitchers
+[  478.7s] RHB vs RHP: 19 hitters x 128 pitchers
+[  481.3s]   RHB vs RHP: 64/128 pitchers
+[  483.1s]   RHB vs RHP: 128/128 pitchers
+[  484.9s] LHB vs LHP: 16 hitters x 128 pitchers
+[  487.0s]   LHB vs LHP: 64/128 pitchers
+[  489.6s]   LHB vs LHP: 128/128 pitchers
+[  489.7s] RHB vs LHP: 24 hitters x 128 pitchers
+[  493.0s]   RHB vs LHP: 64/128 pitchers
+[  495.1s]   RHB vs LHP: 128/128 pitchers
+[  495.1s] LHB vs RHP: 21 hitters x 128 pitchers
+[  499.6s]   LHB vs RHP: 64/128 pitchers
+[  501.8s]   LHB vs RHP: 128/128 pitchers
+[  501.9s] RHB vs RHP: 19 hitters x 128 pitchers
+[  503.9s]   RHB vs RHP: 64/128 pitchers
+[  507.3s]   RHB vs RHP: 128/128 pitchers
+[  511.2s] LHB vs LHP: 16 hitters x 128 pitchers
+[  516.6s]   LHB vs LHP: 64/128 pitchers
+[  522.8s]   LHB vs LHP: 128/128 pitchers
+[  523.0s] RHB vs LHP: 24 hitters x 128 pitchers
+[  532.0s]   RHB vs LHP: 64/128 pitchers
+[  539.1s]   RHB vs LHP: 128/128 pitchers
+[  539.3s] LHB vs RHP: 21 hitters x 128 pitchers
+[  548.5s]   LHB vs RHP: 64/128 pitchers
+[  558.1s]   LHB vs RHP: 128/128 pitchers
+[  558.2s] RHB vs RHP: 19 hitters x 128 pitchers
+[  567.5s]   RHB vs RHP: 64/128 pitchers
+[  581.8s]   RHB vs RHP: 128/128 pitchers
+[  587.8s] LHB vs LHP: 16 hitters x 128 pitchers
+[  606.1s]   LHB vs LHP: 64/128 pitchers
+[  625.9s]   LHB vs LHP: 128/128 pitchers
+[  626.2s] RHB vs LHP: 24 hitters x 128 pitchers
+[  641.4s]   RHB vs LHP: 64/128 pitchers
+[  643.5s]   RHB vs LHP: 128/128 pitchers
+[  643.6s] LHB vs RHP: 21 hitters x 128 pitchers
+[  645.2s]   LHB vs RHP: 64/128 pitchers
+[  646.9s]   LHB vs RHP: 128/128 pitchers
+[  647.0s] RHB vs RHP: 19 hitters x 128 pitchers
+[  648.1s]   RHB vs RHP: 64/128 pitchers
+[  649.4s]   RHB vs RHP: 128/128 pitchers
+[  651.5s] LHB vs LHP: 16 hitters x 128 pitchers
+[  653.4s]   LHB vs LHP: 64/128 pitchers
+[  655.6s]   LHB vs LHP: 128/128 pitchers
+[  655.7s] RHB vs LHP: 24 hitters x 128 pitchers
+[  658.4s]   RHB vs LHP: 64/128 pitchers
+[  660.3s]   RHB vs LHP: 128/128 pitchers
+[  660.4s] LHB vs RHP: 21 hitters x 128 pitchers
+[  662.3s]   LHB vs RHP: 64/128 pitchers
+[  664.3s]   LHB vs RHP: 128/128 pitchers
+[  664.4s] RHB vs RHP: 19 hitters x 128 pitchers
+[  666.8s]   RHB vs RHP: 64/128 pitchers
+[  669.6s]   RHB vs RHP: 128/128 pitchers
+[  672.6s] LHB vs LHP: 16 hitters x 128 pitchers
+[  675.3s]   LHB vs LHP: 64/128 pitchers
+[  676.7s]   LHB vs LHP: 128/128 pitchers
+[  676.8s] RHB vs LHP: 24 hitters x 128 pitchers
+[  678.8s]   RHB vs LHP: 64/128 pitchers
+[  683.1s]   RHB vs LHP: 128/128 pitchers
+[  683.2s] LHB vs RHP: 21 hitters x 128 pitchers
+[  686.6s]   LHB vs RHP: 64/128 pitchers
+[  691.3s]   LHB vs RHP: 128/128 pitchers
+[  691.3s] RHB vs RHP: 19 hitters x 128 pitchers
+[  695.5s]   RHB vs RHP: 64/128 pitchers
+[  699.5s]   RHB vs RHP: 128/128 pitchers
+[  703.7s] LHB vs LHP: 16 hitters x 128 pitchers
+[  708.6s]   LHB vs LHP: 64/128 pitchers
+[  713.0s]   LHB vs LHP: 128/128 pitchers
+[  713.1s] RHB vs LHP: 24 hitters x 128 pitchers
+[  716.6s]   RHB vs LHP: 64/128 pitchers
+[  719.8s]   RHB vs LHP: 128/128 pitchers
+[  719.8s] LHB vs RHP: 21 hitters x 128 pitchers
+[  721.7s]   LHB vs RHP: 64/128 pitchers
+[  723.9s]   LHB vs RHP: 128/128 pitchers
+[  724.0s] RHB vs RHP: 19 hitters x 128 pitchers
+[  725.6s]   RHB vs RHP: 64/128 pitchers
+[  726.8s]   RHB vs RHP: 128/128 pitchers
+[  729.0s] LHB vs LHP: 16 hitters x 128 pitchers
+[  730.8s]   LHB vs LHP: 64/128 pitchers
+[  733.0s]   LHB vs LHP: 128/128 pitchers
+[  733.0s] RHB vs LHP: 24 hitters x 128 pitchers
+[  735.7s]   RHB vs LHP: 64/128 pitchers
+[  737.9s]   RHB vs LHP: 128/128 pitchers
+[  738.0s] LHB vs RHP: 21 hitters x 128 pitchers
+[  739.7s]   LHB vs RHP: 64/128 pitchers
+[  741.2s]   LHB vs RHP: 128/128 pitchers
+[  741.2s] RHB vs RHP: 19 hitters x 128 pitchers
+[  744.3s]   RHB vs RHP: 64/128 pitchers
+[  746.4s]   RHB vs RHP: 128/128 pitchers
+subset: 40 hitters (5 anchors)
+loading tensors, pitch frame, and the seed-0 checkpoint
+eps = 0.033317
+pass base: 13.7s (80 rows written)
+pass dim0: 15.2s (80 rows written)
+pass dim1: 13.9s (80 rows written)
+pass dim2: 30.5s (80 rows written)
+pass dim3: 19.0s (80 rows written)
+pass dim4: 18.5s (80 rows written)
+pass dim5: 18.7s (80 rows written)
+pass dim6: 12.8s (80 rows written)
+pass dim7: 13.3s (80 rows written)
+pass dim8: 14.9s (80 rows written)
+pass dim9: 10.0s (80 rows written)
+pass dim10: 10.0s (80 rows written)
+pass dim11: 11.7s (80 rows written)
+pass dim12: 11.7s (80 rows written)
+pass dim13: 12.6s (80 rows written)
+pass dim14: 10.9s (80 rows written)
+pass dim15: 11.9s (80 rows written)
+pass dim16: 12.5s (80 rows written)
+pass dim17: 12.1s (80 rows written)
+pass dim18: 14.0s (80 rows written)
+pass dim19: 13.1s (80 rows written)
+pass dim20: 14.1s (80 rows written)
+pass dim21: 15.3s (80 rows written)
+pass dim22: 14.1s (80 rows written)
+pass dim23: 17.5s (80 rows written)
+pass dim24: 83.6s (80 rows written)
+pass dim25: 14.6s (80 rows written)
+pass dim26: 24.2s (80 rows written)
+pass dim27: 74.5s (80 rows written)
+pass dim28: 67.5s (80 rows written)
+pass dim29: 20.2s (80 rows written)
+pass dim30: 29.9s (80 rows written)
+pass dim31: 27.3s (80 rows written)
+pass dim0_2x: 19.6s (80 rows written)
+GRADIENT_EXIT=0
