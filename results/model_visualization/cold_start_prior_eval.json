@@ -1,0 +1,33 @@
+{
+  "eval_season": 2024,
+  "n_boot": 2000,
+  "seed": 0,
+  "cold_start_prior_vector_norm": {
+    "L": 0.07251812517642975,
+    "R": 0.09030762314796448
+  },
+  "eb_debut_mu": {
+    "L": [
+      0.24386552044060747,
+      0.24386552044060747
+    ],
+    "R": [
+      0.20325778828859498,
+      0.20325778828859498
+    ],
+    "S": [
+      0.22061906507822351,
+      0.22061906507822351
+    ]
+  },
+  "comparisons": {
+    "model_prior_vs_baseline": {
+      "resolvable": true,
+      "n_cold_start_groups": 164
+    },
+    "eb_prior_vs_baseline": {
+      "resolvable": true,
+      "n_cold_start_groups": 164
+    }
+  }
+}
