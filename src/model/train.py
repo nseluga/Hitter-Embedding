@@ -130,10 +130,16 @@ class LinearWarmup:
     step every one of those 30 and lands on a large-norm random walk. Capping early step
     size is the direct lever on that, and it is a lever weight decay cannot be, since at
     the 10th percentile of exposure decay already loses to the gradient 23.9:1.
+
+    Each param group ramps from its OWN base rate, recorded here at construction. With one
+    AdamW that is the single base_lr it always was; with the embedding on a separate SGD at
+    a different rate, one shared base would silently retune the embedding.
     """
 
-    def __init__(self, optimizer, steps, base_lr):
-        self.optimizer, self.steps, self.base_lr = optimizer, int(steps), base_lr
+    def __init__(self, optimizer, steps, base_lr=None):
+        self.optimizer, self.steps = optimizer, int(steps)
+        self.base_lrs = [group["lr"] for group in optimizer.param_groups]
+        self.base_lr = self.base_lrs[0] if base_lr is None else base_lr
         self.step_count = 0
 
     @property
@@ -146,8 +152,65 @@ class LinearWarmup:
             return
         self.step_count += 1
         scale = self.step_count / self.steps
-        for group in self.optimizer.param_groups:
-            group["lr"] = self.base_lr * scale
+        for group, base in zip(self.optimizer.param_groups, self.base_lrs):
+            group["lr"] = base * scale
+
+
+class Optimizers:
+    """
+    Two real optimizers behind one optimizer-shaped handle, so `run_epoch` and
+    `LinearWarmup` need no branch. `param_groups` is the live concatenation, not a copy:
+    the schedulers own those dicts and the warmup has to write through to them.
+    """
+
+    def __init__(self, *optimizers):
+        self.optimizers = list(optimizers)
+
+    @property
+    def param_groups(self):
+        return [group for opt in self.optimizers for group in opt.param_groups]
+
+    def zero_grad(self, set_to_none=True):
+        for opt in self.optimizers:
+            opt.zero_grad(set_to_none=set_to_none)
+
+    def step(self):
+        for opt in self.optimizers:
+            opt.step()
+
+
+def real_optimizers(optimizer):
+    """The torch Optimizers behind a handle. ReduceLROnPlateau rejects anything else."""
+    return getattr(optimizer, "optimizers", [optimizer])
+
+
+def embedding_group(optimizer):
+    """The SGD param group holding the embedding, or None on the single-AdamW default."""
+    optimizers = real_optimizers(optimizer)
+    return optimizers[1].param_groups[0] if len(optimizers) > 1 else None
+
+
+def build_optimizer(model, args):
+    """
+    The default is exactly the single AdamW every pre-V run used -- same groups, same lr --
+    so nothing about that path changes.
+
+    `--embedding-optimizer sgd` pulls the embedding table out of AdamW and onto plain SGD.
+    AdamW normalises each coordinate by its own second moment, so a row seen in 30 batches
+    takes a near-full step in all 30 and ends long and noisy; an SGD step is proportional
+    to the gradient, so a rare row moves less. AdamW cannot drop that normalisation for one
+    param group, hence a second optimizer. Coupled L2 under plain SGD subtracts
+    lr*wd*w, which is exactly what AdamW's decoupled decay subtracts, so WEIGHT_DECAY means
+    the same thing on both sides.
+    """
+    if args.embedding_optimizer == "adamw":
+        return torch.optim.AdamW(weight_decay_groups(model, WEIGHT_DECAY), lr=args.lr)
+    trunk = torch.optim.AdamW(
+        weight_decay_groups(model, WEIGHT_DECAY, exclude=(model.embedding.weight,)),
+        lr=args.lr)
+    embedding = torch.optim.SGD([model.embedding.weight], lr=args.embedding_lr,
+                                weight_decay=WEIGHT_DECAY)
+    return Optimizers(trunk, embedding)
 
 
 def warmup_for(optimizer, args, n_train_rows):
@@ -234,8 +297,13 @@ def fit(model, tensors, indices, optimizer, generator, args):
     Train to the plateau schedule and early stopping of §5, both on validation loss.
     Returns (best validation loss per row, best epoch, checkpoint path).
     """
-    schedule = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, factor=PLATEAU_FACTOR, patience=PLATEAU_PATIENCE)
+    # One scheduler per REAL optimizer, all stepped on the same validation loss: torch's
+    # ReduceLROnPlateau rejects anything that is not an Optimizer, so the handle cannot be
+    # passed here. On the default path this is the one scheduler it always was.
+    schedules = [torch.optim.lr_scheduler.ReduceLROnPlateau(
+        opt, factor=PLATEAU_FACTOR, patience=PLATEAU_PATIENCE)
+        for opt in real_optimizers(optimizer)]
+    embedding = embedding_group(optimizer)
     warmup = warmup_for(optimizer, args, len(indices["train"]))
     # Warmup finishes inside epoch 0 and the epoch-end line prints the rate AFTER it has
     # returned to base, so a warmed run and a cold one produce byte-identical logs. Print
@@ -257,6 +325,9 @@ def fit(model, tensors, indices, optimizer, generator, args):
             if warmup is not None and not warmup.done:
                 mlflow.log_metric("warmup_lr", optimizer.param_groups[0]["lr"],
                                   step=epoch * 10_000 + step)
+                if embedding is not None:
+                    mlflow.log_metric("embedding_warmup_lr", embedding["lr"],
+                                      step=epoch * 10_000 + step)
 
         train_loss, steps, seconds = run_epoch(model, tensors, indices["train"], optimizer,
                                                generator, args, on_step=log_step,
@@ -271,17 +342,21 @@ def fit(model, tensors, indices, optimizer, generator, args):
         reference = val_loss if args.canonical else run_epoch(
             model, tensors, indices[args.eval_split], None, None, args,
             objective=CANONICAL)[0]
-        schedule.step(val_loss)
-        mlflow.log_metrics({"train_loss_epoch": train_loss, "val_loss_epoch": val_loss,
-                            "val_reference_epoch": reference,
-                            "lr": optimizer.param_groups[0]["lr"],
-                            "epoch_seconds": seconds}, step=epoch)
+        for schedule in schedules:
+            schedule.step(val_loss)
+        metrics = {"train_loss_epoch": train_loss, "val_loss_epoch": val_loss,
+                   "val_reference_epoch": reference,
+                   "lr": optimizer.param_groups[0]["lr"], "epoch_seconds": seconds}
+        if embedding is not None:
+            metrics["embedding_lr"] = embedding["lr"]
+        mlflow.log_metrics(metrics, step=epoch)
         if warmup is not None and warmup.done and not warmup_reported:
             warmup_reported = True
             print(f"warmup: complete after {warmup.step_count} steps", flush=True)
+        embedding_note = "" if embedding is None else f"  emb_lr {embedding['lr']:.2e}"
         print(f"epoch {epoch:>3d}  train {train_loss:.5f}  val {val_loss:.5f}  "
-              f"ref {reference:.5f}  lr {optimizer.param_groups[0]['lr']:.2e}  "
-              f"{seconds:.0f}s ({steps} steps)")
+              f"ref {reference:.5f}  lr {optimizer.param_groups[0]['lr']:.2e}"
+              f"{embedding_note}  {seconds:.0f}s ({steps} steps)")
 
         if val_loss < best:
             best, best_epoch, since_best, best_reference = val_loss, epoch, 0, reference
@@ -325,7 +400,9 @@ def run(args):
                               bilinear=args.bilinear,
                               split=getattr(args, "split", False),
                               spray=not getattr(args, "no_spray", False)).to(args.device)
-    optimizer = torch.optim.AdamW(weight_decay_groups(model, WEIGHT_DECAY), lr=args.lr)
+    if getattr(args, "embedding_lr", None) is None:
+        args.embedding_lr = args.lr
+    optimizer = build_optimizer(model, args)
 
     mlflow.set_tracking_uri(TRACKING_URI)
     mlflow.set_experiment(EXPERIMENT)
@@ -335,6 +412,8 @@ def run(args):
             "seed": args.seed, "device": args.device, "embedding_dim": args.embedding_dim,
             "batch_size": args.batch_size, "lr": args.lr,
             "warmup_steps": args.warmup_steps,
+            "embedding_optimizer": args.embedding_optimizer,
+            "embedding_lr": args.embedding_lr,
             "weight_decay": WEIGHT_DECAY, "loss_rule": args.loss_rule,
             "bilinear": args.bilinear, "loss_weighting": args.loss_weighting,
             "contact_inverse_frequency": args.contact_inverse_frequency,
@@ -378,6 +457,12 @@ def main():
     parser.add_argument("--warmup-steps", type=int, default=WARMUP_STEPS,
                         help="Phase O knob. Linear lr warmup over this many optimizer "
                              "steps; 0 reproduces every pre-O run exactly.")
+    parser.add_argument("--embedding-optimizer", choices=["adamw", "sgd"], default="adamw",
+                        help="Phase V knob. 'sgd' trains the embedding table on plain SGD "
+                             "in its own optimizer while the rest of the model stays on "
+                             "AdamW; 'adamw' reproduces every earlier run exactly.")
+    parser.add_argument("--embedding-lr", type=float, default=None,
+                        help="lr for the embedding optimizer; defaults to --lr")
     parser.add_argument("--loss-rule", choices=list(LOSS_RULES), default="log",
                         help="'rps' is the promote-only screen arm, never the default")
     parser.add_argument("--loss-weighting", choices=list(WEIGHTINGS), default="sum",

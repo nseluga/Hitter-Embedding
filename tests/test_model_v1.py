@@ -370,6 +370,21 @@ def test_weight_decay_covers_the_weights_and_the_embedding_but_not_the_biases():
         expected = undecayed if name.endswith("bias") else decayed
         assert id(parameter) in expected, f"{name} landed in the wrong group"
     assert id(model.embedding.weight) in decayed, "the embedding is the shrinkage lever"
+    assert len(groups) == 2, "the default build is the two groups it always was"
+
+
+def test_exclude_drops_the_embedding_and_leaves_every_other_parameter_placed():
+    """The Phase V sgd path hands the embedding to a second optimizer. If `exclude` failed
+    silently the table would be trained by BOTH and the run would look normal."""
+    model = build_model()
+    groups = weight_decay_groups(model, 1e-2, exclude=(model.embedding.weight,))
+    placed = [id(p) for group in groups for p in group["params"]]
+
+    assert len(placed) == len(set(placed)) == len(list(model.parameters())) - 1
+    assert id(model.embedding.weight) not in placed
+    for name, parameter in model.named_parameters():
+        if parameter is not model.embedding.weight:
+            assert id(parameter) in placed, f"{name} was dropped"
 
 
 # ---------------------------------------------------------------- interaction term

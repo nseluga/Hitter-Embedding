@@ -131,7 +131,18 @@ STAGES["selection"] = [
     ("lr1e3_warm2k", [*O1_BASE, "--lr", "1e-3", "--warmup-steps", "2000"]),
 ]
 
-DEFAULT_SEEDS = {"screen": 2, "early": 5, "presplit": 5, "splithead": 5, "rebuild": 5, "selection": 2}
+# Phase V, item 1. The embedding table on plain SGD while the trunk stays on AdamW, at
+# three rates two orders of magnitude apart, on the same O1 base as `selection` so its
+# `reference` is in the incumbent's units. One seed: this is a screen for whether the
+# effect exists at all, not a selection.
+STAGES["embedding_sgd"] = [
+    ("sgd_lr1e-2", [*O1_BASE, "--embedding-optimizer", "sgd", "--embedding-lr", "1e-2"]),
+    ("sgd_lr1e-1", [*O1_BASE, "--embedding-optimizer", "sgd", "--embedding-lr", "1e-1"]),
+    ("sgd_lr1", [*O1_BASE, "--embedding-optimizer", "sgd", "--embedding-lr", "1"]),
+]
+
+DEFAULT_SEEDS = {"screen": 2, "early": 5, "presplit": 5, "splithead": 5, "rebuild": 5,
+                 "selection": 2, "embedding_sgd": 1}
 
 
 # The ledger is keyed and read as text, so `1e-3` and `0.001` are two different values in a
@@ -149,7 +160,11 @@ def knobs(extra, default_data_dir):
 
     argparse takes the last occurrence, and `launch` puts `extra` after the sweep-level
     --data-dir, so a stage tuple's own --data-dir wins. Resolve it the same way here or the
-    ledger records a build the run did not use."""
+    ledger records a build the run did not use.
+
+    --embedding-optimizer and --embedding-lr are deliberately NOT recorded: LEDGER_FIELDS is
+    fixed and adding a column shifts every existing row (see `append_ledger`). The
+    `embedding_sgd` config name carries the setting instead -- `sgd_lr1e-1` is the rate."""
     lr, warmup, data_dir = canonical_lr(LEARNING_RATE), "0", default_data_dir
     for flag, value in zip(extra, extra[1:]):
         if flag == "--lr":

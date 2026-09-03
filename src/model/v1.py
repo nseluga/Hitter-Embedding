@@ -247,13 +247,20 @@ def factorized_loss(outputs, labels, rule="log", weighting="sum", contact_pos_we
     return total, parts
 
 
-def weight_decay_groups(model, weight_decay):
+def weight_decay_groups(model, weight_decay, exclude=()):
     """
     Parameter groups for AdamW: weights and the embedding decay, biases do not (spec §5).
     Decay on the reserved embedding row is a no-op because that row is zero.
+
+    `exclude` drops parameters (by identity) from both groups, which is how the embedding
+    is handed to a second optimizer instead. Default empty, so every existing caller
+    builds exactly the two groups it always did.
     """
+    excluded = {id(p) for p in exclude}
     decayed, undecayed = [], []
     for name, parameter in model.named_parameters():
+        if id(parameter) in excluded:
+            continue
         (undecayed if name.endswith("bias") else decayed).append(parameter)
     return [{"params": decayed, "weight_decay": weight_decay},
             {"params": undecayed, "weight_decay": 0.0}]
