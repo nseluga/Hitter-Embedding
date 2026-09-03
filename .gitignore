@@ -10,6 +10,7 @@ docs/phase-*-spec.md
 docs/phase-*-review.md
 docs/decision-log.md
 docs/lab-notebook.md
+docs/post-v*.md
 .DS_Store
 
 # Python environment
