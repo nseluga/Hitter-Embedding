@@ -123,13 +123,12 @@ def test_the_default_path_still_passes_both_gates():
 
 # --------------------------------------------------------------------------- the stage
 
-def test_the_embedding_sgd_stage_queues_three_single_seed_runs():
+def test_the_embedding_sgd_stage_queues_the_picked_rate_at_five_seeds():
     queued = sweep.queue("embedding_sgd", seeds=sweep.DEFAULT_SEEDS["embedding_sgd"])
 
-    assert [(name, seed) for name, _, seed in queued] == [
-        ("sgd_lr1e-2", 0), ("sgd_lr1e-1", 0), ("sgd_lr1", 0)]
-    for (_, extra, _), rate in zip(queued, ("1e-2", "1e-1", "1")):
+    assert [(name, seed) for name, _, seed in queued] == [("sgd_lr1", s) for s in range(5)]
+    for _, extra, _ in queued:
         assert extra == [*sweep.O1_BASE, "--embedding-optimizer", "sgd",
-                         "--embedding-lr", rate]
+                         "--embedding-lr", "1"]
     # the knobs the ledger DOES record are the O1 incumbent's, so `reference` is comparable
     assert sweep.knobs(queued[0][1], "unused") == ("0.001", "0", sweep.O1_DATA_DIR)

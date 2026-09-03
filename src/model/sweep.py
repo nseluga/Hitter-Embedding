@@ -135,14 +135,14 @@ STAGES["selection"] = [
 # three rates two orders of magnitude apart, on the same O1 base as `selection` so its
 # `reference` is in the incumbent's units. One seed: this is a screen for whether the
 # effect exists at all, not a selection.
+# screen (2026-09-02, one seed each) also ran sgd_lr1e-2 and sgd_lr1e-1; both lost to lr 1
+# on slope and reference, and the sweep deepens every config it lists, so only the pick stays.
 STAGES["embedding_sgd"] = [
-    ("sgd_lr1e-2", [*O1_BASE, "--embedding-optimizer", "sgd", "--embedding-lr", "1e-2"]),
-    ("sgd_lr1e-1", [*O1_BASE, "--embedding-optimizer", "sgd", "--embedding-lr", "1e-1"]),
     ("sgd_lr1", [*O1_BASE, "--embedding-optimizer", "sgd", "--embedding-lr", "1"]),
 ]
 
 DEFAULT_SEEDS = {"screen": 2, "early": 5, "presplit": 5, "splithead": 5, "rebuild": 5,
-                 "selection": 2, "embedding_sgd": 1}
+                 "selection": 2, "embedding_sgd": 5}
 
 
 # The ledger is keyed and read as text, so `1e-3` and `0.001` are two different values in a
@@ -164,7 +164,7 @@ def knobs(extra, default_data_dir):
 
     --embedding-optimizer and --embedding-lr are deliberately NOT recorded: LEDGER_FIELDS is
     fixed and adding a column shifts every existing row (see `append_ledger`). The
-    `embedding_sgd` config name carries the setting instead -- `sgd_lr1e-1` is the rate."""
+    `embedding_sgd` config name carries the setting instead -- `sgd_lr1` is the rate."""
     lr, warmup, data_dir = canonical_lr(LEARNING_RATE), "0", default_data_dir
     for flag, value in zip(extra, extra[1:]):
         if flag == "--lr":
