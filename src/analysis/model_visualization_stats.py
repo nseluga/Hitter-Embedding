@@ -38,7 +38,7 @@ EVAL_SEASON_FOR_PRIOR = TRAIN_SEASONS[1] + 1  # 2024: prior_exposure sums season
 
 # Shared across every Phase V script that names the five anchor hitters (anchor swapped
 # Duvall -> Bohm 2026-09-02, see decision log). Short names derive from the full name's
-# first token, matching the prior per-module ANCHOR_IDS convention.
+# last token, matching the prior per-module ANCHOR_IDS convention.
 ANCHORS = {
     545361: "Mike Trout",
     665742: "Juan Soto",
