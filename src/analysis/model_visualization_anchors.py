@@ -34,7 +34,7 @@ from src.data import eval_targets
 from src.model import loader, query, query_tables as qt
 
 DEFAULT_OUT_DIR = "results/model_visualization"
-DEFAULT_CHECKPOINT = "results/checkpoints/d10_baseline_s0.pt"
+DEFAULT_CHECKPOINT = "results/checkpoints/embedding_sgd_sgd_lr1_s0.pt"
 DEFAULT_DATA_DIR = "data/processed/phase_d5"
 DEFAULT_NAMES_CSV = "data/processed/hitter_names.csv"
 DEFAULT_STATS_CSV = "results/model_visualization/hitter_stats.csv"

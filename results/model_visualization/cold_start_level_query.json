@@ -1,0 +1,87 @@
+{
+  "n_seeds": 5,
+  "n_pitches": 20000,
+  "origin": {
+    "p_swing": 0.4649010795344125,
+    "p_contact": 0.620327619603837,
+    "q": 0.30604501432217657
+  },
+  "cold_start_groups": {
+    "total": 164,
+    "by_hand": {
+      "L": 74,
+      "R": 90
+    },
+    "coverage": {
+      "eval_season": 2024,
+      "actual_groups": 1279,
+      "dropped_below_min_eval_pa": 130,
+      "min_eval_pa": 10,
+      "dropped_no_prediction": 0,
+      "scored_groups": 1149,
+      "by_stratum": {
+        "low": {
+          "scored": 380,
+          "dropped": 85,
+          "share_dropped": 0.1827956989247312,
+          "mean_woba_scored": 0.2715274403871476,
+          "mean_woba_dropped": 0.1978559710550887
+        },
+        "medium": {
+          "scored": 280,
+          "dropped": 33,
+          "share_dropped": 0.10543130990415335,
+          "mean_woba_scored": 0.2861702757268614,
+          "mean_woba_dropped": 0.22453930976430975
+        },
+        "high": {
+          "scored": 489,
+          "dropped": 12,
+          "share_dropped": 0.023952095808383235,
+          "mean_woba_scored": 0.3042298857630782,
+          "mean_woba_dropped": 0.17301157407407408
+        }
+      }
+    }
+  },
+  "L": {
+    "level_query": {
+      "p_swing": 0.46276431179962607,
+      "p_contact": 0.6130915310315118,
+      "q": 0.29803808485127986
+    },
+    "difference_from_origin": {
+      "p_swing": -0.0021367677347864378,
+      "p_contact": -0.007236088572325161,
+      "q": -0.008006929470896706
+    },
+    "n_low_stratum_rows": 415,
+    "bootstrap_q_difference_ci": {
+      "n_draws": 2500,
+      "seed": 0,
+      "low": -0.010136340534994393,
+      "high": -0.005807246929649262,
+      "mean": -0.008005444810138795
+    }
+  },
+  "R": {
+    "level_query": {
+      "p_swing": 0.46106168058668534,
+      "p_contact": 0.6078690920924261,
+      "q": 0.2969745509637148
+    },
+    "difference_from_origin": {
+      "p_swing": -0.0038393989477271684,
+      "p_contact": -0.012458527511410855,
+      "q": -0.009070463358461789
+    },
+    "n_low_stratum_rows": 554,
+    "bootstrap_q_difference_ci": {
+      "n_draws": 2500,
+      "seed": 0,
+      "low": -0.011477542221769717,
+      "high": -0.006907386023867881,
+      "mean": -0.009080690654040876
+    }
+  }
+}

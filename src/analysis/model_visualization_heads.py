@@ -41,7 +41,7 @@ from src.model.query import load_ensemble, _trunk, spray_kernels
 from src.model.v1 import SPLIT_CLASSES
 
 DEFAULT_DATA_DIR = "data/processed/phase_d5"
-DEFAULT_CHECKPOINT = "results/checkpoints/d10_baseline_s0.pt"
+DEFAULT_CHECKPOINT = "results/checkpoints/embedding_sgd_sgd_lr1_s0.pt"
 DEFAULT_OUT_DIR = "results/model_visualization"
 MANIFEST_PATH = "data/processed/phase_d5/manifest.json"
 NAMES_PATH = "data/processed/hitter_names.csv"

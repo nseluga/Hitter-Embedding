@@ -2,7 +2,7 @@
 Phase V — embedding visualization: V.11 (seed stability gate), V.1 (stand map),
 V.2 (exposure map), V.6 (cold-start), V.7 (dimension usage).
 
-Reads only `embedding.weight` from the frozen `d10_baseline_s{0..4}` checkpoints
+Reads only `embedding.weight` from the frozen `embedding_sgd_sgd_lr1_s{0..4}` checkpoints
 (spec §0.4: no model, scorer, or loss changes). Seed 0 draws every figure; all
 five seeds feed V.11 only (spec §0.2). Purpose is how the model learned, not how
 it performed (spec §0.1) — nothing here grades against 2025 or a baseline.
@@ -32,9 +32,9 @@ from src.analysis.model_visualization_stats import ANCHORS
 
 DEFAULT_OUT_DIR = "results/model_visualization"
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
-DEFAULT_ARM = "d10_baseline"
+DEFAULT_ARM = "embedding_sgd_sgd_lr1"
 LOG_DIR = "results/model_v1/logs"
-LOG_ARM = "rebuild_baseline"  # the pre-rename slug the logs were written under (spec §0.2)
+LOG_ARM = DEFAULT_ARM  # logs were written under the arm name from the first run
 NAMES_PATH = "data/processed/hitter_names.csv"
 
 SEEDS = (0, 1, 2, 3, 4)
