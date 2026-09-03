@@ -45,6 +45,41 @@ def test_zscore_candidates_drops_nan_and_low_exposure():
     assert z.shape == (2, 10)
 
 
+def test_cosine_neighbours_with_allowed_rows_never_returns_disallowed_row():
+    rng = np.random.default_rng(1)
+    embedding = rng.normal(size=(10, 4))
+    allowed_rows = {1, 2, 5, 6}
+    neighbours = cosine_neighbours(embedding, anchor_row=1, k=8, allowed_rows=allowed_rows)
+    returned = set(neighbours["row"].to_numpy())
+    assert returned <= allowed_rows
+    assert returned <= {2, 5, 6}  # anchor row 1 itself is still excluded
+
+
+def test_zscore_candidates_strata_restricts_pool_and_zscores_within_it():
+    df = pd.DataFrame({
+        "embedding_index": [1, 2, 3, 4],
+        "stratum": ["high", "high", "low", "low"],
+        "swing_rate": [0.4, 0.6, 0.5, 0.3],
+        "whiff_rate": [0.2, 0.2, 0.2, 0.2],
+        "contact_rate": [0.7, 0.7, 0.7, 0.7],
+        "chase_rate": [0.3, 0.3, 0.3, 0.3],
+        "zone_swing_rate": [0.6, 0.6, 0.6, 0.6],
+        "ev_mean": [88.0, 88.0, 88.0, 88.0],
+        "ev_p90": [100.0, 100.0, 100.0, 100.0],
+        "la_mean": [12.0, 12.0, 12.0, 12.0],
+        "pull_rate": [0.4, 0.4, 0.4, 0.4],
+        "woba_level": [0.32, 0.32, 0.32, 0.32],
+        "log_prior_pa": [math.log(500)] * 4,
+    })
+    filtered, z = zscore_candidates(df, strata={"high"})
+    assert set(filtered["embedding_index"]) == {1, 2}
+    # z-scored within the restricted 2-row pool: mean of the only varying column is ~0
+    swing_col = list(df.columns[df.columns == "swing_rate"])[0]
+    swing_idx = [c for c in df.columns if c not in
+                ("embedding_index", "stratum", "log_prior_pa")].index("swing_rate")
+    assert abs(z[:, swing_idx].mean()) < 1e-9
+
+
 def test_bin_index_edge_point_lands_in_correct_bin():
     edges = np.linspace(-1.5, 1.5, 6)  # 5 bins
     # the right edge of the grid falls in the last bin, not a nonexistent 6th bin

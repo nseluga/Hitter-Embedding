@@ -16,6 +16,24 @@ import pytest
 from src.analysis import model_visualization_stats as mvs
 
 
+def test_shared_anchor_constant_has_bohm_not_duvall():
+    assert len(mvs.ANCHORS) == 5
+    assert 664761 in mvs.ANCHORS
+    assert 594807 not in mvs.ANCHORS
+
+
+def test_consumer_modules_reuse_the_same_anchor_object():
+    from src.analysis import model_visualization_anchors as mva
+    from src.analysis import model_visualization_embeddings as mve
+    from src.analysis import model_visualization_heads as mvh
+    from src.analysis import model_visualization_platoon as mvp
+
+    assert mva.ANCHORS is mvs.ANCHORS
+    assert set(mve.ANCHOR_IDS) == set(mvs.ANCHORS)
+    assert set(mvp.ANCHOR_IDS) == set(mvs.ANCHORS)
+    assert mvh.ANCHOR_IDS is mvs.ANCHOR_SHORT_NAMES
+
+
 def synthetic_pitch_frame():
     """A tiny pitch table covering swings, takes, zones, and both pull directions."""
     rows = [

@@ -29,6 +29,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from src.analysis.model_visualization_stats import ANCHORS
 from src.data import eval_targets
 from src.model import loader, query, query_tables as qt
 
@@ -38,14 +39,6 @@ DEFAULT_DATA_DIR = "data/processed/phase_d5"
 DEFAULT_NAMES_CSV = "data/processed/hitter_names.csv"
 DEFAULT_STATS_CSV = "results/model_visualization/hitter_stats.csv"
 EVAL_SEASON_WEIGHTS = "2024"
-
-ANCHORS = {
-    545361: "Mike Trout",
-    665742: "Juan Soto",
-    592626: "Joc Pederson",
-    594807: "Adam Duvall",
-    656941: "Kyle Schwarber",
-}
 
 STAT_COLUMNS = ["swing_rate", "whiff_rate", "contact_rate", "chase_rate", "zone_swing_rate",
                 "ev_mean", "ev_p90", "la_mean", "pull_rate", "woba_level"]
@@ -70,30 +63,36 @@ QUANTITIES = ["p_swing", "p_contact", "q"]
 
 # --- V.8: nearest neighbours -------------------------------------------------------------
 
-def cosine_neighbours(embedding, anchor_row, k=K_NEIGHBOURS, exclude_rows=(0,)):
+def cosine_neighbours(embedding, anchor_row, k=K_NEIGHBOURS, exclude_rows=(0,), allowed_rows=None):
     """
     Rows nearest `anchor_row` by cosine similarity, descending.
     embedding: (n_rows, dim). exclude_rows: rows that can never be a neighbour (cold-start).
+    allowed_rows: if given, only rows in this set are eligible neighbours (e.g. one stratum).
     Returns a DataFrame with columns rank, row, similarity, excluding the anchor itself.
     """
     norms = np.linalg.norm(embedding, axis=1, keepdims=True)
     normed = embedding / np.clip(norms, 1e-12, None)
     similarity = normed @ normed[anchor_row]
     excluded = set(exclude_rows) | {anchor_row}
-    order = [row for row in np.argsort(-similarity) if row not in excluded][:k]
+    order = [row for row in np.argsort(-similarity)
+            if row not in excluded and (allowed_rows is None or row in allowed_rows)][:k]
     return pd.DataFrame({"rank": range(1, len(order) + 1), "row": order,
                          "similarity_or_distance": similarity[order]})
 
 
-def zscore_candidates(stats_df, columns=STAT_COLUMNS, min_prior_pa=MIN_PRIOR_PA):
+def zscore_candidates(stats_df, columns=STAT_COLUMNS, min_prior_pa=MIN_PRIOR_PA, strata=None):
     """
     Candidate pool for the stat-neighbour search: drop rows with NaN in any used column
-    and rows below the exposure floor, then z-score the remaining columns.
+    and rows below the exposure floor, optionally restrict to `strata` (a set of values
+    in stats_df["stratum"]), then z-score the remaining columns.
     Returns (filtered_df, z matrix aligned row-for-row with filtered_df).
     """
     eligible = stats_df["log_prior_pa"] >= math.log(min_prior_pa)
     complete = stats_df[columns].notna().all(axis=1)
-    filtered = stats_df[eligible & complete].reset_index(drop=True)
+    mask = eligible & complete
+    if strata is not None:
+        mask &= stats_df["stratum"].isin(strata)
+    filtered = stats_df[mask].reset_index(drop=True)
     values = filtered[columns].to_numpy(dtype="float64")
     mean, std = values.mean(axis=0), values.std(axis=0)
     z = (values - mean) / np.clip(std, 1e-12, None)
@@ -117,19 +116,25 @@ def euclidean_neighbours(filtered_df, z, anchor_embedding_index, k=K_NEIGHBOURS)
                          "similarity_or_distance": distance[order]})
 
 
-def build_neighbours_table(embedding, stats_df, names_df, anchors=ANCHORS):
+def build_neighbours_table(embedding, stats_df, names_df, anchors=ANCHORS, strata=None):
     """
     V.8's neighbours.csv: embedding and stat neighbours for every anchor, one row each.
+    strata: if given (a set of values in stats_df["stratum"]), both the embedding and
+    stat neighbour pools are restricted to hitters in those strata.
     """
     names_by_row = names_df.set_index("embedding_index")
     stats_by_row = stats_df.set_index("embedding_index")
-    filtered, z = zscore_candidates(stats_df)
+    filtered, z = zscore_candidates(stats_df, strata=strata)
+    allowed_rows = (set(stats_df.loc[stats_df["stratum"].isin(strata), "embedding_index"])
+                    if strata is not None else None)
 
     rows = []
     for batter, anchor_name in anchors.items():
         anchor_row = int(names_df.loc[names_df["batter"] == batter, "embedding_index"].iloc[0])
-        for method, table in (("embedding", cosine_neighbours(embedding, anchor_row)),
-                              ("stats", euclidean_neighbours(filtered, z, anchor_row))):
+        for method, table in (
+            ("embedding", cosine_neighbours(embedding, anchor_row, allowed_rows=allowed_rows)),
+            ("stats", euclidean_neighbours(filtered, z, anchor_row)),
+        ):
             for _, neighbour in table.iterrows():
                 row = int(neighbour["row"])
                 name_row = names_by_row.loc[row] if row in names_by_row.index else None
@@ -278,6 +283,11 @@ def run_v8(embedding, names_df, stats_df, out_dir):
     table = build_neighbours_table(embedding, stats_df, names_df)
     table.to_csv(out_dir / "neighbours.csv", index=False)
     plot_neighbours(table, ANCHORS, out_dir / "fig_neighbours.png")
+
+    high_table = build_neighbours_table(embedding, stats_df, names_df, strata={"high"})
+    high_table.to_csv(out_dir / "neighbours_high.csv", index=False)
+    plot_neighbours(high_table, ANCHORS, out_dir / "fig_neighbours_high.png")
+
     overlap = overlap_counts(table)
     for batter, name in ANCHORS.items():
         print(f"V.8 {name}: overlap between embedding and stat neighbour lists = "

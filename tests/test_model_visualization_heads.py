@@ -99,3 +99,32 @@ def test_loadings_frame_is_long_form():
     assert set(loadings["pc"]) == {"pc1", "pc2", "pc3", "pc4"}
     n_variables = len(mvh.HEAD_MARGINALS) + len(mvh.STAT_VARIABLES) + 1
     assert len(loadings) == 4 * n_variables
+
+
+def synthetic_merged_for_partial_loadings(n=20, seed=0):
+    """A frame with the six head marginals, the stat panel, and log_prior_pa, the shape
+    `build_loadings`'s merge produces -- bat_speed_mean has a few NaNs, like the real data."""
+    rng = np.random.default_rng(seed)
+    confound = rng.normal(size=n)
+    data = {"batter": np.arange(1, n + 1), "log_prior_pa": np.abs(confound) + 1.0}
+    for head in mvh.HEAD_MARGINALS:
+        data[head] = confound + rng.normal(scale=0.5, size=n)
+    for stat in mvh.STAT_VARIABLES:
+        data[stat] = confound + rng.normal(scale=0.5, size=n)
+    frame = pd.DataFrame(data)
+    frame.loc[frame.index[:3], "bat_speed_mean"] = np.nan
+    return frame
+
+
+def test_head_partial_loadings_shape_and_range():
+    merged = synthetic_merged_for_partial_loadings()
+    loadings = mvh.head_partial_loadings(merged)
+    assert set(loadings.columns) == {"head", "stat", "r_partial", "ci_low", "ci_high", "n"}
+    assert len(loadings) == len(mvh.HEAD_MARGINALS) * len(mvh.STAT_VARIABLES)
+    assert set(loadings["head"]) == set(mvh.HEAD_MARGINALS)
+    assert set(loadings["stat"]) == set(mvh.STAT_VARIABLES)
+    finite_r = loadings["r_partial"].dropna()
+    assert ((finite_r >= -1 - 1e-9) & (finite_r <= 1 + 1e-9)).all()
+    # bat_speed_mean cells still compute (pairwise-complete over the 17 non-NaN rows)
+    bat_speed_rows = loadings[loadings["stat"] == "bat_speed_mean"]
+    assert (bat_speed_rows["n"] == 17).all()

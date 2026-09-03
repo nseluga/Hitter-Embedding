@@ -14,7 +14,7 @@ ANCHOR_NAMES = {
     545361: "Mike Trout",
     665742: "Juan Soto",
     592626: "Joc Pederson",
-    594807: "Adam Duvall",
+    664761: "Alec Bohm",
     656941: "Kyle Schwarber",
 }
 

@@ -37,6 +37,7 @@ from sklearn.preprocessing import StandardScaler
 from src.analysis import baseline_ladder_bivariate_eb
 from src.analysis.model_evaluation_probe_coverage import RIDGE_ALPHAS, load_seed_embeddings
 from src.analysis.model_visualization_embeddings import bootstrap_ci
+from src.analysis.model_visualization_stats import ANCHORS
 from src.model import loader, query, query_tables as qt
 
 DEFAULT_DATA_DIR = "data/processed/phase_d5"
@@ -49,7 +50,7 @@ HITTER_STATS = "results/model_visualization/hitter_stats.csv"
 NAMES_PATH = "data/processed/hitter_names.csv"
 EVAL_SEASON = 2024
 
-ANCHOR_IDS = [545361, 665742, 592626, 594807, 656941]  # Trout, Soto, Pederson, Duvall, Schwarber
+ANCHOR_IDS = list(ANCHORS)  # Trout, Soto, Pederson, Bohm, Schwarber
 N_OTHER = 35
 N_DIMS = 32
 DEFAULT_N_PITCHERS = 128

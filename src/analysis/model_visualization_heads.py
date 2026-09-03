@@ -35,6 +35,7 @@ import pandas as pd
 import torch
 from sklearn.decomposition import PCA
 
+from src.analysis.model_visualization_stats import ANCHOR_SHORT_NAMES
 from src.model import loader
 from src.model.query import load_ensemble, _trunk, spray_kernels
 from src.model.v1 import SPLIT_CLASSES
@@ -53,8 +54,7 @@ REFERENCE_SEED = 0
 HITTER_BATCH = 64
 BOOT_SEED = 0
 N_BOOT = 1000
-ANCHOR_IDS = {545361: "Trout", 665742: "Soto", 592626: "Pederson",
-              594807: "Duvall", 656941: "Schwarber"}
+ANCHOR_IDS = ANCHOR_SHORT_NAMES
 IN_PLAY_INDEX = SPLIT_CLASSES.index("in_play")
 
 # spec §5 vars for the loadings heatmap, joined from hitter_stats.csv
@@ -229,24 +229,54 @@ def get_or_compute_pca_coords(hitters, out_dir):
     return coords, [f"pc{k + 1}" for k in range(4)], True
 
 
-def fig_head_fingerprints(coords, marginals_df, hitters, path):
-    """2x3 small multiples: PCA(pc1,pc2) coloured by each head marginal."""
-    merged = coords.merge(marginals_df, on=["batter", "embedding_index"]) \
-                    .merge(hitters[["batter", "name"]], on="batter", how="left")
-    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
-    for ax, marginal in zip(axes.flat, HEAD_MARGINALS):
-        sc = ax.scatter(merged["pc1"], merged["pc2"], c=merged[marginal],
-                        cmap="viridis", s=6, alpha=0.75)
-        fig.colorbar(sc, ax=ax, label=marginal)
-        anchors = merged[merged["batter"].isin(ANCHOR_IDS)]
-        for _, row in anchors.iterrows():
-            ax.scatter([row["pc1"]], [row["pc2"]], s=45, facecolors="none",
-                      edgecolors="black", linewidths=1.2)
-            ax.annotate(ANCHOR_IDS[row["batter"]], (row["pc1"], row["pc2"]),
-                       fontsize=8, xytext=(4, 4), textcoords="offset points")
-        ax.set_title(marginal)
-        ax.set_xlabel("pc1"); ax.set_ylabel("pc2")
-    fig.suptitle("Head marginals over the reference context set")
+def head_partial_loadings(merged):
+    """
+    Long-form (head, stat, r_partial, ci_low, ci_high, n): partial Pearson r of each
+    HEAD_MARGINALS column against each STAT_VARIABLES column, partialled on
+    merged["log_prior_pa"], pairwise-complete per cell (bat_speed_mean is NaN for many
+    hitters). merged must already carry the head marginal, stat, and log_prior_pa columns
+    (e.g. the output of `build_loadings`'s merge).
+    """
+    confound = merged["log_prior_pa"].values.astype("float64")
+    rows = []
+    for head in HEAD_MARGINALS:
+        a = merged[head].values.astype("float64")
+        for stat in STAT_VARIABLES:
+            b = merged[stat].values.astype("float64")
+            point, lo, hi, n = bootstrap_ci_partial(a, b, confound)
+            rows.append({"head": head, "stat": stat, "r_partial": point,
+                        "ci_low": lo, "ci_high": hi, "n": n})
+    return pd.DataFrame(rows)
+
+
+def fig_head_partial_heatmap(frame, path):
+    """
+    Heatmap: rows = HEAD_MARGINALS, columns = STAT_VARIABLES, cell = partial r
+    (partialled on log prior PA). Cells whose CI excludes zero are marked with a dot.
+    """
+    pivot = frame.pivot(index="head", columns="stat", values="r_partial").reindex(
+        index=HEAD_MARGINALS, columns=STAT_VARIABLES)
+    lo_pivot = frame.pivot(index="head", columns="stat", values="ci_low").reindex(
+        index=HEAD_MARGINALS, columns=STAT_VARIABLES)
+    hi_pivot = frame.pivot(index="head", columns="stat", values="ci_high").reindex(
+        index=HEAD_MARGINALS, columns=STAT_VARIABLES)
+
+    fig, ax = plt.subplots(figsize=(1.1 * len(STAT_VARIABLES) + 2, 0.9 * len(HEAD_MARGINALS) + 2))
+    im = ax.imshow(pivot.values, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
+    ax.set_xticks(range(len(STAT_VARIABLES))); ax.set_xticklabels(STAT_VARIABLES, rotation=45, ha="right", fontsize=8)
+    ax.set_yticks(range(len(HEAD_MARGINALS))); ax.set_yticklabels(HEAD_MARGINALS, fontsize=8)
+    for i in range(pivot.shape[0]):
+        for j in range(pivot.shape[1]):
+            value = pivot.values[i, j]
+            if not np.isfinite(value):
+                continue
+            ci_excludes_zero = lo_pivot.values[i, j] > 0 or hi_pivot.values[i, j] < 0
+            label = f"{value:.2f}" + ("*" if ci_excludes_zero else "")
+            ax.text(j, i, label, ha="center", va="center", fontsize=7,
+                   fontweight="bold" if ci_excludes_zero else "normal")
+    ax.set_title("Head marginal x stat, partial r (partialled on log prior PA); "
+                 "* = 95% CI excludes zero")
+    fig.colorbar(im, ax=ax, label="Pearson r", shrink=0.8)
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
@@ -408,12 +438,13 @@ def main():
     coords, pc_cols, fallback = get_or_compute_pca_coords(hitter_stats, out_dir)
     print(f"embedding_coords.csv {'was absent, computed PCA fallback' if fallback else 'found'}")
 
-    fig_head_fingerprints(coords[["batter", "embedding_index", "pc1", "pc2"]],
-                          marginals_df, names, out_dir / "fig_head_fingerprints.png")
-
     loadings, merged = build_loadings(coords, pc_cols, marginals_df, hitter_stats)
     loadings.to_csv(out_dir / "loadings.csv", index=False)
     fig_loadings(loadings, pc_cols, out_dir / "fig_loadings.png")
+
+    partial_loadings = head_partial_loadings(merged)
+    partial_loadings.to_csv(out_dir / "head_partial_loadings.csv", index=False)
+    fig_head_partial_heatmap(partial_loadings, out_dir / "fig_head_partial_heatmap.png")
 
     cells = preregistered_cells(merged)
     (out_dir / "head_stat_loadings.json").write_text(json.dumps(cells, indent=2))
@@ -425,9 +456,10 @@ def main():
     level_stats = level_query_stats(level_query_df)
     (out_dir / "level_query.json").write_text(json.dumps(level_stats, indent=2))
 
-    print(f"wrote {out_dir}/head_marginals.csv, loadings.csv, level_query.csv, "
-          f"head_stat_loadings.json, level_query.json, fig_head_fingerprints.png, "
-          f"fig_loadings.png, fig_level_map.png, reference_context_index.csv")
+    print(f"wrote {out_dir}/head_marginals.csv, loadings.csv, head_partial_loadings.csv, "
+          f"level_query.csv, head_stat_loadings.json, level_query.json, "
+          f"fig_head_partial_heatmap.png, fig_loadings.png, fig_level_map.png, "
+          f"reference_context_index.csv")
     print(f"preregistered cells: {json.dumps(cells)}")
     print(f"level query stats: {json.dumps(level_stats)}")
 

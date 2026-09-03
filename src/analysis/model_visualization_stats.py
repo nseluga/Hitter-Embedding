@@ -36,6 +36,18 @@ from src.data.eval_targets import aggregate, drop_pitcher_batters
 TRAIN_SEASONS = (2015, 2023)
 EVAL_SEASON_FOR_PRIOR = TRAIN_SEASONS[1] + 1  # 2024: prior_exposure sums seasons < this
 
+# Shared across every Phase V script that names the five anchor hitters (anchor swapped
+# Duvall -> Bohm 2026-09-02, see decision log). Short names derive from the full name's
+# first token, matching the prior per-module ANCHOR_IDS convention.
+ANCHORS = {
+    545361: "Mike Trout",
+    665742: "Juan Soto",
+    592626: "Joc Pederson",
+    664761: "Alec Bohm",
+    656941: "Kyle Schwarber",
+}
+ANCHOR_SHORT_NAMES = {batter: name.split()[-1] for batter, name in ANCHORS.items()}
+
 PITCH_PARQUET = "data/processed/pitch_events_labeled.parquet"
 EVAL_TARGETS_PARQUET = "data/processed/eval_targets_pa.parquet"
 MANIFEST_PATH = "data/processed/phase_d5/manifest.json"

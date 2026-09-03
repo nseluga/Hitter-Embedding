@@ -28,6 +28,7 @@ from sklearn.manifold import TSNE
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 
 from src.analysis.model_evaluation_probe_coverage import load_seed_embeddings
+from src.analysis.model_visualization_stats import ANCHORS
 
 DEFAULT_OUT_DIR = "results/model_visualization"
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
@@ -38,7 +39,7 @@ NAMES_PATH = "data/processed/hitter_names.csv"
 
 SEEDS = (0, 1, 2, 3, 4)
 EPOCH_TOL = 1e-5
-ANCHOR_IDS = [545361, 665742, 592626, 594807, 656941]  # Trout, Soto, Pederson, Duvall, Schwarber
+ANCHOR_IDS = list(ANCHORS)  # Trout, Soto, Pederson, Bohm, Schwarber
 N_BOOT = 1000
 BOOT_SEED = 7
 STAND_COLORS = {"L": "#4c8dff", "R": "#e0574a", "S": "#7a7a7a"}
@@ -288,13 +289,14 @@ def exposure_loadings(coords, norms, log_prior_pa):
 
 def fig_exposure_map(coords, norms, log_prior_pa, cold_start_pc, path):
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
-    sc = axes[0].scatter(coords["pc1"], coords["pc2"], c=log_prior_pa, cmap="viridis", s=6, alpha=0.7)
+    hb = axes[0].hexbin(coords["pc1"], coords["pc2"], C=log_prior_pa,
+                        reduce_C_function=np.mean, gridsize=35, cmap="viridis")
     axes[0].scatter([cold_start_pc[0]], [cold_start_pc[1]], marker="*", s=180, color="red",
                     edgecolors="black", label="cold-start row 0")
     axes[0].legend(fontsize=8)
     axes[0].set_title("PCA coloured by log prior PA")
     axes[0].set_xlabel("pc1"); axes[0].set_ylabel("pc2")
-    fig.colorbar(sc, ax=axes[0], label="log prior PA")
+    fig.colorbar(hb, ax=axes[0], label="mean log prior PA per cell")
 
     order = np.argsort(log_prior_pa.values)
     x_sorted, y_sorted = log_prior_pa.values[order], norms[order]
@@ -353,24 +355,6 @@ def dimension_usage(matrix):
     effective_rank = float(np.exp(entropy))
     participation_ratio = float(eigenvalues.sum() ** 2 / np.sum(eigenvalues ** 2))
     return per_dim_variance, eigenvalues, effective_rank, participation_ratio
-
-
-def fig_dimension_usage(per_dim_variance, pca, effective_rank, path):
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
-    sorted_var = np.sort(per_dim_variance)[::-1]
-    axes[0].bar(range(1, len(sorted_var) + 1), sorted_var, color="#4c8dff")
-    axes[0].set_xlabel("dimension (sorted)"); axes[0].set_ylabel("variance")
-    axes[0].set_title("per-dimension variance")
-
-    cumulative = np.cumsum(pca.explained_variance_ratio_)
-    axes[1].plot(range(1, len(cumulative) + 1), cumulative, marker="o", markersize=3, color="#e0574a")
-    axes[1].axvline(effective_rank, color="gray", linestyle="--", label=f"effective rank {effective_rank:.1f}")
-    axes[1].set_xlabel("number of components"); axes[1].set_ylabel("cumulative explained variance")
-    axes[1].set_title("PCA explained variance")
-    axes[1].legend(fontsize=8)
-    fig.tight_layout()
-    fig.savefig(path, dpi=130)
-    plt.close(fig)
 
 
 # --------------------------------------------------------------------- hitter table
@@ -467,7 +451,6 @@ def main():
     }
     with open(f"{args.out_dir}/dimension_usage.json", "w") as f:
         json.dump(dim_usage_report, f, indent=2)
-    fig_dimension_usage(per_dim_variance, pca, effective_rank, f"{args.out_dir}/fig_dimension_usage.png")
 
     print(f"wrote figures + CSV/JSON to {args.out_dir}/")
 
