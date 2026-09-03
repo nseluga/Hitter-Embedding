@@ -638,10 +638,31 @@ def unmeasured_points(tables, weights):
     return float(np.asarray(tables["unmeasured"]["categories"]) @ values)
 
 
+def _append_cold_start_row(model, vector):
+    """
+    Temporarily grow `model.embedding` by one row holding `vector`, appended after the
+    trained table -- row 0 and every trained row are untouched, and the append is a new
+    `nn.Embedding` module so nothing about the original is mutated in place. Returns
+    (original_module, new_row_index) for `_restore_cold_start_row`.
+    """
+    original = model.embedding
+    vec = torch.as_tensor(vector, dtype=original.weight.dtype).reshape(1, -1)
+    with torch.no_grad():
+        weight = torch.cat([original.weight.detach(), vec], dim=0)
+    grown = torch.nn.Embedding.from_pretrained(weight, padding_idx=original.padding_idx)
+    model.embedding = grown
+    return original, weight.shape[0] - 1
+
+
+def _restore_cold_start_row(model, original):
+    """Undo `_append_cold_start_row`: put the original embedding module back."""
+    model.embedding = original
+
+
 def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
             n_pitchers=DEFAULT_N_PITCHERS, n_pitches=DEFAULT_N_PITCHES, seed=0,
             split_head=None, chunk=DEFAULT_CHUNK_PITCHERS, use_league_split=False,
-            unmeasured_split=True, batters=None):
+            unmeasured_split=True, batters=None, cold_start_prior=None):
     """
     One pred_woba per (batter, p_throws) active in eval_season (spec §7), plus the four §8
     per-PA absorbing rates the league-fidelity check aggregates.
@@ -654,6 +675,13 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
     DELTA at a handful of hitters and a full pass costs hours. The pitcher pool is untouched,
     so both sides of a delta are drawn against the same panel -- restricting pitchers instead
     would leave panel noise inside the difference.
+
+    `cold_start_prior`: optional {"L": vector, "R": vector} (each `embedding_dim` long).
+    When given, every zero-prior hitter (vocabulary miss -> row 0) in a stand group scores
+    against that stand's vector instead of the shared reserved origin -- a row temporarily
+    appended to a copy of each model's embedding table for that stand's scoring call only,
+    then restored (see `_append_cold_start_row`). Default None reproduces today's row-0
+    behaviour bit-identically.
     """
     weights = eval_targets.load_weights()[str(eval_season)]
     points = torch.from_numpy(qt.woba_points_table(tables["outcome"], weights)).float()
@@ -694,25 +722,40 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
                 continue
             hitter_rows = np.array([vocabulary.get(int(b), 0) for b in batters[group]],
                                    dtype="int64")
-            grid, usable, levels = _sample_grid(repertoire, slots,
-                                                1 if stand == "R" else 0, n_pitches,
-                                                generator)
-            backoff += levels
-            dropped += int((~usable).sum())
-            assert usable.any(), f"no usable pitchers for {hand}HP against {stand}HB"
 
-            weight_vector = panel_weights[usable]
-            label = f"{stand}HB vs {hand}HP"
-            _progress(f"{label}: {group.sum()} hitters x {int(usable.sum())} pitchers")
-            total, used, absorbing = _group_woba(
-                models, kernels, tensors, frame, tables, points, n_bins, hitter_rows,
-                grid[usable], weight_vector, split_head, chunk, weights["wBB"],
-                weights["wHBP"], use_league_split, share, unmeasured,
-                progress=lambda done, n, label=label: _progress(
-                    f"  {label}: {done}/{n} pitchers"))
-            totals[group] = total / used
-            for key in ABSORBING_KEYS:
-                rates[key][group] = absorbing[key] / used
+            prior_vector = cold_start_prior.get(stand) if cold_start_prior else None
+            grown = None
+            if prior_vector is not None:
+                grown = [_append_cold_start_row(model, prior_vector) for model in models]
+                new_index = grown[0][1]
+                assert all(idx == new_index for _, idx in grown), \
+                    "ensemble models disagree on embedding row count"
+                hitter_rows = np.where(hitter_rows == 0, new_index, hitter_rows)
+
+            try:
+                grid, usable, levels = _sample_grid(repertoire, slots,
+                                                    1 if stand == "R" else 0, n_pitches,
+                                                    generator)
+                backoff += levels
+                dropped += int((~usable).sum())
+                assert usable.any(), f"no usable pitchers for {hand}HP against {stand}HB"
+
+                weight_vector = panel_weights[usable]
+                label = f"{stand}HB vs {hand}HP"
+                _progress(f"{label}: {group.sum()} hitters x {int(usable.sum())} pitchers")
+                total, used, absorbing = _group_woba(
+                    models, kernels, tensors, frame, tables, points, n_bins, hitter_rows,
+                    grid[usable], weight_vector, split_head, chunk, weights["wBB"],
+                    weights["wHBP"], use_league_split, share, unmeasured,
+                    progress=lambda done, n, label=label: _progress(
+                        f"  {label}: {done}/{n} pitchers"))
+                totals[group] = total / used
+                for key in ABSORBING_KEYS:
+                    rates[key][group] = absorbing[key] / used
+            finally:
+                if grown is not None:
+                    for model, (original, _) in zip(models, grown):
+                        _restore_cold_start_row(model, original)
 
         predictions.append(pd.DataFrame(
             {"batter": batters, "season": eval_season, "p_throws": hand,
@@ -733,7 +776,8 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
                    "batter_subset": None if batters is None else sorted(int(b) for b in batters),
                    "measured_share": share, "unmeasured_points": unmeasured,
                    "contact_split_source": "league_table" if (
-                       use_league_split or models[0].head_split is None) else "trained_head"}
+                       use_league_split or models[0].head_split is None) else "trained_head",
+                   "cold_start_prior": cold_start_prior is not None}
     return out, diagnostics
 
 

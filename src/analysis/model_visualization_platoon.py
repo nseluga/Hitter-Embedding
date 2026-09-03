@@ -124,10 +124,24 @@ def perturb_embedding(model, dim, eps):
 
 
 def restore_embedding(model, saved):
-    """Undo `perturb_embedding` and assert the table is back bit-identical."""
+    """Undo `perturb_embedding` (or `set_row0`) and assert the table is back bit-identical."""
     with torch.no_grad():
         model.embedding.weight.copy_(saved)
     assert torch.equal(model.embedding.weight, saved), "embedding restore did not round-trip"
+
+
+def set_row0(model, vector):
+    """
+    Overwrite embedding row 0 (the reserved cold-start origin) with `vector`, for a
+    query call. Sibling of `perturb_embedding`, which deliberately skips row 0 -- this
+    is the one place that touches it on purpose. Returns the exact pre-overwrite
+    tensor, restored via `restore_embedding`.
+    """
+    weight = model.embedding.weight
+    saved = weight.detach().clone()
+    with torch.no_grad():
+        weight[0] = torch.as_tensor(vector, dtype=weight.dtype)
+    return saved
 
 
 def pending_passes(raw_path, all_pass_ids):
