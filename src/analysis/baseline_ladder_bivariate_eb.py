@@ -334,20 +334,22 @@ def posterior_mean(x, n_pa, mu, matrix, sigma2):
     """
     Empirical-Bayes posterior mean (BLUP) for every hitter at once.
     x: (N,2) observed side-specific wOBA, nan allowed where n_pa is 0.
-    n_pa: (N,2) PA vs each hand. mu: (2,). matrix: (2,2) Sigma. sigma2: (2,).
-    Returns (N,2) shrunk estimates.
+    n_pa: (N,2) PA vs each hand. mu: (2,) or (N,2) -- per-row lets a caller override the
+    shrinkage target for individual rows (debut_mu in `predict`). matrix: (2,2) Sigma.
+    sigma2: (2,). Returns (N,2) shrunk estimates.
     """
     x, n_pa = np.asarray(x, dtype=float), np.asarray(n_pa, dtype=float)
+    mu = np.broadcast_to(np.asarray(mu, dtype=float), x.shape)
     assert x.shape == n_pa.shape and x.ndim == 2 and x.shape[1] == 2, \
         f"x and n_pa must both be (N,2), got {x.shape} and {n_pa.shape}"
-    assert mu.shape == (2,) and matrix.shape == (2, 2) and sigma2.shape == (2,), \
-        f"parameter shapes wrong: mu {mu.shape}, Sigma {matrix.shape}, sigma2 {sigma2.shape}"
+    assert matrix.shape == (2, 2) and sigma2.shape == (2,), \
+        f"parameter shapes wrong: Sigma {matrix.shape}, sigma2 {sigma2.shape}"
 
     observed = n_pa > 0
     # a side with no PA contributes no evidence: infinite sampling variance, and its
     # residual is zeroed so a nan cannot propagate through the solve
     sampling_var = np.where(observed, sigma2[None, :] / np.maximum(n_pa, 1.0), ZERO_PA_VARIANCE)
-    residual = np.where(observed, np.nan_to_num(x) - mu[None, :], 0.0)
+    residual = np.where(observed, np.nan_to_num(x) - mu, 0.0)
 
     n_rows = len(x)
     total = np.broadcast_to(matrix, (n_rows, 2, 2)).copy()
@@ -355,7 +357,7 @@ def posterior_mean(x, n_pa, mu, matrix, sigma2):
     total[:, 1, 1] += sampling_var[:, 1]
 
     weighted = np.linalg.solve(total, residual[:, :, None])[:, :, 0]
-    out = mu[None, :] + weighted @ matrix
+    out = mu + weighted @ matrix
     assert np.isfinite(out).all(), "posterior mean produced non-finite values"
     return out
 
@@ -382,12 +384,17 @@ def implied_split_constant(params):
     return float(params["sigma2"][0] / tau2_split), tau2_split
 
 
-def predict(pa_df, eval_season, params=None, n_seasons=TRAILING_SEASONS, rho_override=None):
+def predict(pa_df, eval_season, params=None, n_seasons=TRAILING_SEASONS, rho_override=None,
+            debut_mu=None):
     """
     Project side-specific wOBA for every hitter-hand active in eval_season.
     params: output of `fit`; refit on the trailing window when omitted.
     rho_override: {batter_type: rho} to score a fixed-correlation variant (used only
     for The Book reference row); None uses the estimated rho.
+    debut_mu: optional override for the shrinkage target `record["mu"]`, applied ONLY to
+    rows with zero prior PA on both sides (n_L + n_R == 0) -- a hitter with any observed
+    PA still shrinks to the fitted league mu. Either a {batter_type: (mu_L, mu_R)}
+    mapping or a callable(batter_type) -> (mu_L, mu_R).
     Returns batter/season/p_throws/pred_woba, ready for claim1_eval.
     """
     params = params or fit(pa_df, eval_season, n_seasons)
@@ -416,8 +423,15 @@ def predict(pa_df, eval_season, params=None, n_seasons=TRAILING_SEASONS, rho_ove
         matrix = record["sigma_matrix"]
         if rho_override is not None:
             matrix = sigma_matrix(record["tau2"], rho_override[batter_type])
-        shrunk = posterior_mean(group[["x_L", "x_R"]].to_numpy(), group[["n_L", "n_R"]].to_numpy(),
-                                record["mu"], matrix, record["sigma2"])
+        n_pa = group[["n_L", "n_R"]].to_numpy()
+        mu = record["mu"]
+        if debut_mu is not None:
+            override = debut_mu(batter_type) if callable(debut_mu) else debut_mu.get(batter_type)
+            if override is not None:
+                zero_prior = n_pa.sum(axis=1) == 0
+                mu = np.broadcast_to(record["mu"], (len(group), 2)).copy()
+                mu[zero_prior] = override
+        shrunk = posterior_mean(group[["x_L", "x_R"]].to_numpy(), n_pa, mu, matrix, record["sigma2"])
         predictions.append(pd.DataFrame({"batter": group["batter"].to_numpy(),
                                          "L": shrunk[:, 0], "R": shrunk[:, 1]}))
 
