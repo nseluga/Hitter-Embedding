@@ -77,6 +77,15 @@ def split_indices(season, config=None):
         indices[name] = torch.from_numpy(np.flatnonzero(mask).astype(np.int64))
     # one counter, both failures: a row in two splits lands on 2, a row in none on 0
     assert bool((assigned == 1).all()), "the splits do not partition the table"
+
+    # the split-boundary guard, checked against the FROZEN config no matter which config was
+    # passed: the final-run config moves 2024 into train, and the one thing it must never be
+    # able to do is drag 2025 along with it
+    sealed = set(load_splits()["split"]["test"])
+    for name in ("train", "val"):
+        present = set(np.unique(seasons[indices[name].numpy()]).tolist())
+        assert not present & sealed, (
+            f"{name} contains sealed test season(s) {sorted(present & sealed)}")
     return indices
 
 

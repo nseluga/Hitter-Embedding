@@ -90,6 +90,8 @@ from src.analysis.baseline_ladder_trailing import TRAILING_SEASONS, trailing_win
 from src.analysis.stabilization import hitter_stats, variance_components
 from src.data.eval_targets import drop_pitcher_batters
 
+DEFAULT_HITTER_STATS = "results/model_visualization/hitter_stats.csv"
+
 KEY = ["batter", "season", "p_throws"]
 SIDES = ("L", "R")
 BATTER_TYPES = ("L", "R", "S")
@@ -382,6 +384,37 @@ def implied_split_constant(params):
     # The Book weights the hitter's own split by PA faced vs LHP, i.e. it treats the
     # strong side as known, so the relevant per-observation variance is the weak side's
     return float(params["sigma2"][0] / tau2_split), tau2_split
+
+
+def matching_debut_mu(stats):
+    """
+    Low-stratum, within-stand mean observed training wOBA (`woba_level`) -- the EB
+    counterpart of `ensemble_cold_start_prior`'s embedding-space match. Returns
+    {"L": value, "R": value, "S": value}; "S" is the combined-stand mean (see
+    `cold_start_prior_eval`'s module docstring, which reasons the match out).
+    """
+    low = stats[stats["stratum"] == "low"]
+    by_stand = low.groupby("stand")["woba_level"].mean().to_dict()
+    combined = float(low["woba_level"].mean())
+    return {"L": float(by_stand.get("L", combined)), "R": float(by_stand.get("R", combined)),
+            "S": combined}
+
+
+def eb_debut_mu(stats):
+    """
+    `debut_mu` for `predict`: batter_type -> (mu_L, mu_R),
+    both components the matched stand value (see module docstring).
+    """
+    matched = matching_debut_mu(stats)
+    return {batter_type: (matched[batter_type], matched[batter_type])
+            for batter_type in ("L", "R", "S")}
+
+
+def debut_mu_from_stats(stats_csv=DEFAULT_HITTER_STATS):
+    """`eb_debut_mu` off the committed hitter panel. The panel must come from the same
+    train seasons as `pa_df`'s trailing window, or the debut prior is a level from a
+    different era."""
+    return eb_debut_mu(pd.read_csv(stats_csv))
 
 
 def predict(pa_df, eval_season, params=None, n_seasons=TRAILING_SEASONS, rho_override=None,

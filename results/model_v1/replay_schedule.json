@@ -1,0 +1,39 @@
+{
+  "step_budget": 16537,
+  "lr_cut_steps": [
+    6300,
+    8662,
+    11025,
+    13633
+  ],
+  "n_cuts_per_seed": [
+    5,
+    4,
+    4,
+    3,
+    7
+  ],
+  "total_steps_per_seed": [
+    17256,
+    15099,
+    15099,
+    16537,
+    17256
+  ],
+  "best_epoch_per_seed": [
+    23,
+    20,
+    20,
+    22,
+    23
+  ],
+  "steps_per_epoch": 719,
+  "arm": "embedding_sgd_sgd_lr1",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

@@ -38,6 +38,8 @@ import pandas as pd
 
 from src.analysis import baseline_ladder_bivariate_eb as eb
 from src.analysis import claim1_eval
+from src.analysis.baseline_ladder_bivariate_eb import (  # re-exported: they moved to the
+    eb_debut_mu, matching_debut_mu)                      # module whose predict() reads them
 from src.analysis.cold_start_prior_diagnostic import low_stratum_means
 from src.model import loader, query, query_tables as qt
 
@@ -65,30 +67,6 @@ def ensemble_cold_start_prior(models, stats):
     means = [low_stratum_means(model.embedding.weight.detach().numpy(), stats)
              for model in models]
     return {stand: np.mean([m[stand] for m in means], axis=0) for stand in ("L", "R")}
-
-
-def matching_debut_mu(stats):
-    """
-    Low-stratum, within-stand mean observed training wOBA (`woba_level`) -- the EB
-    counterpart of `ensemble_cold_start_prior`'s embedding-space match. Returns
-    {"L": value, "R": value, "S": value}; "S" is the combined-stand mean (see module
-    docstring).
-    """
-    low = stats[stats["stratum"] == "low"]
-    by_stand = low.groupby("stand")["woba_level"].mean().to_dict()
-    combined = float(low["woba_level"].mean())
-    return {"L": float(by_stand.get("L", combined)), "R": float(by_stand.get("R", combined)),
-            "S": combined}
-
-
-def eb_debut_mu(stats):
-    """
-    `debut_mu` for `baseline_ladder_bivariate_eb.predict`: batter_type -> (mu_L, mu_R),
-    both components the matched stand value (see module docstring).
-    """
-    matched = matching_debut_mu(stats)
-    return {batter_type: (matched[batter_type], matched[batter_type])
-            for batter_type in ("L", "R", "S")}
 
 
 def _cold_start_groups(eval_frame):

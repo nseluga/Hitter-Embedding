@@ -141,8 +141,18 @@ STAGES["embedding_sgd"] = [
     ("sgd_lr1", [*O1_BASE, "--embedding-optimizer", "sgd", "--embedding-lr", "1"]),
 ]
 
+# Phase V, item 3. The same arm with the decay taken off the EMBEDDING TABLE ONLY -- the
+# trunk keeps WEIGHT_DECAY, so the only thing that moves is the shrinkage on the table. The
+# SGD arm's exposure-vs-norm slope has two candidate causes, the optimizer and the decay,
+# and they cannot be told apart while both are on. One seed: like the lr screen, this asks
+# whether the effect exists, not how big it is.
+STAGES["embedding_sgd_nodecay"] = [
+    ("sgd_lr1_nodecay", [*O1_BASE, "--embedding-optimizer", "sgd", "--embedding-lr", "1",
+                         "--embedding-weight-decay", "0"]),
+]
+
 DEFAULT_SEEDS = {"screen": 2, "early": 5, "presplit": 5, "splithead": 5, "rebuild": 5,
-                 "selection": 2, "embedding_sgd": 5}
+                 "selection": 2, "embedding_sgd": 5, "embedding_sgd_nodecay": 1}
 
 
 # The ledger is keyed and read as text, so `1e-3` and `0.001` are two different values in a
@@ -164,7 +174,8 @@ def knobs(extra, default_data_dir):
 
     --embedding-optimizer and --embedding-lr are deliberately NOT recorded: LEDGER_FIELDS is
     fixed and adding a column shifts every existing row (see `append_ledger`). The
-    `embedding_sgd` config name carries the setting instead -- `sgd_lr1` is the rate."""
+    `embedding_sgd` config name carries the setting instead -- `sgd_lr1` is the rate, and
+    `sgd_lr1_nodecay` is the same rate with --embedding-weight-decay 0."""
     lr, warmup, data_dir = canonical_lr(LEARNING_RATE), "0", default_data_dir
     for flag, value in zip(extra, extra[1:]):
         if flag == "--lr":

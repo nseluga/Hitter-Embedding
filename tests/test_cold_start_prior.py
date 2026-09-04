@@ -10,8 +10,11 @@ directly, since it's the exact mechanism `baseline_ladder_bivariate_eb.predict`'
 `debut_mu` is built on.
 """
 
+import inspect
+
 import numpy as np
 import pandas as pd
+import pytest
 import torch
 
 from src.analysis.baseline_ladder_bivariate_eb import posterior_mean, sigma_matrix
@@ -195,3 +198,61 @@ if __name__ == "__main__":
     test_restore_runs_even_if_the_query_between_append_and_restore_raises()
     test_posterior_mean_per_row_mu_override_touches_only_that_row()
     print("cold_start_prior smoke checks passed (run pytest for the monkeypatched predict() tests)")
+
+
+# --- the prior is now the DEFAULT (2026-09-04) ----------------------------------------
+# Deliverable A shipped the prior behind a flag. It is now on unless asked off, so the
+# thing worth gating is the default itself: a query run that silently reverted to the raw
+# padding row would still produce a full, plausible, wrong set of cold-start numbers.
+
+def test_the_query_cli_turns_the_cold_start_prior_on_unless_asked_off():
+    defaults = query.build_parser().parse_args([])
+    assert defaults.no_cold_start_prior is False
+    assert defaults.hitter_stats == query.DEFAULT_HITTER_STATS
+    assert query.build_parser().parse_args(["--no-cold-start-prior"]).no_cold_start_prior
+
+
+def test_default_cold_start_prior_averages_the_seeds_in_their_own_spaces(tmp_path):
+    models = [build_model(seed) for seed in (0, 1)]
+    stats = pd.DataFrame({
+        "embedding_index": [1, 2, 3, 4],
+        "stand": ["L", "L", "R", "R"],
+        "stratum": ["low", "low", "low", "medium"],
+    })
+    stats_csv = tmp_path / "hitter_stats.csv"
+    stats.to_csv(stats_csv, index=False)
+
+    prior = query.default_cold_start_prior(models, stats_csv)
+    assert set(prior) == {"L", "R"}
+
+    per_seed = [low_stratum_means(m.embedding.weight.detach().numpy(), stats) for m in models]
+    for stand in ("L", "R"):
+        np.testing.assert_allclose(prior[stand],
+                                   np.mean([m[stand] for m in per_seed], axis=0))
+    # a seed's own space, not a pooled one: the two seeds disagree, so the average is
+    # not either of them
+    assert not np.allclose(prior["L"], per_seed[0]["L"])
+
+
+def test_the_eb_ladder_gets_a_debut_prior_by_default_so_the_comparison_stays_fair(tmp_path):
+    stats = pd.DataFrame({
+        "stand": ["L", "L", "R", "R"],
+        "stratum": ["low", "low", "low", "medium"],
+        "woba_level": [0.240, 0.260, 0.300, 0.400],
+    })
+    stats_csv = tmp_path / "hitter_stats.csv"
+    stats.to_csv(stats_csv, index=False)
+
+    from src.analysis import baseline_ladder_bivariate_eb as eb
+    from src.analysis import baseline_ladder_report as report
+
+    debut_mu = eb.debut_mu_from_stats(stats_csv)
+    assert debut_mu["L"] == (0.250, 0.250) and debut_mu["R"] == (0.300, 0.300)
+    # switch hitters take the pooled low mean over ROWS, not the mean of the two stand
+    # means -- the stands are unbalanced and the two differ
+    assert debut_mu["S"] == pytest.approx((0.2666666, 0.2666666), abs=1e-6)
+
+    assert "debut_mu" in inspect.signature(report.build_predictions).parameters
+    source = inspect.getsource(report.main)
+    assert "--no-debut-prior" in source and "debut_mu_from_stats" in source, \
+        "the ladder report must build the debut prior unless --no-debut-prior is passed"

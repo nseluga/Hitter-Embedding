@@ -43,7 +43,7 @@ import mlflow
 import torch
 
 from src.analysis import claim1_eval as evaluation
-from src.config.splits import load_splits, season_split_map
+from src.config.splits import DEFAULT_SPLIT_CONFIG, load_splits, season_split_map
 from src.model import loader
 from src.model.v1 import (DEFAULT_EMBEDDING_DIM, HitterEmbeddingV1, LOSS_RULES,
                           WEIGHTINGS, factor_masks, factorized_loss, weight_decay_groups)
@@ -203,14 +203,27 @@ def build_optimizer(model, args):
     lr*wd*w, which is exactly what AdamW's decoupled decay subtracts, so WEIGHT_DECAY means
     the same thing on both sides.
     """
+    embedding_decay = embedding_weight_decay(args)
     if args.embedding_optimizer == "adamw":
+        assert embedding_decay == WEIGHT_DECAY, \
+            "--embedding-weight-decay needs --embedding-optimizer sgd: on the single-AdamW " \
+            "path the table shares the trunk's param group and has no decay of its own"
         return torch.optim.AdamW(weight_decay_groups(model, WEIGHT_DECAY), lr=args.lr)
     trunk = torch.optim.AdamW(
         weight_decay_groups(model, WEIGHT_DECAY, exclude=(model.embedding.weight,)),
         lr=args.lr)
     embedding = torch.optim.SGD([model.embedding.weight], lr=args.embedding_lr,
-                                weight_decay=WEIGHT_DECAY)
+                                weight_decay=embedding_decay)
     return Optimizers(trunk, embedding)
+
+
+def embedding_weight_decay(args):
+    """`--embedding-weight-decay`, defaulting to the trunk's WEIGHT_DECAY. Setting it to 0
+    is the Phase V no-decay ablation: it asks whether the exposure-vs-norm slope the SGD arm
+    produces comes from the optimizer or from the shrinkage, and those two cannot be told
+    apart while both move together."""
+    decay = getattr(args, "embedding_weight_decay", None)
+    return WEIGHT_DECAY if decay is None else float(decay)
 
 
 def warmup_for(optimizer, args, n_train_rows):
@@ -234,12 +247,14 @@ def warmup_for(optimizer, args, n_train_rows):
 
 
 def run_epoch(model, tensors, indices, optimizer, generator, args, on_step=None,
-              objective=None, warmup=None):
+              objective=None, warmup=None, max_steps=None):
     """
     One pass over `indices`. Returns (loss per scored row, steps, seconds).
     optimizer=None evaluates instead of training: no grad, no dropout, fixed order.
     objective overrides the arm's own loss settings, which is how the canonical
     yardstick is measured on an arm that trains against something else.
+    max_steps stops the pass early -- only the fixed-budget path uses it, to end on the
+    budgeted step rather than on an epoch boundary.
     """
     objective = objective or {"rule": args.loss_rule, "weighting": args.loss_weighting,
                               "contact_pos_weight": args.contact_pos_weight}
@@ -264,6 +279,8 @@ def run_epoch(model, tensors, indices, optimizer, generator, args, on_step=None,
             total, rows, steps = total + loss.item(), rows + batch_rows, steps + 1
             if on_step is not None:
                 on_step(steps, loss.item() / max(batch_rows, 1))
+            if max_steps is not None and steps >= max_steps:
+                break
 
     denominator = steps if objective["weighting"] == "mean" else rows
     return total / max(denominator, 1), steps, time.time() - started
@@ -292,11 +309,100 @@ def benchmark(model, tensors, indices, optimizer, generator, args):
     return row, path
 
 
+class ReplaySchedule:
+    """
+    A finished run's plateau cuts, replayed by optimizer-step count.
+
+    The final refit has no validation season, so ReduceLROnPlateau has nothing to read and
+    early stopping has nothing to stop on. Both are replaced by this: the step budget and the
+    cut points are properties of the runs being reproduced, recovered from their logs by
+    `src/model/replay_schedule.py`. Multiplying every param group by PLATEAU_FACTOR is
+    exactly what stepping one ReduceLROnPlateau per real optimizer does, since both
+    optimizers are always cut on the same signal.
+
+    Steps, not epochs (2026-09-04 decision log): warmup and the coupled-L2 decay are both
+    per step, so matching epoch counts on a training set that grew by a season would apply
+    ~11% more shrinkage than the run being reproduced.
+    """
+
+    def __init__(self, optimizer, cut_steps):
+        self.optimizer = optimizer
+        self.cuts = sorted(int(step) for step in cut_steps)
+        self.fired = 0
+
+    def step(self, taken):
+        """Call AFTER optimizer.step(), with the total number of steps taken so far."""
+        while self.fired < len(self.cuts) and taken >= self.cuts[self.fired]:
+            self.fired += 1
+            for group in self.optimizer.param_groups:
+                group["lr"] *= PLATEAU_FACTOR
+
+
+def fit_to_budget(model, tensors, indices, optimizer, generator, args):
+    """
+    Train exactly `--step-budget` optimizer steps with `--lr-cut-steps` replayed on the way.
+    Same return shape as `fit`; `best` is nan because nothing was selected -- the whole point
+    of the budget is that the stopping point was chosen on the frozen split and is being
+    reproduced, not re-chosen here.
+
+    The epoch loop, the batch order and the RNG draws are the normal path's, untouched, so a
+    budgeted run and a normal one at the same seed are bit-identical for as long as no cut has
+    fired. That equivalence is the test (tests/test_model_train_refit.py).
+    """
+    warmup = warmup_for(optimizer, args, len(indices["train"]))
+    embedding = embedding_group(optimizer)
+    schedule = ReplaySchedule(optimizer, args.lr_cut_steps)
+    print(f"budget: {args.step_budget} optimizer steps; lr cuts replayed at {schedule.cuts}",
+          flush=True)
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    checkpoint = CHECKPOINT_DIR / f"{run_name(args)}.pt"
+
+    taken, epoch, train_loss = 0, 0, float("nan")
+    while taken < args.step_budget:
+        def log_step(step, loss_per_row, taken=taken, epoch=epoch):
+            schedule.step(taken + step)
+            mlflow.log_metric("train_loss_per_row", loss_per_row, step=epoch * 10_000 + step)
+
+        train_loss, steps, seconds = run_epoch(
+            model, tensors, indices["train"], optimizer, generator, args, on_step=log_step,
+            warmup=warmup, max_steps=args.step_budget - taken)
+        assert steps > 0, "an epoch produced no optimizer steps; the budget cannot be reached"
+        taken += steps
+        metrics = {"train_loss_epoch": train_loss, "lr": optimizer.param_groups[0]["lr"],
+                   "epoch_seconds": seconds, "steps_taken": taken}
+        if embedding is not None:
+            metrics["embedding_lr"] = embedding["lr"]
+        mlflow.log_metrics(metrics, step=epoch)
+        embedding_note = "" if embedding is None else f"  emb_lr {embedding['lr']:.2e}"
+        print(f"epoch {epoch:>3d}  train {train_loss:.5f}  "
+              f"lr {optimizer.param_groups[0]['lr']:.2e}{embedding_note}  "
+              f"{seconds:.0f}s ({steps} steps, {taken}/{args.step_budget})", flush=True)
+        epoch += 1
+
+    assert taken == args.step_budget, f"took {taken} steps against a budget of {args.step_budget}"
+    assert schedule.fired == len(schedule.cuts), (
+        f"only {schedule.fired} of {len(schedule.cuts)} lr cuts fired inside the budget; "
+        f"the cut steps do not belong to this budget")
+    torch.save({"model": model.state_dict(), "epoch": epoch - 1, "steps": taken,
+                "val_loss": float("nan"), "args": vars(args)}, checkpoint)
+
+    # under a final-run split there is no eval split to score and `reference` stays nan.
+    # On the frozen split it is scored ONCE, at the end: validation is off as a control
+    # signal, which is not the same as unreported -- the replay check reads this number.
+    reference = float("nan") if args.eval_split is None else run_epoch(
+        model, tensors, indices[args.eval_split], None, None, args, objective=CANONICAL)[0]
+    mlflow.log_metrics({"budget_steps": taken, "budget_epochs": epoch,
+                        "val_reference_final": reference})
+    return float("nan"), epoch - 1, reference, checkpoint
+
+
 def fit(model, tensors, indices, optimizer, generator, args):
     """
     Train to the plateau schedule and early stopping of §5, both on validation loss.
     Returns (best validation loss per row, best epoch, checkpoint path).
     """
+    if getattr(args, "step_budget", 0):
+        return fit_to_budget(model, tensors, indices, optimizer, generator, args)
     # One scheduler per REAL optimizer, all stepped on the same validation loss: torch's
     # ReduceLROnPlateau rejects anything that is not an Optimizer, so the handle cannot be
     # passed here. On the default path this is the one scheduler it always was.
@@ -388,7 +494,9 @@ def contact_pos_weight(tensors, train_index):
 
 def run(args):
     tensors, manifest = loader.load_tensors(args.data_dir)
-    indices = loader.split_indices(tensors["season"])
+    indices = loader.split_indices(tensors["season"],
+                                   load_splits(getattr(args, "split_config", None)
+                                               or DEFAULT_SPLIT_CONFIG))
     args.contact_pos_weight = (contact_pos_weight(tensors, indices["train"]).to(args.device)
                                if args.contact_inverse_frequency else None)
     torch.manual_seed(args.seed)
@@ -414,7 +522,12 @@ def run(args):
             "warmup_steps": args.warmup_steps,
             "embedding_optimizer": args.embedding_optimizer,
             "embedding_lr": args.embedding_lr,
-            "weight_decay": WEIGHT_DECAY, "loss_rule": args.loss_rule,
+            "weight_decay": WEIGHT_DECAY,
+            "embedding_weight_decay": embedding_weight_decay(args),
+            "split_config": str(getattr(args, "split_config", None) or DEFAULT_SPLIT_CONFIG),
+            "step_budget": getattr(args, "step_budget", 0),
+            "lr_cut_steps": list(getattr(args, "lr_cut_steps", []) or []),
+            "loss_rule": args.loss_rule,
             "bilinear": args.bilinear, "loss_weighting": args.loss_weighting,
             "contact_inverse_frequency": args.contact_inverse_frequency,
             "contact_pos_weight": (float(args.contact_pos_weight)
@@ -485,19 +598,47 @@ def main():
     # this flag is the deliberate act of doing so, never a convenience
     parser.add_argument("--final-run", action="store_true",
                         help="permit scoring the frozen TEST season")
+    parser.add_argument("--split-config", default=None,
+                        help="split config to train against; defaults to the FROZEN split. "
+                             "src/config/split_config_final_run.json is the refit's, and needs "
+                             "--step-budget because it has no validation season")
+    parser.add_argument("--step-budget", type=int, default=0,
+                        help="train exactly this many optimizer steps with early stopping and "
+                             "ReduceLROnPlateau off; 0 is the normal validated path")
+    parser.add_argument("--lr-cut-steps", type=int, nargs="*", default=[],
+                        help="replay the plateau cuts at these step counts under --step-budget. "
+                             "src/model/replay_schedule.py derives both from the runs being "
+                             "reproduced")
+    parser.add_argument("--embedding-weight-decay", type=float, default=None,
+                        help="Phase V ablation knob: weight decay on the embedding table only. "
+                             "Defaults to the trunk's; 0 is the no-decay arm")
     args = parser.parse_args()
 
     # never score against the frozen test season outside a final run. the season is
     # an explicit argument and the split is derived FROM it, not from --final-run:
     # deriving it the other way would make this guard a tautology it can never fail.
-    config = load_splits()
-    args.eval_season = args.eval_season or config["split"]["val"][0]
-    evaluation.assert_not_test_season(args.eval_season, final_run=args.final_run)
-    args.eval_split = season_split_map(config)[args.eval_season]
+    config = load_splits(args.split_config or DEFAULT_SPLIT_CONFIG)
     args.canonical = (args.loss_rule == "log" and args.loss_weighting == "sum"
                       and not args.contact_inverse_frequency)
-    assert args.eval_split != "train", \
-        f"season {args.eval_season} is a training season; validation would be in-sample"
+    if config["split"]["val"]:
+        args.eval_season = args.eval_season or config["split"]["val"][0]
+        evaluation.assert_not_test_season(args.eval_season, final_run=args.final_run)
+        args.eval_split = season_split_map(config)[args.eval_season]
+        assert args.eval_split != "train", \
+            f"season {args.eval_season} is a training season; validation would be in-sample"
+    else:
+        # the final-run split. Nothing is scored inside training at all -- not the absorbed
+        # validation season (in-sample now) and certainly not the sealed test season.
+        assert config.get("final_run"), "a split with no validation season must set final_run"
+        assert args.step_budget > 0, \
+            "a final_run split has no validation loss to stop on; pass --step-budget"
+        assert args.eval_season is None, \
+            "a final_run split scores nothing inside training; drop --eval-season"
+        args.eval_split = None
+    if args.lr_cut_steps:
+        assert args.step_budget > 0, "--lr-cut-steps needs --step-budget"
+        assert max(args.lr_cut_steps) < args.step_budget, \
+            "an lr cut at or past the budget never fires"
 
     run(args)
 

@@ -884,7 +884,7 @@ def default_cold_start_prior(models, stats_csv=DEFAULT_HITTER_STATS):
     return ensemble_cold_start_prior(models, stats)
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(description="Phase D.5 — compose conditionals to wOBA.")
     parser.add_argument("--arm", default=DEFAULT_ARM, help="checkpoint stem, seeds appended")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
@@ -924,7 +924,11 @@ def main():
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
 
     claim1_eval.assert_not_test_season(args.eval_season, final_run=args.final_run)
 
@@ -1016,9 +1020,9 @@ def main():
         json.dumps({**diagnostics, "composition": composition,
                     "composition_per_seed": per_seed, "composition_spread": spread,
                     "fidelity": fidelity, "reference": reference,
-                    "arm": args.arm,
-                        "cold_start_prior_stats": (
-                            None if cold_start_prior is None else args.hitter_stats), "seeds": args.seeds,
+                    "arm": args.arm, "seeds": args.seeds,
+                    "cold_start_prior_stats": (
+                        None if cold_start_prior is None else args.hitter_stats),
                     "eval_season": args.eval_season}, indent=2))
 
     print(f"arm: {args.arm} seeds: {args.seeds}")

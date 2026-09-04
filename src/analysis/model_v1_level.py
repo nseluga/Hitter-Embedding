@@ -148,7 +148,12 @@ def gradient_a(eval_frame, pa_df, eval_season, n_boot=2000, seed=0):
     and vs RHP) driven by the same talent, health and home park, so resampling rows would
     count them as independent and understate every interval.
     """
-    proxy = baseline_ladder_bivariate_eb.predict(pa_df, eval_season)[claim1_eval.KEY + ["pred_woba"]]
+    # the debut prior matters here specifically: prior_pa == 0 is the left end of the very
+    # regression this function fits, and it is where the model now carries a cold-start prior
+    proxy = baseline_ladder_bivariate_eb.predict(
+        pa_df, eval_season,
+        debut_mu=baseline_ladder_bivariate_eb.debut_mu_from_stats(),
+    )[claim1_eval.KEY + ["pred_woba"]]
     frame = eval_frame.merge(proxy.rename(columns={"pred_woba": "eb_prior"}),
                              on=claim1_eval.KEY, how="inner")
     assert len(frame) > 0, "no rows survived the join to the C.2 posterior"

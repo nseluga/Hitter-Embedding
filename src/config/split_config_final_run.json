@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "final_run": true,
+  "created_on": "2026-09-04",
+  "rule_reference": "docs/decision-log.md 2026-09-04 (refit design); Layer1_Architecture_Plan_v2.md §2.2",
+  "description": "Final refit ONLY. The frozen walk-forward chose the architecture and the stopping point on 2024; this config spends 2024 as training data and reproduces that stopping point with a fixed step budget instead (train.py --step-budget / --lr-cut-steps). 2025 remains the held-out test season and is never scored inside training. The frozen config (split_config.json) is unchanged and stays the reference for every model-selection decision.",
+  "seasons": [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+  "split": {
+    "train": [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024],
+    "val": [],
+    "test": [2025]
+  }
+}

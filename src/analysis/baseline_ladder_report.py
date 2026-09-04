@@ -104,12 +104,18 @@ def fit_and_describe(pa_df, eval_season, seed):
     return params, pd.DataFrame(rows), rho_ci
 
 
-def build_predictions(pa_df, eval_season, params, process_seasons, seed=0):
+def build_predictions(pa_df, eval_season, params, process_seasons, seed=0,
+                     debut_mu=None):
     """Every Phase C baseline, plus the two reference rows, on one eval frame."""
     predictions = {
-        "eb_bivariate": eb.predict(pa_df, eval_season, params=params),
+        # `debut_mu` (on by default since 2026-09-04) is the EB counterpart of the model's
+        # cold-start prior: without it the ladder scores zero-prior-PA hitters at the global
+        # mu while the model scores them at a low-stratum prior, and the model's cold-start
+        # margin is then an artifact of which side got a prior. The book-rho row takes it too,
+        # so that row keeps isolating rho and nothing else.
+        "eb_bivariate": eb.predict(pa_df, eval_season, params=params, debut_mu=debut_mu),
         "eb_book_rho_reference": eb.predict(pa_df, eval_season, params=params,
-                                            rho_override=BOOK_IMPLIED_RHO),
+                                            rho_override=BOOK_IMPLIED_RHO, debut_mu=debut_mu),
         "trailing_raw": trailing.predict(pa_df, eval_season, variant="raw"),
         "trailing_bucketed": trailing.predict(pa_df, eval_season, variant="bucketed"),
         # C.1-xwOBA (D5-R8): the same projection machinery reading Statcast's OWN xwOBA field
@@ -347,6 +353,10 @@ def main():
     parser.add_argument("--eval-season", type=int, default=DEFAULT_EVAL_SEASON)
     parser.add_argument("--out-dir", default=str(OUT_DIR))
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--no-debut-prior", action="store_true",
+                        help="score zero-prior-PA hitters at the global mu, reproducing the "
+                             "pre-2026-09-04 ladder")
+    parser.add_argument("--hitter-stats", default=eb.DEFAULT_HITTER_STATS)
     # the frozen test season is scored ONCE, for the final reported result;
     # this flag is the deliberate act of doing so, never a convenience
     parser.add_argument("--final-run", action="store_true",
@@ -371,8 +381,11 @@ def main():
 
     process_seasons = gbm.season_process(
         pd.read_parquet(args.pitch_events, columns=PITCH_COLUMNS))
+    debut_mu = None if args.no_debut_prior else eb.debut_mu_from_stats(args.hitter_stats)
+    print(f"EB debut prior: {'off' if debut_mu is None else args.hitter_stats}")
     predictions, gbm_models = build_predictions(pa_df, args.eval_season, params,
-                                               process_seasons, seed=args.seed)
+                                               process_seasons, seed=args.seed,
+                                               debut_mu=debut_mu)
     for feature_set, (_, n_rounds) in gbm_models.items():
         print(f"C.3 [{feature_set}]: {n_rounds} boosting rounds "
               f"(early-stopped on target season {args.eval_season - 1})")

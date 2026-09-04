@@ -33,8 +33,7 @@ import pyarrow.parquet as pq
 from src.analysis.claim1_eval import assign_stratum, prior_exposure
 from src.data.eval_targets import aggregate, drop_pitcher_batters
 
-TRAIN_SEASONS = (2015, 2023)
-EVAL_SEASON_FOR_PRIOR = TRAIN_SEASONS[1] + 1  # 2024: prior_exposure sums seasons < this
+TRAIN_SEASONS = (2015, 2023)  # the phase_d5 default; --manifest overrides it
 
 # Shared across every Phase V script that names the five anchor hitters (anchor swapped
 # Duvall -> Bohm 2026-09-02, see decision log). Short names derive from the full name's
@@ -60,15 +59,15 @@ PITCH_COLUMNS = ["batter", "stand", "season", "swing", "contact", "zone", "ev", 
                   "spray", "bat_speed"]
 
 
-def load_pitch_frame(path=PITCH_PARQUET):
+def load_pitch_frame(path=PITCH_PARQUET, train_seasons=TRAIN_SEASONS):
     """
     Read only the columns this module needs (pyarrow column projection) and restrict
-    to training seasons 2015-2023. Asserts no other season survives the filter.
+    to the build's training seasons. Asserts no other season survives the filter.
     """
     df = pq.read_table(path, columns=PITCH_COLUMNS).to_pandas()
-    df = df[df["season"].between(*TRAIN_SEASONS)]
-    assert set(df["season"].unique()) <= set(range(TRAIN_SEASONS[0], TRAIN_SEASONS[1] + 1)), \
-        "a season outside 2015-2023 survived the filter"
+    df = df[df["season"].between(*train_seasons)]
+    assert set(df["season"].unique()) <= set(range(train_seasons[0], train_seasons[1] + 1)), \
+        f"a season outside {train_seasons} survived the filter"
     return df
 
 
@@ -105,20 +104,20 @@ def per_batter_pitch_stats(df):
     return stats.reset_index()
 
 
-def per_batter_exposure_and_platoon(pa_df):
+def per_batter_exposure_and_platoon(pa_df, train_seasons=TRAIN_SEASONS):
     """
-    Training-season (2015-2023) wOBA level, side-specific exposure, and the
-    observed platoon differential per batter, from eval_targets_pa.
+    Training-season wOBA level, side-specific exposure, and the observed platoon
+    differential per batter, from eval_targets_pa.
     pa_df: the raw PA-level eval-target table (any seasons); filtered internally.
     """
     pa_df = drop_pitcher_batters(pa_df)
-    train_pa = pa_df[pa_df["season"].between(*TRAIN_SEASONS)]
-    assert set(train_pa["season"].unique()) <= set(range(TRAIN_SEASONS[0], TRAIN_SEASONS[1] + 1))
+    train_pa = pa_df[pa_df["season"].between(*train_seasons)]
+    assert set(train_pa["season"].unique()) <= set(range(train_seasons[0], train_seasons[1] + 1))
 
     level = aggregate(train_pa, by=("batter",))[["batter", "woba"]] \
         .rename(columns={"woba": "woba_level"})
 
-    prior = prior_exposure(pa_df, eval_season=EVAL_SEASON_FOR_PRIOR)
+    prior = prior_exposure(pa_df, eval_season=train_seasons[1] + 1)
     prior_wide = (prior.pivot(index="batter", columns="p_throws", values="prior_pa")
                   .reindex(columns=["L", "R"]).fillna(0.0))
     prior_wide.columns = ["prior_pa_L", "prior_pa_R"]
@@ -153,11 +152,10 @@ def df_majority_stand(pa_df, train_pa):
 
 def load_vocabulary(path=MANIFEST_PATH):
     """
-    Batter -> embedding_index for every hitter in the frozen phase_d5 vocabulary
-    (the join spine: every vocabulary hitter gets a row, even with all-NaN stats).
+    Batter -> embedding_index for every hitter in the build's vocabulary (the join spine:
+    every vocabulary hitter gets a row, even with all-NaN stats).
     """
-    manifest = json.loads(Path(path).read_text())
-    vocab = manifest["vocabulary"]
+    vocab = json.loads(Path(path).read_text())["vocabulary"]
     return pd.DataFrame({"batter": [int(batter) for batter in vocab],
                           "embedding_index": list(vocab.values())})
 
@@ -165,14 +163,22 @@ def load_vocabulary(path=MANIFEST_PATH):
 def build_hitter_stats(pitch_path=PITCH_PARQUET, eval_targets_path=EVAL_TARGETS_PARQUET,
                         manifest_path=MANIFEST_PATH):
     """
-    Assemble the full per-hitter observable-stat panel, joined onto the phase_d5
-    vocabulary. Returns one row per vocabulary hitter (NaN stats if unobserved).
+    Assemble the full per-hitter observable-stat panel, joined onto the build's vocabulary.
+    Returns one row per vocabulary hitter (NaN stats if unobserved).
+
+    The training seasons come from the MANIFEST rather than from a constant: this panel is
+    the cold-start prior's population (`cold_start_prior_eval.ensemble_cold_start_prior`,
+    `baseline_ladder_bivariate_eb.debut_mu_from_stats`), so a panel whose seasons disagreed
+    with the build's would define the low stratum on one era and apply it to another. The
+    refit build trains through 2024 and needs its own panel for exactly that reason.
     """
-    pitch_df = load_pitch_frame(pitch_path)
+    train_seasons = json.loads(Path(manifest_path).read_text())["train_seasons"]
+    train_seasons = (min(train_seasons), max(train_seasons))
+    pitch_df = load_pitch_frame(pitch_path, train_seasons)
     pitch_stats = per_batter_pitch_stats(pitch_df)
 
     pa_df = pd.read_parquet(eval_targets_path)
-    platoon_stats = per_batter_exposure_and_platoon(pa_df)
+    platoon_stats = per_batter_exposure_and_platoon(pa_df, train_seasons)
 
     vocab = load_vocabulary(manifest_path)
     out = vocab.merge(pitch_stats, on="batter", how="left").merge(platoon_stats, on="batter", how="left")
@@ -183,12 +189,15 @@ def build_hitter_stats(pitch_path=PITCH_PARQUET, eval_targets_path=EVAL_TARGETS_
 def main():
     parser = argparse.ArgumentParser(description="Phase V per-hitter observable-stat panel.")
     parser.add_argument("--out-dir", default="results/model_visualization")
+    parser.add_argument("--manifest", default=MANIFEST_PATH,
+                        help="the build this panel describes; its train_seasons drive every "
+                             "season filter here")
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    stats = build_hitter_stats()
+    stats = build_hitter_stats(manifest_path=args.manifest)
     out_path = out_dir / "hitter_stats.csv"
     stats.to_csv(out_path, index=False)
     print(f"rows written: {len(stats)}")

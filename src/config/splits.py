@@ -25,6 +25,13 @@ def validate_split_config(config):
     Assert the split is a well-formed contiguous walk-forward:
     the three sets partition `seasons` with no overlap, train is a contiguous
     block, and val/test are exactly the next two seasons after train.
+
+    A config with `final_run: true` is the one exception (2026-09-04 decision log): the
+    final refit absorbs the validation season into train and keeps the SAME held-out test
+    season, so `val` is empty and test is one season after train rather than two. It buys
+    that by giving up early stopping, which is why such a config is only usable with a fixed
+    step budget (`train.py --step-budget`). It cannot move the test season: a config that
+    tests on anything but the frozen test season is rejected here, not downstream.
     """
     train, val, test = config["split"]["train"], config["split"]["val"], config["split"]["test"]
     assigned = train + val + test
@@ -32,8 +39,16 @@ def validate_split_config(config):
     assert len(assigned) == len(set(assigned)), "a season appears in more than one split"
     assert set(assigned) == set(config["seasons"]), "split does not partition the configured seasons"
     assert train == list(range(min(train), max(train) + 1)), "train seasons must be contiguous"
-    assert val == [max(train) + 1], f"val must be the single season after train, got {val}"
-    assert test == [max(train) + 2], f"test must be two seasons after train, got {test}"
+    if config.get("final_run"):
+        assert val == [], f"a final_run split has no validation season, got {val}"
+        assert test == [max(train) + 1], f"test must be the season after train, got {test}"
+        assert not config.get("frozen"), "the frozen split is not a final_run split"
+        frozen_test = json.loads(DEFAULT_SPLIT_CONFIG.read_text())["split"]["test"]
+        assert test == frozen_test, (
+            f"a final_run split must keep the frozen test season {frozen_test}, got {test}")
+    else:
+        assert val == [max(train) + 1], f"val must be the single season after train, got {val}"
+        assert test == [max(train) + 2], f"test must be two seasons after train, got {test}"
 
 
 def validate_against_data(df, config=None):
