@@ -58,6 +58,7 @@ DEFAULT_DATA_DIR = "data/processed/phase_d"
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
 DEFAULT_OUT_DIR = "results/model_v1"
 DEFAULT_ARM = "presplit_baseline"
+DEFAULT_HITTER_STATS = "results/model_visualization/hitter_stats.csv"
 
 # pre-registered knobs (spec §9). Set by benchmark, then frozen; never by their effect on
 # the claim-1 metric, because claim-1 is produced BY this module.
@@ -869,6 +870,20 @@ def league_composition(models, tensors, manifest, frame, tables, shares, eval_se
             "cells": cells}
 
 
+def default_cold_start_prior(models, stats_csv=DEFAULT_HITTER_STATS):
+    """
+    The cold-start prior every composition run now uses by default (2026-09-04 decision
+    log). Row 0 is `padding_idx` and its embedding is whatever the initialiser left there,
+    so an unseen hitter used to be scored by a vector that means nothing; substituting the
+    per-stand low-stratum mean makes the default a real prior instead of an accident.
+
+    Imported lazily: `cold_start_prior_eval` imports this module at module level.
+    """
+    from src.analysis.cold_start_prior_eval import ensemble_cold_start_prior
+    stats = pd.read_csv(stats_csv)
+    return ensemble_cold_start_prior(models, stats)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Phase D.5 — compose conditionals to wOBA.")
     parser.add_argument("--arm", default=DEFAULT_ARM, help="checkpoint stem, seeds appended")
@@ -896,6 +911,12 @@ def main():
                              "perturb-and-re-solve diagnostics, where a full pass costs hours "
                              "for a delta at ~50 hitters. Suppresses the league fidelity check "
                              "and both probes, which are not defined on a subset")
+    parser.add_argument("--no-cold-start-prior", action="store_true",
+                        help="score unseen hitters with the raw padding row, the pre-2026-09-04 "
+                             "default. The prior is ON otherwise")
+    parser.add_argument("--hitter-stats", default=DEFAULT_HITTER_STATS,
+                        help="low-stratum population the cold-start prior is averaged over; "
+                             "must come from the SAME tensor build as --data-dir")
     parser.add_argument("--label", default=None,
                         help="output stem; defaults to the arm name")
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
@@ -922,6 +943,10 @@ def main():
     paths = [Path(args.checkpoint_dir) / f"{args.arm}_s{seed}.pt" for seed in args.seeds]
     models = load_ensemble(paths, manifest, tensors["context"].shape[1])
 
+    cold_start_prior = None if args.no_cold_start_prior else default_cold_start_prior(
+        models, args.hitter_stats)
+    _progress(f"cold-start prior: {'off' if cold_start_prior is None else args.hitter_stats}")
+
     shares = handedness_shares(pa_df, manifest["train_seasons"])
     observed, n_observed = observed_absorbing_rates(pa_df, manifest["train_seasons"])
     observed_eval, n_observed_eval = observed_absorbing_rates(pa_df, [args.eval_season])
@@ -942,7 +967,8 @@ def main():
                                        n_pitches=args.n_pitches, seed=args.seed,
                                        use_league_split=args.league_split,
                                        unmeasured_split=not args.no_unmeasured_split,
-                                       batters=args.batters)
+                                       batters=args.batters,
+                                       cold_start_prior=cold_start_prior)
     # the CSV lands before the probe runs, for the same reason
     predictions.to_csv(out_dir / f"model_v1_predictions_{label}.csv", index=False)
     _progress(f"wrote {out_dir / f'model_v1_predictions_{label}.csv'}")
@@ -953,6 +979,8 @@ def main():
         # as a league number six weeks later
         (out_dir / f"model_v1_diagnostics_{label}.json").write_text(
             json.dumps({**diagnostics, "reference": reference, "arm": args.arm,
+                        "cold_start_prior_stats": (
+                            None if cold_start_prior is None else args.hitter_stats),
                         "seeds": args.seeds, "eval_season": args.eval_season}, indent=2))
         _progress(f"batter subset ({len(args.batters)} ids): fidelity and both probes skipped, "
                   f"they are not defined on a subset")
@@ -988,7 +1016,9 @@ def main():
         json.dumps({**diagnostics, "composition": composition,
                     "composition_per_seed": per_seed, "composition_spread": spread,
                     "fidelity": fidelity, "reference": reference,
-                    "arm": args.arm, "seeds": args.seeds,
+                    "arm": args.arm,
+                        "cold_start_prior_stats": (
+                            None if cold_start_prior is None else args.hitter_stats), "seeds": args.seeds,
                     "eval_season": args.eval_season}, indent=2))
 
     print(f"arm: {args.arm} seeds: {args.seeds}")
