@@ -101,7 +101,7 @@ def main():
         description="Phase E.10 — structural bias of the independent-pitch count chain.")
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
-    parser.add_argument("--data-dir", default="data/processed/phase_d")
+    parser.add_argument("--data-dir", default="data/processed/phase_d5")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--out-dir", default="results/model_evaluation")

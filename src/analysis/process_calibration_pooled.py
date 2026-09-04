@@ -76,14 +76,14 @@ def pool_predictions(predictions, weights, eval_season):
 def main():
     parser = argparse.ArgumentParser(
         description="Phase F.5 -- claim-1 metric with handedness pooled away.")
-    parser.add_argument("--arm", default="rebuild_baseline")
+    parser.add_argument("--arm", default="embedding_sgd_sgd_lr1")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
     parser.add_argument("--data-dir", default=provenance.CANONICAL_DATA_DIR)
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--model-predictions",
-                        default="results/model_v1/model_v1_predictions_rebuild_baseline.csv")
+                        default="results/model_v1/model_v1_predictions_embedding_sgd_sgd_lr1.csv")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     args = parser.parse_args()
 

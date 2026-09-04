@@ -62,3 +62,22 @@ def test_wilson_interval_stays_in_the_unit_interval():
     assert low == 0.0 and 0.0 < high < 1.0
     low, high = coverage.wilson_interval(10, 20)
     assert low < 0.5 < high
+
+
+def test_eb_posterior_split_resolves_the_renamed_c2_module():
+    # regression: Pass B renamed eb_bivariate_eb -> baseline_ladder_bivariate_eb and
+    # the probe's call sites raised NameError until they were updated
+    from tests.test_baseline_ladder_bivariate_eb import (
+        REAL_MU, REAL_PA, REAL_SIGMA2, REAL_TAU2, synthetic_pa_table)
+    pa_df, _ = synthetic_pa_table(60, REAL_MU, REAL_TAU2, 0.85, REAL_SIGMA2, REAL_PA, seed=3)
+    eval_rows = pa_df[pa_df["season"] == 2023].copy()
+    eval_rows["season"] = 2024
+    pa_df = pd.concat([pa_df, eval_rows], ignore_index=True)
+
+    split = coverage.eb_posterior_split(pa_df, 2024)
+    assert list(split.columns) == ["batter", "true_split"]
+    assert len(split) > 0 and not split["batter"].duplicated().any()
+    assert np.isfinite(split["true_split"]).all()
+
+    stands = coverage.batter_stands(pa_df, 2024)
+    assert set(stands["batter_type"]) == {"R"}

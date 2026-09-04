@@ -155,7 +155,7 @@ def summarize(name, model_ll, cold_ll, reference_ll, mask):
 def main():
     parser = argparse.ArgumentParser(
         description="Phase F.4 -- pitch-level process scoring against no-identity references.")
-    parser.add_argument("--arm", default="rebuild_baseline")
+    parser.add_argument("--arm", default="embedding_sgd_sgd_lr1")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")

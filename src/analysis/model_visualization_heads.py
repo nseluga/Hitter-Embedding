@@ -13,7 +13,7 @@ conditions at inference); spray is a pull-tendency scalar (see `PULL_SCALAR_NOTE
 marginals are mapped onto the PCA embedding coordinates and correlated (raw and
 partialled on log prior PA) against the observable-stat panel in `hitter_stats.csv`.
 
-V.4 reads the committed 2024 ensemble query (`model_v1_predictions_rebuild_baseline.csv`),
+V.4 reads the committed 2024 ensemble query (`model_v1_predictions_embedding_sgd_sgd_lr1.csv`),
 averages each hitter's predicted wOBA over the sides they were queried on into one
 "level query" number, and checks it against training wOBA level by exposure stratum.
 Nothing here trains, scores a new season, or changes the model, scorer, or loss --
@@ -47,7 +47,7 @@ MANIFEST_PATH = "data/processed/phase_d5/manifest.json"
 NAMES_PATH = "data/processed/hitter_names.csv"
 HITTER_STATS_PATH = "results/model_visualization/hitter_stats.csv"
 EMBEDDING_COORDS_PATH = "results/model_visualization/embedding_coords.csv"
-LEVEL_QUERY_PREDICTIONS_PATH = "results/model_v1/model_v1_predictions_rebuild_baseline.csv"
+LEVEL_QUERY_PREDICTIONS_PATH = "results/model_v1/model_v1_predictions_embedding_sgd_sgd_lr1.csv"
 
 N_REFERENCE_PITCHES = 2000
 REFERENCE_SEED = 0

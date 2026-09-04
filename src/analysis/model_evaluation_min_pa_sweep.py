@@ -91,8 +91,8 @@ def sweep(pa_df, predictions, eval_season, label, seed=0,
 def main():
     parser = argparse.ArgumentParser(description="E.11b — MIN_EVAL_PA sweep on the D/E headline.")
     parser.add_argument("--predictions",
-                        default="results/model_v1/model_v1_predictions_rebuild_baseline.csv")
-    parser.add_argument("--label", default="min_pa_sweep_rebuild_baseline")
+                        default="results/model_v1/model_v1_predictions_embedding_sgd_sgd_lr1.csv")
+    parser.add_argument("--label", default="min_pa_sweep_embedding_sgd_sgd_lr1")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-season", type=int, default=2024)

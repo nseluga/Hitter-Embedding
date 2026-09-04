@@ -28,7 +28,7 @@ from src.data import eval_targets
 from src.model import query
 
 DEFAULT_OUT_DIR = "results/model_evaluation"
-DEFAULT_ARM = "rebuild_baseline"
+DEFAULT_ARM = "embedding_sgd_sgd_lr1"
 
 
 # ---------------------------------------------------------------- shared helpers
@@ -536,7 +536,7 @@ def main():
     parser.add_argument("--final-run", action="store_true")
     parser.add_argument("--predictions", default=None,
                         help="defaults to results/model_v1/model_v1_predictions_<arm>.csv")
-    parser.add_argument("--data-dir", default="data/processed/phase_d")
+    parser.add_argument("--data-dir", default="data/processed/phase_d5")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     parser.add_argument("--n-boot", type=int, default=2000)

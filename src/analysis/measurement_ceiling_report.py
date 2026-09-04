@@ -1249,9 +1249,9 @@ def main():
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--platoon-frame", default="results/model_evaluation/platoon_frame.csv")
     parser.add_argument("--model-predictions",
-                        default="results/model_v1/model_v1_predictions_rebuild_baseline.csv")
+                        default="results/model_v1/model_v1_predictions_embedding_sgd_sgd_lr1.csv")
     parser.add_argument("--seed-predictions",
-                        default="results/model_v1/model_v1_predictions_rebuild_baseline_s{seed}.csv")
+                        default="results/model_v1/model_v1_predictions_embedding_sgd_sgd_lr1_s{seed}.csv")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--manifest", default="data/processed/phase_d5/manifest.json")
     parser.add_argument("--pooled-scores", default="results/process_calibration/pooled_scores.csv")

@@ -99,7 +99,7 @@ from src.analysis.baseline_ladder_trailing import TRAILING_SEASONS, trailing_win
 from src.data.eval_targets import drop_pitcher_batters
 
 DEFAULT_OUT_DIR = "results/model_evaluation"
-DEFAULT_ARM = "rebuild_baseline"
+DEFAULT_ARM = "embedding_sgd_sgd_lr1"
 SEEDS = (0, 1, 2, 3, 4)
 
 # Two-sided normal quantiles for the nominal levels §12.4 names. Stated explicitly
@@ -144,7 +144,7 @@ def batter_stands(pa_df, eval_season, n_seasons=TRAILING_SEASONS):
     """
     Which side of the plate each hitter bats from, as C.2 types them: L / R / S.
 
-    Same routine C.2 itself uses (`eb_bivariate_eb.batter_types`, minority-share rule),
+    Same routine C.2 itself uses (`baseline_ladder_bivariate_eb.batter_types`, minority-share rule),
     read off the trailing window so the probe groups hitters exactly the way the target
     it decodes was grouped. Hitters with no trailing-window PA (debuts) are typed off the
     eval season, which is the same static-roster-attribute exception `eb.predict`
@@ -153,10 +153,10 @@ def batter_stands(pa_df, eval_season, n_seasons=TRAILING_SEASONS):
     hitters_only = drop_pitcher_batters(pa_df)
     window = trailing_window(hitters_only, eval_season, n_seasons)
     window = window[window["in_denominator"]]
-    types = eb_bivariate_eb.batter_types(window)
+    types = baseline_ladder_bivariate_eb.batter_types(window)
 
     active = hitters_only[hitters_only["season"] == eval_season]
-    debut = eb_bivariate_eb.batter_types(active[active["in_denominator"]])
+    debut = baseline_ladder_bivariate_eb.batter_types(active[active["in_denominator"]])
     debut = debut.rename(columns={"batter_type": "debut_type"})
     merged = debut.merge(types, on="batter", how="outer")
     merged["batter_type"] = merged["batter_type"].fillna(merged["debut_type"])
@@ -171,7 +171,7 @@ def eb_posterior_split(pa_df, eval_season):
     The decode TARGET: each hitter's C.2 empirical-Bayes posterior mean platoon split,
     defined as posterior E[wOBA | vs LHP] - posterior E[wOBA | vs RHP].
 
-    Source: `src/analysis/eb_bivariate_eb.py::predict(pa_df, eval_season)`, column
+    Source: `src/analysis/baseline_ladder_bivariate_eb.py::predict(pa_df, eval_season)`, column
     `pred_woba`, pivoted on `p_throws`. That function is C.2's own scorer — the same call
     whose output `results/baseline_ladder/baseline_ladder_claim1_scores.csv` grades as `eb_bivariate`. Its
     hyper-parameters are the ones recorded in `results/baseline_ladder/eb_prior_parameters.csv`
@@ -181,7 +181,7 @@ def eb_posterior_split(pa_df, eval_season):
 
     Returns one row per batter with `true_split`.
     """
-    predictions = eb_bivariate_eb.predict(pa_df, eval_season)
+    predictions = baseline_ladder_bivariate_eb.predict(pa_df, eval_season)
     assert set(predictions["p_throws"]) <= {"L", "R"}, "unexpected pitcher hand in C.2 output"
     wide = predictions.pivot(index="batter", columns="p_throws", values="pred_woba")
     # a hitter projected against only one hand has no split to decode
@@ -311,7 +311,7 @@ def probe_group(frame, embeddings, seeds=SEEDS, n_boot=N_BOOT, seed=0, ci=(2.5, 
     }
 
 
-def run_probe(pa_df, manifest, embeddings, eval_season, n_boot=N_BOOT, seed=0):
+def run_probe(pa_df, manifest, embeddings, eval_season, n_boot=N_BOOT, seed=0, arm=DEFAULT_ARM):
     """
     The full probe: real and null decode, per stand and pooled, plus the expectation check.
 
@@ -358,13 +358,13 @@ def run_probe(pa_df, manifest, embeddings, eval_season, n_boot=N_BOOT, seed=0):
 
     return {
         "target": {
-            "source_module": "src/analysis/eb_bivariate_eb.py::predict",
+            "source_module": "src/analysis/baseline_ladder_bivariate_eb.py::predict",
             "column": "pred_woba, pivoted on p_throws, split = L - R",
             "quantity": "C.2 empirical-Bayes POSTERIOR MEAN split (not the raw observed split)",
             "hyper_parameters_committed_at": "results/baseline_ladder/eb_prior_parameters.csv",
         },
         "features": {
-            "source": "results/checkpoints/rebuild_baseline_s{0..4}.pt, key model.embedding.weight",
+            "source": f"results/checkpoints/{arm}_s{{0..4}}.pt, key model.embedding.weight",
             "vocabulary": "data/processed/phase_d5/manifest.json::vocabulary",
             "seed_handling": "per-seed decode, correlations averaged; raw embeddings NEVER averaged",
             "embedding_dim": int(next(iter(embeddings.values())).shape[1]),
@@ -589,7 +589,7 @@ def main():
     embeddings = load_seed_embeddings(args.checkpoint_dir, args.arm)
 
     print("E.14 part 1 — the §5.1 probe (retrospective diagnostic)")
-    probe = run_probe(pa_df, manifest, embeddings, args.eval_season,
+    probe = run_probe(pa_df, manifest, embeddings, args.eval_season, arm=args.arm,
                       n_boot=args.n_boot, seed=args.seed)
 
     print("E.14 part 2 — ensemble interval coverage")

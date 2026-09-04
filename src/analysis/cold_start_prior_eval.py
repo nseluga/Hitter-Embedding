@@ -42,7 +42,7 @@ from src.analysis.cold_start_prior_diagnostic import low_stratum_means
 from src.model import loader, query, query_tables as qt
 
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
-DEFAULT_ARM = "d10_baseline"
+DEFAULT_ARM = "embedding_sgd_sgd_lr1"
 DEFAULT_SEEDS = list(range(5))
 DEFAULT_STATS_CSV = "results/model_visualization/hitter_stats.csv"
 DEFAULT_OUT_DIR = "results/model_visualization"

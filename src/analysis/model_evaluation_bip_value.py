@@ -58,7 +58,7 @@ E3_VALUE_MODELLED_BIP = 0.37864233821410337
 E3_VALUE_OBSERVED_BIP = 0.3635263829493724
 
 # the two train-season league constants the composition applies to 2024
-# (results/model_v1/model_v1_diagnostics_rebuild_baseline.json)
+# (results/model_v1/model_v1_diagnostics_<arm>.json)
 TRAIN_MEASURED_SHARE = 0.9231315908347482
 TRAIN_UNMEASURED_POINTS = 0.1414959852073254
 
@@ -267,7 +267,7 @@ def fit_two_v_tables(frame, bins, pa_df, manifest, eval_season):
 def main():
     parser = argparse.ArgumentParser(
         description="Phase E.13 — who owns the balls-in-play value gap.")
-    parser.add_argument("--arm", default="rebuild_baseline")
+    parser.add_argument("--arm", default="embedding_sgd_sgd_lr1")
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
     parser.add_argument("--predictions", default=None)

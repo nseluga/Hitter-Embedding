@@ -177,7 +177,7 @@ def expected_index_table(labels, probabilities, by_values, by_name, head):
 def main():
     parser = argparse.ArgumentParser(
         description="Phase F.3 -- per-head calibration on real held-out pitches.")
-    parser.add_argument("--arm", default="rebuild_baseline")
+    parser.add_argument("--arm", default="embedding_sgd_sgd_lr1")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
