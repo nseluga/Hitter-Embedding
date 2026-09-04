@@ -32,7 +32,7 @@ COMMITTED_TAU2_SPLIT_DERIVED = {
     "S": 0.000588220547130464,
 }
 COMMITTED_E5_WITHIN_STAND_RANK_CORR = ceiling.E5_REPORTED_WITHIN_STAND_RANK_CORR
-COMMITTED_E14_POOLED_COVERAGE_95 = 0.855527
+COMMITTED_E14_POOLED_COVERAGE_95 = 0.869452  # embedding_sgd_sgd_lr1 chain, 2026-09-03
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +47,7 @@ def platoon_frame():
 
 @pytest.fixture(scope="module")
 def model_predictions():
-    table = pd.read_csv(REPO / "results/model_v1/model_v1_predictions_rebuild_baseline.csv")
+    table = pd.read_csv(REPO / "results/model_v1/model_v1_predictions_embedding_sgd_sgd_lr1.csv")
     return table[table["season"] == EVAL_SEASON]
 
 
@@ -411,18 +411,19 @@ def test_the_exhibit_rank_cells_reproduce_the_superseded_tables(exhibit_tables):
     REPRODUCTION GATE, blocking. The exhibit replaces `differential_scores.csv` and the
     stratum table, so its rank numerators must be those files' committed values to the last
     digit -- a replacement that also moves the numbers is a new result wearing an old name.
-    Reference values are the Pass A2 spec's table and the committed stratum CSV.
+    Reference values are the committed `differential_exhibit.csv` of the canonical build
+    (`embedding_sgd_sgd_lr1`, chain rerun 2026-09-03).
     """
     exhibit, _ = exhibit_tables
     expected = {
-        ("pooled", "model_v1_model"): 0.14626474805407283,
-        ("pooled", "eb_bivariate"): 0.14582642711091456,
+        ("pooled", "model_v1_model"): 0.1626334134811194,
+        ("pooled", "eb_bivariate"): 0.1458264271109145,
         ("pooled", "gbm_full"): 0.1412976147889645,
-        ("low", "model_v1_model"): 0.1901200387409761,
-        ("low", "eb_bivariate"): 0.19737665798869397,
-        ("low", "gbm_full"): 0.23600403635465694,
-        ("medium", "model_v1_model"): 0.14263646602311905,
-        ("high", "model_v1_model"): 0.11046510805034039,
+        ("low", "model_v1_model"): 0.1792224155194817,
+        ("low", "eb_bivariate"): 0.1973766579886939,
+        ("low", "gbm_full"): 0.2360040363546569,
+        ("medium", "model_v1_model"): 0.1439236604176937,
+        ("high", "model_v1_model"): 0.1257432935274337,
     }
     indexed = exhibit.set_index(["exhibit_column", "model"])
     for key, value in expected.items():

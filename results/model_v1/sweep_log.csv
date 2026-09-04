@@ -139,3 +139,5 @@ embedding_sgd,sgd_lr1,1,ok,3249.7,1.02387,1.02387,20,0.001,0,data/processed/phas
 embedding_sgd,sgd_lr1,2,ok,1767.2,1.02393,1.02393,20,0.001,0,data/processed/phase_d5,2026-09-02 22:46
 embedding_sgd,sgd_lr1,3,ok,1677.2,1.02379,1.02379,22,0.001,0,data/processed/phase_d5,2026-09-02 23:14
 embedding_sgd,sgd_lr1,4,ok,1788.3,1.02397,1.02397,23,0.001,0,data/processed/phase_d5,2026-09-02 23:43
+embedding_sgd,sgd_lr3,0,ok,1354.6,1.02409,1.02409,23,0.001,0,data/processed/phase_d5,2026-09-04 04:05
+embedding_sgd,sgd_lr10,0,ok,1674.0,1.02470,1.02470,31,0.001,0,data/processed/phase_d5,2026-09-04 04:33

@@ -1,15 +1,15 @@
 {
-  "arm": "rebuild_baseline",
+  "arm": "embedding_sgd_sgd_lr1",
   "n_pitchers_requested": 200,
   "n_hitters": 4,
   "n_exact_reference_draws": 24,
   "coverage_note": "sampled panel of pitchers and hitters; paired within both",
-  "overall_take_mass_drawn": 0.5222688487015358,
-  "overall_take_mass_exact": 0.5243362632707452,
+  "overall_take_mass_drawn": 0.528223477766561,
+  "overall_take_mass_exact": 0.5302789659481076,
   "delta_bb_channel_1_surface": 0.0009319076702593992,
-  "delta_bb_channel_2_take_mass": -0.0009600847194768253,
-  "delta_bb_both_channels": -2.817704921742603e-05,
-  "residual_walk_excess": 0.002259999999999998,
-  "share_of_residual_explained": -0.012467720892666396,
-  "delta_k_channel_2": -0.00010960655377559303
+  "delta_bb_channel_2_take_mass": -0.0008495777466086957,
+  "delta_bb_both_channels": 8.232992365070357e-05,
+  "residual_walk_excess": 0.0030814081210911587,
+  "share_of_residual_explained": 0.02671827957068851,
+  "delta_k_channel_2": -0.00012897764116648336
 }

@@ -18,7 +18,7 @@
       "la",
       "spray"
     ],
-    "arm": "rebuild_baseline",
+    "arm": "embedding_sgd_sgd_lr1",
     "seeds": [
       0,
       1,
@@ -27,7 +27,7 @@
       4
     ],
     "eval_season": 2024,
-    "git_revision": "5ccaa90cbd34174aaf25c71a592c9c1d06a12386"
+    "git_revision": "fc451e6d5f4294f055a494a524646c57e0db3c12"
   },
   "reference_seasons": [
     2015,
@@ -52,62 +52,62 @@
     "swing": {
       "head": "swing",
       "n_rows": 705344,
-      "model_nll": 0.4185453272457928,
-      "cold_start_nll": 0.44409067953731657,
+      "model_nll": 0.41659558219433346,
+      "cold_start_nll": 0.44618588463553716,
       "frequency_reference_nll": 0.6606760017804434,
-      "identity_gain": 0.02554535229152377,
-      "gain_vs_reference": 0.2421306745346506,
-      "identity_share_of_gain": 0.10550233810986245
+      "identity_gain": 0.029590302441203697,
+      "gain_vs_reference": 0.24408041958610993,
+      "identity_share_of_gain": 0.12123177472154598
     },
     "contact": {
       "head": "contact",
       "n_rows": 337137,
-      "model_nll": 0.4176793928989176,
-      "cold_start_nll": 0.439779233026834,
+      "model_nll": 0.41692665347813196,
+      "cold_start_nll": 0.44537831216900176,
       "frequency_reference_nll": 0.5411556700221091,
-      "identity_gain": 0.022099840127916437,
-      "gain_vs_reference": 0.12347627712319148,
-      "identity_share_of_gain": 0.17898045392045284
+      "identity_gain": 0.028451658690869797,
+      "gain_vs_reference": 0.12422901654397711,
+      "identity_share_of_gain": 0.22902587078597617
     },
     "split": {
       "head": "split",
       "n_rows": 258502,
-      "model_nll": 0.7587257885895324,
-      "cold_start_nll": 0.768359070679406,
+      "model_nll": 0.7580945206716984,
+      "cold_start_nll": 0.7700867115869899,
       "frequency_reference_nll": 0.8025107500488008,
-      "identity_gain": 0.009633282089873574,
-      "gain_vs_reference": 0.04378496145926836,
-      "identity_share_of_gain": 0.2200134879377497
+      "identity_gain": 0.011992190915291578,
+      "gain_vs_reference": 0.044416229377102434,
+      "identity_share_of_gain": 0.2699956993979733
     },
     "ev": {
       "head": "ev",
       "n_rows": 122316,
-      "model_nll": 2.9799955968057716,
-      "cold_start_nll": 3.046108685969009,
+      "model_nll": 2.9797611708767318,
+      "cold_start_nll": 3.0756347284643284,
       "frequency_reference_nll": 3.169975828973175,
-      "identity_gain": 0.06611308916323733,
-      "gain_vs_reference": 0.18998023216740334,
-      "identity_share_of_gain": 0.34799983350362995
+      "identity_gain": 0.09587355758759664,
+      "gain_vs_reference": 0.19021465809644322,
+      "identity_share_of_gain": 0.5040282307738162
     },
     "la": {
       "head": "la",
       "n_rows": 122316,
-      "model_nll": 2.9096841140250227,
-      "cold_start_nll": 2.9406804006435516,
+      "model_nll": 2.9082451197682233,
+      "cold_start_nll": 2.945304066266747,
       "frequency_reference_nll": 3.1658274930737655,
-      "identity_gain": 0.030996286618528934,
-      "gain_vs_reference": 0.25614337904874285,
-      "identity_share_of_gain": 0.12101146917652902
+      "identity_gain": 0.03705894649852359,
+      "gain_vs_reference": 0.25758237330554223,
+      "identity_share_of_gain": 0.14387221463545005
     },
     "spray": {
       "head": "spray",
       "n_rows": 121153,
-      "model_nll": 2.915216472205767,
-      "cold_start_nll": 2.950182007822688,
+      "model_nll": 2.91365439412386,
+      "cold_start_nll": 2.9514304540722516,
       "frequency_reference_nll": 3.1732403892370296,
-      "identity_gain": 0.03496553561692117,
-      "gain_vs_reference": 0.2580239170312626,
-      "identity_share_of_gain": 0.13551276958827305
+      "identity_gain": 0.037776059948391616,
+      "gain_vs_reference": 0.2595859951131696,
+      "identity_share_of_gain": 0.14552426039749444
     }
   },
   "note": "diagnostic only -- the frequency reference is not a claim-1 ladder rung and neither reference re-opens the pre-registered gates"

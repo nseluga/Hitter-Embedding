@@ -1,5 +1,5 @@
 {
-  "arm": "rebuild_baseline",
+  "arm": "embedding_sgd_sgd_lr1",
   "seeds": [
     0,
     1,
@@ -10,11 +10,11 @@
   "eval_season": 2024,
   "n_pitches": 705344,
   "overall_observed": 0.4779752858179839,
-  "overall_predicted": 0.47925575717386953,
-  "overall_relative_gap": 0.0026789488784850508,
+  "overall_predicted": 0.4793513264389894,
+  "overall_relative_gap": 0.0028788949174446497,
   "three_ball_observed": 0.5927032661570535,
-  "three_ball_predicted": 0.6040052480569663,
-  "three_ball_relative_gap": 0.019068533185572223,
-  "under_three_ball_relative_gap": 0.000833706937429568,
-  "max_abs_count_relative_gap": 0.08739834697711174
+  "three_ball_predicted": 0.6021714845829047,
+  "three_ball_relative_gap": 0.01597463514456554,
+  "under_three_ball_relative_gap": 0.0014044945505116146,
+  "max_abs_count_relative_gap": 0.0232290649321534
 }

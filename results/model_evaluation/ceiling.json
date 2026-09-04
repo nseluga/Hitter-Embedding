@@ -129,17 +129,17 @@
         "ceiling_rank_corr_unweighted": 0.2646763883268086
       }
     ],
-    "platoon_within_stand_rank_corr_recomputed": 0.14626474805407283,
-    "platoon_within_stand_rank_corr_reported": 0.14626474805407289,
+    "platoon_within_stand_rank_corr_recomputed": 0.1626334134811194,
+    "platoon_within_stand_rank_corr_reported": 0.1626334134811194,
     "recomputation_matches_report": true,
     "platoon_within_stand_rank_corr_by_stand": {
-      "L": 0.22570916212303577,
-      "R": 0.039417885242445196
+      "L": 0.2438839285895019,
+      "R": 0.055985749368522
     },
     "fraction_of_ceiling": {
-      "pooled": 0.41133291235718045,
-      "L": 0.5690628371928935,
-      "R": 0.12158155336698968
+      "pooled": 0.45736567767543906,
+      "L": 0.6148854527812126,
+      "R": 0.17268390561222358
     },
     "split_half": [
       {
@@ -212,10 +212,10 @@
         "share_between_stand": 0.10898348003462612
       },
       "delta_pred": {
-        "variance": 0.0005674880018011178,
-        "between_stand": 0.00046357741658848133,
-        "within_stand": 0.00010391058521263651,
-        "share_between_stand": 0.8168937759338689
+        "variance": 0.0005443014246975777,
+        "between_stand": 0.00044040745871973274,
+        "within_stand": 0.000103893965977845,
+        "share_between_stand": 0.8091242071696394
       },
       "delta_route_a": {
         "variance": 0.00041470161321681827,
@@ -223,7 +223,7 @@
         "within_stand": 5.421010862427522e-20,
         "share_between_stand": 0.9999999999999999
       },
-      "post_hoc_within_stand_rank_corr": 0.14626474805407283,
+      "post_hoc_within_stand_rank_corr": 0.1626334134811194,
       "post_hoc_note": "added after the pre-registered E.5 table was read; descriptive, not evidence for the adoption rule"
     }
   },
@@ -248,39 +248,39 @@
       {
         "stand": "L",
         "n_hitters": 221,
-        "sd_pred_within_stand": 0.015378576369871241,
+        "sd_pred_within_stand": 0.015242195413841045,
         "sd_obs_within_stand_raw": 0.06232922012326187,
         "var_obs_within_stand_noise_corrected": -3.7547215288997755e-05,
         "noise_corrected_variance_is_positive": false,
         "sd_obs_within_stand_true": NaN,
         "mean_sampling_var_weighted": 0.003922478896463031,
         "tau_split_eb": 0.027060596607933463,
-        "ratio_vs_eb": 0.5683014529458912,
+        "ratio_vs_eb": 0.5632616174239273,
         "ratio_vs_realized_true": NaN,
         "sd_obs_within_stand_raw_aweights": 0.0625352786371206,
-        "sd_pred_within_stand_aweights": 0.015429417477553513,
+        "sd_pred_within_stand_aweights": 0.015292585650213476,
         "var_obs_within_stand_noise_corrected_aweights": -1.1817822240717257e-05,
         "ratio_vs_realized_true_aweights": NaN
       },
       {
         "stand": "R",
         "n_hitters": 324,
-        "sd_pred_within_stand": 0.0034410944057789972,
+        "sd_pred_within_stand": 0.003835728721698075,
         "sd_obs_within_stand_raw": 0.0664181819483767,
         "var_obs_within_stand_noise_corrected": 0.00022457385013607226,
         "noise_corrected_variance_is_positive": true,
         "sd_obs_within_stand_true": 0.014985788272095407,
         "mean_sampling_var_weighted": 0.0041868010431916,
         "tau_split_eb": 0.022175958079054894,
-        "ratio_vs_eb": 0.15517229936636187,
-        "ratio_vs_realized_true": 0.22962385049751152,
+        "ratio_vs_eb": 0.17296789198573143,
+        "ratio_vs_realized_true": 0.25595775491106276,
         "sd_obs_within_stand_raw_aweights": 0.06656075264821511,
-        "sd_pred_within_stand_aweights": 0.003448480925904214,
+        "sd_pred_within_stand_aweights": 0.0038439623485785556,
         "var_obs_within_stand_noise_corrected_aweights": 0.00024353274990527446,
-        "ratio_vs_realized_true_aweights": 0.22097805252022032
+        "ratio_vs_realized_true_aweights": 0.2463204326778218
       }
     ],
-    "asymmetry_vs_eb": 3.662389841914575,
+    "asymmetry_vs_eb": 3.2564518822394635,
     "asymmetry_vs_realized_true": NaN,
     "asymmetry_vs_realized_true_aweights": NaN,
     "in_session_uncorrected": {
@@ -318,7 +318,7 @@
         0.4,
         0.55
       ],
-      "observed": 0.41133291235718045,
+      "observed": 0.45736567767543906,
       "held": true
     },
     "part2_corrected_share_50_to_60_percent": {
@@ -332,7 +332,7 @@
     "part3_asymmetry_survives_correction": {
       "expected": "the LHB/RHB recovery ratio stays near 3x after noise correction",
       "observed": {
-        "asymmetry_vs_eb": 3.662389841914575,
+        "asymmetry_vs_eb": 3.2564518822394635,
         "asymmetry_vs_realized_true": NaN,
         "asymmetry_vs_realized_true_aweights": NaN
       },

@@ -17,7 +17,7 @@ import pytest
 
 from src.analysis import claim1_eval as evaluation, model_v1_ablation_report, model_evaluation_min_pa_sweep
 
-LABEL = "min_pa_sweep_rebuild_baseline"
+LABEL = "min_pa_sweep_embedding_sgd_sgd_lr1"
 OPPONENTS = ("gbm_full", "eb_bivariate")
 
 

@@ -278,7 +278,7 @@ def differential_frame():
     from src.analysis import measurement_ceiling_report
     pa_df = pd.read_parquet(REPO_ROOT / "data/processed/eval_targets_pa.parquet")
     platoon_frame = pd.read_csv(REPO_ROOT / "results/model_evaluation/platoon_frame.csv")
-    model = pd.read_csv(REPO_ROOT / "results/model_v1/model_v1_predictions_rebuild_baseline.csv")
+    model = pd.read_csv(REPO_ROOT / "results/model_v1/model_v1_predictions_embedding_sgd_sgd_lr1.csv")
     model = model[model["season"] == 2024]
     population, _ = measurement_ceiling_report.m6_population(pa_df, platoon_frame, model, 2024)
     frame, _ = measurement_ceiling_report.intersection_frame(platoon_frame, pa_df, population, 2024)

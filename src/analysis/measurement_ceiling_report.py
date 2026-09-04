@@ -55,7 +55,8 @@ COMMITTED = {
     "mean_sampling_var": 0.00407848,
     "route_a_tau2": 0.00011715,
     "route_b_tau2": 0.00059034,
-    "coverage_pooled_coverage_95": 0.855527,
+    # embedding_sgd_sgd_lr1 chain, 2026-09-03 (rebuild_baseline was 0.855527); the model-dependent pin
+    "coverage_pooled_coverage_95": 0.869452,
 }
 
 

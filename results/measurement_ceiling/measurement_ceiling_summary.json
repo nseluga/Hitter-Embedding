@@ -62,19 +62,19 @@
   "headline": {
     "primary_route": "B_prime",
     "platoon_ceiling_b_prime": 0.2964517824970523,
-    "platoon_fraction_b_prime": 0.4933846132482849,
+    "platoon_fraction_b_prime": 0.5485998839718109,
     "platoon_ceiling_a": 0.16709992545088512,
-    "platoon_fraction_a": 0.8753130658760451,
+    "platoon_fraction_a": 0.9732704131512103,
     "level_ceiling": 0.7420469557106563,
-    "level_fraction": 0.6534578209413344
+    "level_fraction": 0.6281514357341259
   },
   "fallback_rules_fired": [],
   "coverage_labels_coverage": {
     "nominal": 0.95,
     "interval": "seed_plus_target_noise (the fair test \u2014 seed spread convolved with the target's own sampling noise)",
-    "measured_coverage_all_groups": 0.855526544821584,
-    "measured_coverage_m6_intersection": 0.8660550458715597,
-    "committed_coverage_value": 0.855527,
+    "measured_coverage_all_groups": 0.8694516971279374,
+    "measured_coverage_m6_intersection": 0.8788990825688073,
+    "committed_coverage_value": 0.869452,
     "reproduces_committed": true,
     "label_for_notebook": "every displayed interval carries its MEASURED coverage, not the nominal level \u2014 the plan's own fallback, already fired. No further attempt is made to close the gap."
   },

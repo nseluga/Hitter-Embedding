@@ -54,7 +54,8 @@ from src.data.model_dataset import MASKED
 from src.model import query_tables as qt
 
 # the E.3 numbers this module explains, quoted so a silent change upstream trips an assertion
-E3_VALUE_MODELLED_BIP = 0.37864233821410337
+# (embedding_sgd_sgd_lr1 chain, 2026-09-03; rebuild_baseline was 0.37864233821410337)
+E3_VALUE_MODELLED_BIP = 0.3757228903779065
 E3_VALUE_OBSERVED_BIP = 0.3635263829493724
 
 # the two train-season league constants the composition applies to 2024
@@ -299,7 +300,7 @@ def main():
 
     # the gap comes from the E.3 artefact on disk, not from a constant retyped here -- but the
     # constants are asserted against it so a re-run of E.3 that moves them cannot go unnoticed
-    e3 = json.loads(Path(args.model_evaluation_report).read_text())["e3_level_closure"]
+    e3 = json.loads(Path(args.e_report).read_text())["e3_level_closure"]
     for label, on_disk, quoted in (("modelled", e3["value_modelled"]["bip"], E3_VALUE_MODELLED_BIP),
                                    ("observed", e3["value_observed"]["bip"], E3_VALUE_OBSERVED_BIP)):
         assert abs(on_disk - quoted) < 1e-9, \

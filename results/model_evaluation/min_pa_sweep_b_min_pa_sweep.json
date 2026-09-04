@@ -1,0 +1,138 @@
+{
+  "thresholds": [
+    10,
+    25,
+    50
+  ],
+  "decisive_stratum": "low",
+  "by_threshold": {
+    "10": {
+      "all": {
+        "rmse_gate_vs_gbm_full": false,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 1149,
+        "n_batters": 604,
+        "rank_difference_vs_gbm_full": 0.00504298296132516,
+        "rank_ci_low_vs_gbm_full": -0.03027451355644032,
+        "rank_ci_high_vs_gbm_full": 0.04213771932343148
+      },
+      "high": {
+        "rmse_gate_vs_gbm_full": false,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 489,
+        "n_batters": 318,
+        "rank_difference_vs_gbm_full": -0.04268320506013845,
+        "rank_ci_low_vs_gbm_full": -0.09927323854728298,
+        "rank_ci_high_vs_gbm_full": 0.012395388503404846
+      },
+      "low": {
+        "rmse_gate_vs_gbm_full": false,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 380,
+        "n_batters": 239,
+        "rank_difference_vs_gbm_full": 0.09283398314908406,
+        "rank_ci_low_vs_gbm_full": -0.05253280976857108,
+        "rank_ci_high_vs_gbm_full": 0.2478566962690081
+      },
+      "medium": {
+        "rmse_gate_vs_gbm_full": true,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 280,
+        "n_batters": 238,
+        "rank_difference_vs_gbm_full": 0.08910205120978282,
+        "rank_ci_low_vs_gbm_full": -0.015620088661209624,
+        "rank_ci_high_vs_gbm_full": 0.1862904946732616
+      }
+    },
+    "25": {
+      "all": {
+        "rmse_gate_vs_gbm_full": false,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 1013,
+        "n_batters": 561,
+        "rank_difference_vs_gbm_full": 0.005062387996005724,
+        "rank_ci_low_vs_gbm_full": -0.033000468980815635,
+        "rank_ci_high_vs_gbm_full": 0.041315423365607756
+      },
+      "high": {
+        "rmse_gate_vs_gbm_full": false,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 469,
+        "n_batters": 309,
+        "rank_difference_vs_gbm_full": -0.044026800087872686,
+        "rank_ci_low_vs_gbm_full": -0.10022413151745246,
+        "rank_ci_high_vs_gbm_full": 0.013868704822972333
+      },
+      "low": {
+        "rmse_gate_vs_gbm_full": false,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 294,
+        "n_batters": 204,
+        "rank_difference_vs_gbm_full": 0.10310818607233968,
+        "rank_ci_low_vs_gbm_full": -0.051443800016803036,
+        "rank_ci_high_vs_gbm_full": 0.2581498124959452
+      },
+      "medium": {
+        "rmse_gate_vs_gbm_full": true,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 250,
+        "n_batters": 218,
+        "rank_difference_vs_gbm_full": 0.0933624442349485,
+        "rank_ci_low_vs_gbm_full": -0.011436898939789216,
+        "rank_ci_high_vs_gbm_full": 0.2014171592811859
+      }
+    },
+    "50": {
+      "all": {
+        "rmse_gate_vs_gbm_full": false,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 848,
+        "n_batters": 493,
+        "rank_difference_vs_gbm_full": 0.0032500043884486907,
+        "rank_ci_low_vs_gbm_full": -0.03736396165847888,
+        "rank_ci_high_vs_gbm_full": 0.04188726873767406
+      },
+      "high": {
+        "rmse_gate_vs_gbm_full": false,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 444,
+        "n_batters": 300,
+        "rank_difference_vs_gbm_full": -0.04259898920078553,
+        "rank_ci_low_vs_gbm_full": -0.10134988462351335,
+        "rank_ci_high_vs_gbm_full": 0.01549023938986145
+      },
+      "low": {
+        "rmse_gate_vs_gbm_full": false,
+        "ordering_gate_vs_both": false,
+        "n_hitters": 194,
+        "n_batters": 141,
+        "rank_difference_vs_gbm_full": 0.0965978884781643,
+        "rank_ci_low_vs_gbm_full": -0.07950258653916893,
+        "rank_ci_high_vs_gbm_full": 0.25890409229677164
+      },
+      "medium": {
+        "rmse_gate_vs_gbm_full": true,
+        "ordering_gate_vs_both": true,
+        "n_hitters": 210,
+        "n_batters": 183,
+        "rank_difference_vs_gbm_full": 0.10513119206908422,
+        "rank_ci_low_vs_gbm_full": 0.005278130989099362,
+        "rank_ci_high_vs_gbm_full": 0.21913997166584073
+      }
+    }
+  },
+  "stability": {
+    "rmse_gate_stable": true,
+    "ordering_gate_stable": true,
+    "low_stratum_n_hitters": [
+      380,
+      294,
+      194
+    ],
+    "low_stratum_rank_difference": [
+      0.09283398314908406,
+      0.10310818607233968,
+      0.0965978884781643
+    ]
+  }
+}

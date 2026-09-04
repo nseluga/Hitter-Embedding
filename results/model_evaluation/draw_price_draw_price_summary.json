@@ -6,6 +6,6 @@
   "delta_bb_from_draw": 0.0009319076702593992,
   "delta_k_from_draw": -0.0015517653002635468,
   "sum_of_per_count_delta_bb": 0.0009323162042498834,
-  "residual_walk_excess": 0.002259999999999998,
-  "share_of_residual_explained": 0.41234852666345134
+  "residual_walk_excess": 0.0030814081210911587,
+  "share_of_residual_explained": 0.3024291601884274
 }

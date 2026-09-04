@@ -37,8 +37,8 @@
       "degenerate": false,
       "sampling_scale": 1.0,
       "observed_within_stand_var": 0.004195629093186848,
-      "achieved_rank_corr": 0.14626474805407283,
-      "fraction_of_ceiling": 0.8753130658760451
+      "achieved_rank_corr": 0.1626334134811194,
+      "fraction_of_ceiling": 0.9732704131512103
     },
     "B": {
       "tau2": 0.0005903354341684647,
@@ -46,8 +46,8 @@
       "reliability": 0.12644230777530005,
       "ceiling_rank_corr": 0.35558727167222964,
       "degenerate": false,
-      "achieved_rank_corr": 0.14626474805407283,
-      "fraction_of_ceiling": 0.41133291235715425
+      "achieved_rank_corr": 0.1626334134811194,
+      "fraction_of_ceiling": 0.4573656776754099
     },
     "B_prime": {
       "tau2": 0.0003929668596653433,
@@ -55,8 +55,8 @@
       "reliability": 0.0878836593456796,
       "ceiling_rank_corr": 0.2964517824970523,
       "degenerate": false,
-      "achieved_rank_corr": 0.14626474805407283,
-      "fraction_of_ceiling": 0.4933846132482849
+      "achieved_rank_corr": 0.1626334134811194,
+      "fraction_of_ceiling": 0.5485998839718109
     }
   },
   "fragility_band": {
@@ -148,7 +148,7 @@
       "convention": "pa_star_weak_side"
     }
   },
-  "achieved_rank_corr_platoon": 0.14626474805407283,
+  "achieved_rank_corr_platoon": 0.1626334134811194,
   "route_c": {
     "verdict": "uninformative_inside_both_nulls",
     "reading": "Route C's LHB value sits inside BOTH simulated nulls, so it discriminates nothing: the split-half estimator at these half-length exposures has too much sampling variance to separate tau2=0 from tau2=B'. The alarming -0.366 in E.15 is Spearman-Brown magnifying an ordinary null draw (the raw half correlation is at the 18th percentile of the tau2=0 null). Route C is retired as evidence in either direction, which is the bounded outcome the spec allows. It was never an estimator.",

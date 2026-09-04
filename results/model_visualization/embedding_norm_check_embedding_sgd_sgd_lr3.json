@@ -1,0 +1,41 @@
+{
+  "arm": "embedding_sgd_sgd_lr3",
+  "seeds": [
+    0
+  ],
+  "per_seed": {
+    "0": {
+      "slope": 0.5051490180650376,
+      "slope_ci95": [
+        0.495713018681737,
+        0.5143169916537111
+      ],
+      "r": 0.9305806427823984,
+      "r_ci95": [
+        0.9248042506973138,
+        0.9361395117400035
+      ],
+      "spread": {
+        "low": 0.7898563840717829,
+        "medium": 0.5470065968929506,
+        "high": 0.5735055135087066
+      },
+      "n": 1762
+    }
+  },
+  "slope_mean": 0.5051490180650376,
+  "slope_passes": true,
+  "spread_passes": false,
+  "reference_bar": {
+    "n_arm": 1,
+    "n_incumbent": 5,
+    "arm_mean": 1.02409,
+    "incumbent_mean": 1.0257999999999998,
+    "margin": 0.0017099999999998783,
+    "se": 0.00011410521460476173,
+    "margin_in_ses": 14.986168738413802,
+    "passes": true,
+    "advisory": true
+  },
+  "passes": false
+}

@@ -18,7 +18,7 @@
       "la",
       "spray"
     ],
-    "arm": "rebuild_baseline",
+    "arm": "embedding_sgd_sgd_lr1",
     "seeds": [
       0,
       1,
@@ -27,15 +27,15 @@
       4
     ],
     "eval_season": 2024,
-    "git_revision": "5ccaa90cbd34174aaf25c71a592c9c1d06a12386"
+    "git_revision": "fc451e6d5f4294f055a494a524646c57e0db3c12"
   },
   "pooled_hand_label": "B",
   "pooling_weight": "prior side-specific denominator PA, normalized within batter",
   "rungs_pooled": [
-    "trailing_bucketed",
-    "trailing_raw",
+    "model_v1",
     "no_info_league_average",
-    "model_v1"
+    "trailing_bucketed",
+    "trailing_raw"
   ],
   "rungs_omitted": [
     "eb_bivariate",

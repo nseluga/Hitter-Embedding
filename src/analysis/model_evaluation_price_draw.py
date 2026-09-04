@@ -151,8 +151,11 @@ def main():
     per_count = pd.DataFrame(per_count).sort_values("delta_bb", ascending=False)
     per_count.to_csv(out_dir / "draw_price_draw_price_by_count.csv", index=False)
 
-    matched = 0.08312   # E.1's population-matched observed walk rate
-    modelled = 0.08538  # the shipped rebuild_baseline composition
+    # E.1's walk-rate verdict for whichever arm the chain last evaluated: the model's
+    # composed rate and the population-matched observed train rate
+    e1 = json.loads((out_dir / "model_evaluation_report.json").read_text())
+    bb = e1["matched_population_matched_population"]["bb"]
+    matched, modelled = bb["train_matched"], bb["modelled"]
     total_delta = float(shifted["bb"][0, 0] - base["bb"][0, 0])
     summary = {
         "league_chain_bb": float(base["bb"][0, 0]), "league_chain_k": float(base["k"][0, 0]),
