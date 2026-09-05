@@ -141,3 +141,4 @@ embedding_sgd,sgd_lr1,3,ok,1677.2,1.02379,1.02379,22,0.001,0,data/processed/phas
 embedding_sgd,sgd_lr1,4,ok,1788.3,1.02397,1.02397,23,0.001,0,data/processed/phase_d5,2026-09-02 23:43
 embedding_sgd,sgd_lr3,0,ok,1354.6,1.02409,1.02409,23,0.001,0,data/processed/phase_d5,2026-09-04 04:05
 embedding_sgd,sgd_lr10,0,ok,1674.0,1.02470,1.02470,31,0.001,0,data/processed/phase_d5,2026-09-04 04:33
+embedding_sgd_nodecay,sgd_lr1_nodecay,0,ok,1195.2,1.02618,1.02618,17,0.001,0,data/processed/phase_d5,2026-09-05 02:01

@@ -1,0 +1,80 @@
+{
+  "provenance": {
+    "data_dir": "data/processed/phase_d5_final",
+    "manifest_sha256": "292f5212f5888d7d8e8fd5507a0729c1fadd60247b5c20fa67b426a9c195eca0",
+    "train_seasons": [
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024
+    ],
+    "quality_bin_edges_present": [
+      "ev",
+      "la",
+      "spray"
+    ],
+    "arm": "embedding_sgd_sgd_lr1_final",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "eval_season": 2025,
+    "git_revision": "4866994da44d43dddfbd4fe139e97f5a48d7f1d3"
+  },
+  "n_pitches": 705307,
+  "n_bins": 24,
+  "rows_scored": {
+    "swing": 705307,
+    "contact": 335564,
+    "ev": 122693,
+    "la": 122691,
+    "spray": 121468,
+    "split": 257505
+  },
+  "overall_relative_gap": {
+    "swing": 0.020471513185833286,
+    "contact": -0.015645646251628443
+  },
+  "split_overall": {
+    "foul": {
+      "observed": 0.49363313333721676,
+      "predicted": 0.5021907316112085,
+      "relative_gap": 0.017335947885300886
+    },
+    "foul_tip": {
+      "observed": 0.02833731383856624,
+      "predicted": 0.029188681055338013,
+      "relative_gap": 0.030044033870743506
+    },
+    "in_play": {
+      "observed": 0.478029552824217,
+      "predicted": 0.4686205874327658,
+      "relative_gap": -0.019682811106264596
+    }
+  },
+  "split_two_strike": {
+    "0_foul": 0.01975177971108308,
+    "0_foul_tip": 0.03520399111241147,
+    "0_in_play": -0.022304196213499702,
+    "1_foul": 0.013471822434438247,
+    "1_foul_tip": 0.022075606177804834,
+    "1_in_play": -0.015415372324703554
+  },
+  "max_abs_relative_gap_by_head": {
+    "swing": 0.15540601258576556,
+    "contact": 0.024232993017924826,
+    "split": 0.08978356688708485,
+    "ev": 0.262496647946093,
+    "la": 0.28197413140895705,
+    "spray": 0.23919872541092424
+  }
+}

@@ -22,10 +22,14 @@ tests green, `scripts/overnight.sh` reviewed. Read `docs/decision-log.md` last t
   alone will not get past that — `GATE_OVERRIDE=1` is the deliberate way, and only after a gate that passed.
 
 ## Run
-- Launch `scripts/overnight.sh` with nohup; ~13 h serial. Monitor with the Monitor tool on pid + log tail, not
+- BEFORE launch: `rm -rf /tmp/hitter-overnight` (the DRY run left 23 empty stage logs there; a stale
+  `gate_passed` sentinel would let stage 4 start). Then `nohup ./scripts/overnight.sh > /tmp/overnight.out 2>&1 &`.
+- ~14 h serial (stage 4 also builds `phase_d5_final` tensors, ~30 min, before the five seeds). Monitor with the Monitor tool on pid + log tail, not
   polling loops. Check swap (`vm_stat`); if two heavy procs appear, kill the newer, resume from the stage script.
 - Stage ETAs: chain ~5 h, nodecay ~30 min, replay ~30 min, refit 5×~25 min, 2025 queries+chain ~5 h.
 - If the replay GATE fails: stop. Do not run the refit. Log the miss (reference value, spread) and stop for Nate.
+  Context for the morning: the schedule is 4 cuts at the median step fraction (seeds had 3–7 cuts), budget
+  16537 = seed 0's best epoch 23 × 719. First diagnostic is a replay with seed 0's OWN cut steps — not tonight.
 - After each stage: write the numbers to `docs/run-notes-overnight.md` (untracked ok) — nothing lives only in chat.
 - After all stages: fresh Sonnet verifier: stale arm names, pins reproduce, 2025 read only by refit/query stages,
   row counts. Then full pytest. Then commit results + one pins entry + lab-notebook entry (Did/Why/Found/Learned/Next).

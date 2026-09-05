@@ -80,7 +80,7 @@ MIN_PA_FOR_OWN_VARIANCE = 50
 # E.5's reported within-stand rank correlation, for the reproduction check. Never used
 # as an input -- it is recomputed from the frame and compared against this.
 # embedding_sgd_sgd_lr1 chain, 2026-09-03 (rebuild_baseline was 0.14626474805407289)
-E5_REPORTED_WITHIN_STAND_RANK_CORR = 0.1626334134811194
+E5_REPORTED_WITHIN_STAND_RANK_CORR = 0.1630066654919241
 
 
 # ------------------------------------------------------------------ pure statistics

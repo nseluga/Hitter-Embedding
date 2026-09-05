@@ -1,0 +1,20 @@
+{
+  "arm": "embedding_sgd_sgd_lr1_final",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "eval_season": 2025,
+  "n_pitches": 705307,
+  "overall_observed": 0.4757701256332349,
+  "overall_predicted": 0.485509860033519,
+  "overall_relative_gap": 0.020471513185744496,
+  "three_ball_observed": 0.5864811477682285,
+  "three_ball_predicted": 0.6021557544294271,
+  "three_ball_relative_gap": 0.026726531144003918,
+  "under_three_ball_relative_gap": 0.01976981724937632,
+  "max_abs_count_relative_gap": 0.15540601258576556
+}

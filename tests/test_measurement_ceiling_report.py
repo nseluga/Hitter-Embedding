@@ -412,14 +412,14 @@ def test_the_exhibit_rank_cells_reproduce_the_superseded_tables(exhibit_tables):
     stratum table, so its rank numerators must be those files' committed values to the last
     digit -- a replacement that also moves the numbers is a new result wearing an old name.
     Reference values are the committed `differential_exhibit.csv` of the canonical build
-    (`embedding_sgd_sgd_lr1`, chain rerun 2026-09-03).
+    (`embedding_sgd_sgd_lr1`, cold-start prior on, chain rerun 2026-09-04).
     """
     exhibit, _ = exhibit_tables
     expected = {
-        ("pooled", "model_v1_model"): 0.1626334134811194,
+        ("pooled", "model_v1_model"): 0.1630066654919241,
         ("pooled", "eb_bivariate"): 0.1458264271109145,
         ("pooled", "gbm_full"): 0.1412976147889645,
-        ("low", "model_v1_model"): 0.1792224155194817,
+        ("low", "model_v1_model"): 0.1776424517621384,
         ("low", "eb_bivariate"): 0.1973766579886939,
         ("low", "gbm_full"): 0.2360040363546569,
         ("medium", "model_v1_model"): 0.1439236604176937,

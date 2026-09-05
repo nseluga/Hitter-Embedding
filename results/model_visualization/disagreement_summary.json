@@ -2,21 +2,21 @@
   "high": {
     "n_hitters": 171,
     "spearman": 0.6620659034727723,
-    "rank_gap_sd": 117.37999412291619
+    "rank_gap_sd": 117.35523619331309
   },
   "low": {
     "n_hitters": 207,
-    "spearman": 0.8037736158108034,
-    "rank_gap_sd": 72.29842941403774
+    "spearman": 0.8037940904679552,
+    "rank_gap_sd": 71.9069450230942
   },
   "medium": {
     "n_hitters": 167,
     "spearman": 0.7597447102352953,
-    "rank_gap_sd": 110.32738205682612
+    "rank_gap_sd": 111.04626251710314
   },
   "pooled": {
     "n_hitters": 545,
-    "spearman": 0.7463311163974762,
-    "rank_gap_sd": 100.56396120935992
+    "spearman": 0.7456891382503945,
+    "rank_gap_sd": 100.70355446732226
   }
 }

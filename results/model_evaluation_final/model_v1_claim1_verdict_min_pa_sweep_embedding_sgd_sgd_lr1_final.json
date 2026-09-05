@@ -1,0 +1,95 @@
+{
+  "decisive_stratum": "low",
+  "rmse_gate_vs_gbm_full": false,
+  "ordering_gate_vs_both": false,
+  "by_stratum": {
+    "all": {
+      "rmse_gate_vs_gbm_full": false,
+      "ordering_gate_vs_both": true,
+      "n_comparisons": 2
+    },
+    "high": {
+      "rmse_gate_vs_gbm_full": false,
+      "ordering_gate_vs_both": false,
+      "n_comparisons": 2
+    },
+    "low": {
+      "rmse_gate_vs_gbm_full": false,
+      "ordering_gate_vs_both": false,
+      "n_comparisons": 2
+    },
+    "medium": {
+      "rmse_gate_vs_gbm_full": true,
+      "ordering_gate_vs_both": true,
+      "n_comparisons": 2
+    }
+  },
+  "debiased_mean_excess_removed": 0.0038062722703675416,
+  "debiased_rmse_difference": {
+    "low": {
+      "rmse_difference": 0.002309570404774773,
+      "ci_low": -0.0008810022345305064,
+      "ci_high": 0.005388231513316867
+    },
+    "medium": {
+      "rmse_difference": -0.002183226677699719,
+      "ci_low": -0.00438400348412012,
+      "ci_high": -1.8806207593487118e-05
+    },
+    "high": {
+      "rmse_difference": 0.00033956797609925593,
+      "ci_low": -0.0010643714573551329,
+      "ci_high": 0.0017129965942805987
+    },
+    "all": {
+      "rmse_difference": 0.0002772925387300451,
+      "ci_low": -0.0008672314040099336,
+      "ci_high": 0.0014810388311421742
+    }
+  },
+  "rank_power": {
+    "low": {
+      "se_rank": 0.058777494577580275,
+      "z": 0.4442226768315261,
+      "batters_multiplier": 39.774637020506,
+      "batters_needed": 9785
+    },
+    "medium": {
+      "se_rank": 0.06365456001761284,
+      "z": 2.207800767665821,
+      "batters_multiplier": 1.610230003313226,
+      "batters_needed": 380
+    },
+    "high": {
+      "se_rank": 0.029822225816147484,
+      "z": 0.4346252789335081,
+      "batters_multiplier": 41.55063925407956,
+      "batters_needed": 13338
+    },
+    "all": {
+      "se_rank": 0.020861321194674657,
+      "z": 2.2835956272202558,
+      "batters_multiplier": 1.5051135624368734,
+      "batters_needed": 930
+    }
+  },
+  "trained_row_spread": {
+    "low": {
+      "sd_pooled": 0.02051592362075612,
+      "sd_trained": 0.020785279577169437,
+      "cold_start_share": 0.4270833333333333
+    },
+    "medium": {
+      "sd_pooled": 0.022787651303994235,
+      "sd_trained": 0.022787651303994235,
+      "cold_start_share": 0.0
+    },
+    "high": {
+      "sd_pooled": 0.027163030957290946,
+      "sd_trained": 0.027163030957290946,
+      "cold_start_share": 0.0
+    }
+  },
+  "eval_season": 2025,
+  "label": "min_pa_sweep_embedding_sgd_sgd_lr1_final"
+}

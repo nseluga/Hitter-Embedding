@@ -1,0 +1,41 @@
+{
+  "arm": "embedding_sgd_nodecay_sgd_lr1_nodecay",
+  "seeds": [
+    0
+  ],
+  "per_seed": {
+    "0": {
+      "slope": 2.084798365677738,
+      "slope_ci95": [
+        2.000935772068866,
+        2.162193819156795
+      ],
+      "r": 0.7749393792641247,
+      "r_ci95": [
+        0.751507847836198,
+        0.7964955626799827
+      ],
+      "spread": {
+        "low": 6.156779277225762,
+        "medium": 3.144239998096029,
+        "high": 2.92395117832152
+      },
+      "n": 1762
+    }
+  },
+  "slope_mean": 2.084798365677738,
+  "slope_passes": true,
+  "spread_passes": false,
+  "reference_bar": {
+    "n_arm": 1,
+    "n_incumbent": 5,
+    "arm_mean": 1.02618,
+    "incumbent_mean": 1.0257999999999998,
+    "margin": -0.000380000000000269,
+    "se": 0.00011410521460476173,
+    "margin_in_ses": -3.3302597196501065,
+    "passes": false,
+    "advisory": true
+  },
+  "passes": false
+}

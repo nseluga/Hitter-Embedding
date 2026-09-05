@@ -221,12 +221,12 @@
         "stratum": "low",
         "n_hitters": 380,
         "pa": 32781.0,
-        "mean_pred": 0.2814720509852958,
+        "mean_pred": 0.28057402451328645,
         "mean_obs": 0.2924853421189103,
-        "intercept": 0.08258660605805786,
-        "slope": 0.745717861955031,
-        "slope_se": 0.162354336382494,
-        "slope_z_vs_one": -1.5662171008842067
+        "intercept": 0.0931710502758001,
+        "slope": 0.7103804145407324,
+        "slope_se": 0.160528058025688,
+        "slope_z_vs_one": -1.804168000418482
       },
       {
         "stratum": "medium",
@@ -254,12 +254,12 @@
         "stratum": "all",
         "n_hitters": 1149,
         "pa": 180772.0,
-        "mean_pred": 0.3175308478765068,
+        "mean_pred": 0.31736800072219673,
         "mean_obs": 0.3105544221450225,
-        "intercept": 0.06172511299585843,
-        "slope": 0.7836382222804956,
-        "slope_se": 0.05714798814348945,
-        "slope_z_vs_one": -3.7859911564385187
+        "intercept": 0.06486506970079357,
+        "slope": 0.7741465802637413,
+        "slope_se": 0.056888661124039924,
+        "slope_z_vs_one": -3.9700955387895025
       }
     ]
   },
@@ -276,10 +276,10 @@
         "share_between_stand": 0.10898348003462617
       },
       "delta_pred": {
-        "variance": 0.0005443014246975796,
-        "between_stand": 0.00044040745871973426,
-        "within_stand": 0.00010389396597784532,
-        "share_between_stand": 0.8091242071696394
+        "variance": 0.0005439690760448168,
+        "between_stand": 0.0004404973021926114,
+        "within_stand": 0.00010347177385220535,
+        "share_between_stand": 0.8097837204192827
       },
       "delta_route_a": {
         "variance": 0.00041470161321681924,
@@ -287,7 +287,7 @@
         "within_stand": -5.421010862427522e-20,
         "share_between_stand": 1.0000000000000002
       },
-      "post_hoc_within_stand_rank_corr": 0.16263341348111943,
+      "post_hoc_within_stand_rank_corr": 0.16300666549192414,
       "post_hoc_note": "added after the pre-registered E.5 table was read; descriptive, not evidence for the adoption rule"
     },
     "n_hitters": 545,
@@ -298,11 +298,11 @@
         "n_hitters": 207,
         "weight": 17065.802434879926,
         "mean_obs": -0.007778445745174412,
-        "mean_pred": -0.0061279901027587414,
+        "mean_pred": -0.006173131660450915,
         "sd_obs": 0.08445338428764011,
-        "sd_pred": 0.02302835861019408,
-        "rmse": 0.07847088880044462,
-        "rank_corr_weighted": 0.38250041370259974
+        "sd_pred": 0.022993628471296358,
+        "rmse": 0.07847219461500624,
+        "rank_corr_weighted": 0.3809097752962864
       },
       {
         "stratum": "medium",
@@ -334,11 +334,11 @@
         "n_hitters": 545,
         "weight": 67773.76666231274,
         "mean_obs": 0.0003507638002582054,
-        "mean_pred": -0.003195184982275707,
+        "mean_pred": -0.003206551871606439,
         "sd_obs": 0.06871001072015405,
-        "sd_pred": 0.02336060498622555,
-        "rmse": 0.06350031732906725,
-        "rank_corr_weighted": 0.3583377960040298
+        "sd_pred": 0.02335347194306951,
+        "rmse": 0.06350072366150891,
+        "rank_corr_weighted": 0.35900214104625133
       },
       {
         "stratum": "low",
@@ -394,15 +394,15 @@
         "stratum": "low",
         "n_hitters": 207,
         "n_boot": 2000,
-        "rmse_difference": -0.0008941727314853154,
-        "rmse_ci_low": -0.001802523233852649,
-        "rmse_ci_high": 6.550205339488527e-05,
+        "rmse_difference": -0.0008928669169236958,
+        "rmse_ci_low": -0.001800920576540224,
+        "rmse_ci_high": 6.622525123545849e-05,
         "rmse_favours_model": false,
-        "rank_difference": 0.02861394084351182,
-        "rank_ci_low": -0.05434318084586223,
-        "rank_ci_high": 0.10342579411880005,
+        "rank_difference": 0.02702330243719847,
+        "rank_ci_low": -0.05524990125875285,
+        "rank_ci_high": 0.10177422448373764,
         "rank_favours_model": false,
-        "rank_se": 0.040144275668580864
+        "rank_se": 0.04022835929668773
       },
       {
         "stratum": "medium",
@@ -436,15 +436,15 @@
         "stratum": "all",
         "n_hitters": 545,
         "n_boot": 2000,
-        "rmse_difference": -0.0013574904384951042,
-        "rmse_ci_low": -0.0024065711537699618,
-        "rmse_ci_high": -0.0003628526550007868,
+        "rmse_difference": -0.0013570841060534383,
+        "rmse_ci_low": -0.00240418165213324,
+        "rmse_ci_high": -0.000363828538867644,
         "rmse_favours_model": true,
-        "rank_difference": 0.011862383596443926,
-        "rank_ci_low": -0.04372987512960666,
-        "rank_ci_high": 0.06456295758219317,
+        "rank_difference": 0.01252672863866544,
+        "rank_ci_low": -0.043221885344519914,
+        "rank_ci_high": 0.06557451486513921,
         "rank_favours_model": false,
-        "rank_se": 0.02735225320467096
+        "rank_se": 0.027306472042436875
       }
     ]
   }

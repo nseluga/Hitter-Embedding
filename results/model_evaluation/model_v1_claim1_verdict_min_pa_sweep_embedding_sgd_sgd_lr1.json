@@ -24,35 +24,35 @@
       "n_comparisons": 2
     }
   },
-  "debiased_mean_excess_removed": 0.006976425731484337,
+  "debiased_mean_excess_removed": 0.00681357857717427,
   "debiased_rmse_difference": {
     "low": {
-      "rmse_difference": 0.001338937781098809,
-      "ci_low": -0.002422546654974498,
-      "ci_high": 0.004774634717726054
+      "rmse_difference": 0.0016774169814130144,
+      "ci_low": -0.002241718277667818,
+      "ci_high": 0.005246172041882514
     },
     "medium": {
-      "rmse_difference": -0.0028331006049110846,
-      "ci_low": -0.005370191687500578,
-      "ci_high": -0.0003434811962139374
+      "rmse_difference": -0.00283417067907029,
+      "ci_low": -0.005357123680490543,
+      "ci_high": -0.00036884181153202947
     },
     "high": {
-      "rmse_difference": 0.00038592491064252943,
-      "ci_low": -0.0010066112863290574,
-      "ci_high": 0.0017373457180276583
+      "rmse_difference": 0.0004077315700831072,
+      "ci_low": -0.0009773852439608486,
+      "ci_high": 0.0017537715478520486
     },
     "all": {
-      "rmse_difference": -7.876764991412294e-05,
-      "ci_low": -0.0013246706824508695,
-      "ci_high": 0.0011849239216600608
+      "rmse_difference": 1.2713950729104084e-05,
+      "ci_low": -0.0012534564642483644,
+      "ci_high": 0.0012929205679673113
     }
   },
   "rank_power": {
     "low": {
-      "se_rank": 0.07663138414966124,
-      "z": 1.2114355518853621,
-      "batters_multiplier": 5.34819267890329,
-      "batters_needed": 1278
+      "se_rank": 0.07857656172316614,
+      "z": 1.0192096521452967,
+      "batters_multiplier": 7.555802872264311,
+      "batters_needed": 1806
     },
     "medium": {
       "se_rank": 0.05150874835637699,
@@ -67,15 +67,15 @@
       "batters_needed": 1112
     },
     "all": {
-      "se_rank": 0.01847284783063624,
-      "z": 0.27299434324152444,
-      "batters_multiplier": 105.31746049789757,
-      "batters_needed": 63612
+      "se_rank": 0.018527006273569006,
+      "z": 0.21823929733199787,
+      "batters_multiplier": 164.79414034445142,
+      "batters_needed": 99536
     }
   },
   "trained_row_spread": {
     "low": {
-      "sd_pooled": 0.01770673577888154,
+      "sd_pooled": 0.01823447022712044,
       "sd_trained": 0.019330711518262288,
       "cold_start_share": 0.4263157894736842
     },

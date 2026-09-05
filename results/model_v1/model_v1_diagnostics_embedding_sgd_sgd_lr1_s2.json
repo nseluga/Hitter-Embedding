@@ -669,7 +669,7 @@
   "measured_share": 0.9231315908347482,
   "unmeasured_points": 0.1414959852073254,
   "contact_split_source": "trained_head",
-  "cold_start_prior": false,
+  "cold_start_prior": true,
   "composition": {
     "league_pred_woba": 0.27188110709126484,
     "league_pred_woba_uniform": 0.26880483064797844,
@@ -851,5 +851,6 @@
   "seeds": [
     2
   ],
+  "cold_start_prior_stats": "results/model_visualization/hitter_stats.csv",
   "eval_season": 2024
 }

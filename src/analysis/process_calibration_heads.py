@@ -192,7 +192,10 @@ def main():
     args = parser.parse_args()
 
     claim1_eval.assert_not_test_season(args.eval_season, final_run=args.final_run)
-    provenance.assert_quality_bins(args.data_dir)
+    # the reference is the build the arm's own checkpoint trained on: the canonical arm's is
+    # phase_d5, the refit arm's is phase_d5_final (its quantile edges shift with the extra season)
+    provenance.assert_quality_bins(args.data_dir, provenance.trained_data_dir(
+        Path(args.checkpoint_dir) / f"{args.arm}_s{args.seeds[0]}.pt"))
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 

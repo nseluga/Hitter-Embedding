@@ -197,15 +197,22 @@ fi
 # which cannot run on 2025, so a "2025" ceiling report would be a 2024 ceiling under a 2025 name.
 if stage 6 "2025 chain"; then
   mkdir -p $FINAL_EVAL_OUT $FINAL_PROC_OUT
-  # eval runs FIRST: bip_value and price_draw both read the report it writes
-  for M in model_evaluation_eval model_evaluation_swing model_evaluation_take_mass \
-           model_evaluation_probe_coverage; do
+  # eval runs FIRST: bip_value and price_draw both read the report it writes.
+  # resample (arm-independent, refit on the final train window) writes the audit price_draw
+  # reads; take_mass reads price_draw's summary -- so: eval, swing, resample, price_draw, take_mass.
+  for M in model_evaluation_eval model_evaluation_swing; do
     run $P -m src.analysis.$M --arm $FINAL_ARM --data-dir $FINAL_DATA \
         --eval-season $FINAL_SEASON --final-run --out-dir $FINAL_EVAL_OUT >> $LOG/06_chain.log 2>&1
   done
-  run $P -m src.analysis.model_evaluation_bip_value --arm $FINAL_ARM --data-dir $FINAL_DATA \
-      --eval-season $FINAL_SEASON --final-run --out-dir $FINAL_EVAL_OUT \
-      --e-report $FINAL_EVAL_OUT/model_evaluation_report.json >> $LOG/06_chain.log 2>&1
+  for M in model_evaluation_resample model_evaluation_price_draw; do
+    run $P -m src.analysis.$M --data-dir $FINAL_DATA \
+        --eval-season $FINAL_SEASON --final-run --out-dir $FINAL_EVAL_OUT >> $LOG/06_chain.log 2>&1
+  done
+  # probe_coverage (E.14) is out: it asserts against --final-run by design (retrospective only).
+  run $P -m src.analysis.model_evaluation_take_mass --arm $FINAL_ARM --data-dir $FINAL_DATA \
+      --eval-season $FINAL_SEASON --final-run --out-dir $FINAL_EVAL_OUT >> $LOG/06_chain.log 2>&1
+  # bip_value (E.13) is out: it hard-pins the 2024 E.3 constants (E3_VALUE_*_BIP) and asserts
+  # the report matches them, so it cannot run on a 2025 report without a code change (Tier 2).
   for M in process_calibration_heads process_calibration_process; do
     run $P -m src.analysis.$M --arm $FINAL_ARM --data-dir $FINAL_DATA \
         --eval-season $FINAL_SEASON --final-run --out-dir $FINAL_PROC_OUT >> $LOG/06_chain.log 2>&1
@@ -215,8 +222,6 @@ if stage 6 "2025 chain"; then
       --eval-season $FINAL_SEASON --final-run --out-dir $FINAL_PROC_OUT \
       --model-predictions results/model_v1/model_v1_predictions_${FINAL_ARM}.csv \
       >> $LOG/06_chain.log 2>&1
-  run $P -m src.analysis.model_evaluation_price_draw --data-dir $FINAL_DATA \
-      --eval-season $FINAL_SEASON --final-run --out-dir $FINAL_EVAL_OUT >> $LOG/06_chain.log 2>&1
   run $P -m src.analysis.model_evaluation_min_pa_sweep \
       --predictions results/model_v1/model_v1_predictions_${FINAL_ARM}.csv \
       --label min_pa_sweep_${FINAL_ARM} --out-dir $FINAL_EVAL_OUT \

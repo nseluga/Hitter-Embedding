@@ -65,6 +65,13 @@ def stamp(data_dir, arm=None, seeds=None, eval_season=None, **extra):
     return block
 
 
+def trained_data_dir(checkpoint_path):
+    """The build a checkpoint was trained on, from the args train.py saves alongside it."""
+    import torch
+    ck = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    return str(ck["args"]["data_dir"])
+
+
 def assert_quality_bins(data_dir, reference_data_dir=CANONICAL_DATA_DIR):
     """
     Blocks a module that reads ev/la/spray from a build whose bin edges are not the trained
@@ -81,6 +88,6 @@ def assert_quality_bins(data_dir, reference_data_dir=CANONICAL_DATA_DIR):
     for name in QUALITY_ARRAYS:
         assert edges[name] == reference[name], (
             f"{data_dir} has different {name} bin edges than {reference_data_dir}, which is "
-            f"the build D.10 trained on. Scoring a quality head against these indices would "
+            f"the build the arm trained on. Scoring a quality head against these indices would "
             f"mis-bin every batted ball. Pass --data-dir {reference_data_dir}.")
     return edges

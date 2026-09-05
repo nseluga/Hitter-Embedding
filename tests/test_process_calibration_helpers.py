@@ -96,3 +96,10 @@ def test_pool_predictions_falls_back_to_an_even_split_without_prior_exposure():
         "pred_woba": [0.400, 0.200]})
     pooled = pool_predictions(predictions, weights, 2024)
     assert pooled["pred_woba"].iloc[0] == pytest.approx(0.300)
+
+
+def test_trained_data_dir_reads_the_checkpoint_args(tmp_path):
+    import torch
+    path = tmp_path / "arm_s0.pt"
+    torch.save({"model": {}, "args": {"data_dir": "data/processed/phase_d5_final"}}, path)
+    assert provenance.trained_data_dir(path) == "data/processed/phase_d5_final"

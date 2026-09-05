@@ -1,0 +1,116 @@
+{
+  "provenance": {
+    "data_dir": "data/processed/phase_d5_final",
+    "manifest_sha256": "292f5212f5888d7d8e8fd5507a0729c1fadd60247b5c20fa67b426a9c195eca0",
+    "train_seasons": [
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024
+    ],
+    "quality_bin_edges_present": [
+      "ev",
+      "la",
+      "spray"
+    ],
+    "arm": "embedding_sgd_sgd_lr1_final",
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "eval_season": 2025,
+    "git_revision": "4866994da44d43dddfbd4fe139e97f5a48d7f1d3"
+  },
+  "reference_seasons": [
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+  ],
+  "reference_conditioning": [
+    "balls",
+    "strikes",
+    "stand",
+    "p_throws"
+  ],
+  "laplace_alpha": 1.0,
+  "cold_start_share_of_eval_pitches": 0.08249882675203847,
+  "by_head": {
+    "swing": {
+      "head": "swing",
+      "n_rows": 705307,
+      "model_nll": 0.41934646739296555,
+      "cold_start_nll": 0.4510799791606557,
+      "frequency_reference_nll": 0.659704314735301,
+      "identity_gain": 0.031733511767690126,
+      "gain_vs_reference": 0.24035784734233545,
+      "identity_share_of_gain": 0.13202611072852932
+    },
+    "contact": {
+      "head": "contact",
+      "n_rows": 335564,
+      "model_nll": 0.41400041625399125,
+      "cold_start_nll": 0.4406752340833294,
+      "frequency_reference_nll": 0.5403729628884266,
+      "identity_gain": 0.02667481782933817,
+      "gain_vs_reference": 0.12637254663443537,
+      "identity_share_of_gain": 0.2110807967374579
+    },
+    "split": {
+      "head": "split",
+      "n_rows": 257505,
+      "model_nll": 0.7571391970681088,
+      "cold_start_nll": 0.7702043544995507,
+      "frequency_reference_nll": 0.8022124434340526,
+      "identity_gain": 0.013065157431441876,
+      "gain_vs_reference": 0.045073246365943787,
+      "identity_share_of_gain": 0.2898650193812883
+    },
+    "ev": {
+      "head": "ev",
+      "n_rows": 122693,
+      "model_nll": 2.9817346315132625,
+      "cold_start_nll": 3.0893052635959526,
+      "frequency_reference_nll": 3.1700208794573985,
+      "identity_gain": 0.10757063208269013,
+      "gain_vs_reference": 0.18828624794413606,
+      "identity_share_of_gain": 0.571314332603866
+    },
+    "la": {
+      "head": "la",
+      "n_rows": 122691,
+      "model_nll": 2.91072504313675,
+      "cold_start_nll": 2.9488985410928823,
+      "frequency_reference_nll": 3.1644363441544163,
+      "identity_gain": 0.03817349795613234,
+      "gain_vs_reference": 0.25371130101766637,
+      "identity_share_of_gain": 0.1504603768259982
+    },
+    "spray": {
+      "head": "spray",
+      "n_rows": 121468,
+      "model_nll": 2.912059844790252,
+      "cold_start_nll": 2.949654119272927,
+      "frequency_reference_nll": 3.1726398286680917,
+      "identity_gain": 0.03759427448267472,
+      "gain_vs_reference": 0.26057998387783954,
+      "identity_share_of_gain": 0.14427153583791377
+    }
+  },
+  "note": "diagnostic only -- the frequency reference is not a claim-1 ladder rung and neither reference re-opens the pre-registered gates"
+}

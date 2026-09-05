@@ -10,8 +10,8 @@
     "reliability": 0.5506336844794527,
     "ceiling_rank_corr": 0.7420469557106563,
     "degenerate": false,
-    "achieved_rank_corr_weighted": 0.46611786061178606,
-    "fraction_of_ceiling": 0.6281514357341259,
+    "achieved_rank_corr_weighted": 0.46592648616025795,
+    "fraction_of_ceiling": 0.6278935350041851,
     "post_selection_descriptive": true
   },
   "committed_pooled_population": {
@@ -24,8 +24,8 @@
       "reliability": 0.5486782192032441,
       "ceiling_rank_corr": 0.7407281682258642,
       "degenerate": false,
-      "achieved_rank_corr_weighted": 0.4701440438677948,
-      "fraction_of_ceiling": 0.6347052320068347,
+      "achieved_rank_corr_weighted": 0.4699341767020699,
+      "fraction_of_ceiling": 0.6344219065242523,
       "post_selection_descriptive": true
     }
   },
