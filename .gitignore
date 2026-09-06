@@ -1,16 +1,9 @@
 # Claude Code — keep CLAUDE.md tracked, ignore everything else Claude-specific
 .claude/
-docs/research-manifest.md
 README.md
-docs/README.md
 
-# Internal working docs — phase-lettered specs, decision log, lab notebook (not public cleanup)
-docs/pass-*-spec.md
-docs/phase-*-spec.md
-docs/phase-*-review.md
-docs/decision-log.md
-docs/lab-notebook.md
-docs/post-v*.md
+# All docs are local-only now
+docs/
 .DS_Store
 
 # Python environment
