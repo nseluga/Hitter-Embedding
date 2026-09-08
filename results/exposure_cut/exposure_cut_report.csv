@@ -1,0 +1,2 @@
+pearson_r_pitches_vs_pa,pitches_per_pa_ratio,n_matched_hitters,n_star_pa,n_star_pitches_vc,n_star_pitches_vc_ci_low,n_star_pitches_vc_ci_high,n_star_pitches_predicted_from_pa_ratio,eval_season,n_hitters_eval,n_above_low_cut,n_low,n_medium,n_high
+0.9976142658982323,3.893164785683221,2138,226,106.71673990470276,96.51689975641723,119.03203498998973,879.855241564408,2025,652,374,278,192,182

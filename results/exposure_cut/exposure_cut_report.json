@@ -1,0 +1,22 @@
+{
+  "max_train_season": 2023,
+  "eval_season": 2025,
+  "pearson_r_pitches_vs_pa": 0.9976142658982323,
+  "pitches_per_pa_ratio": 3.893164785683221,
+  "n_matched_hitters": 2138,
+  "n_star_pa": 226,
+  "n_star_pitches_vc": 106.71673990470276,
+  "n_star_pitches_vc_ci_low": 96.51689975641723,
+  "n_star_pitches_vc_ci_high": 119.03203498998973,
+  "n_star_pitches_predicted_from_pa_ratio": 879.855241564408,
+  "population": {
+    "eval_season": 2025,
+    "n_hitters": 652,
+    "n_above_low_cut": 374,
+    "by_stratum": {
+      "low": 278,
+      "medium": 192,
+      "high": 182
+    }
+  }
+}
