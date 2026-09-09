@@ -1,0 +1,17 @@
+{
+  "reference_arm": "embedding_sgd_sgd_lr1",
+  "comparison_arm": "embedding_sgd_sgd_lr1_final",
+  "n_shared_batters": 1762,
+  "median_cosine_real": 0.9674235616496589,
+  "median_cosine_null": 0.08578211921656416,
+  "null_floor_mean": 0.08462596219194471,
+  "n_null_permutations": 20,
+  "median_diff": 0.8816414424330947,
+  "diff_ci95": [
+    0.8708064235968827,
+    0.8922800316538857
+  ],
+  "n_boot": 1000,
+  "boot_seed": 7,
+  "separates_from_null": true
+}
