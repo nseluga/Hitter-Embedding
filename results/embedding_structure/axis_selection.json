@@ -1,0 +1,63 @@
+{
+  "n_hitters": 1493,
+  "population": "career pitcher-batters excluded (load_hitters default)",
+  "whiff_brk_minus_fb_source": "derived in embedding_alt_views.whiff_brk_minus_fb_by_batter from pitch_events_labeled.parquet; NOT a hitter_stats column",
+  "criteria": "an axis must be weakly correlated with power (ev_p90), exposure (log_prior_pa) and handedness (stand), or it re-plots one of them",
+  "candidates": {
+    "swing_rate": {
+      "coverage": "1493/1493",
+      "r_with_ev_p90": -0.0029,
+      "r_with_log_prior_pa": -0.097,
+      "r_with_stand_is_R": 0.0962
+    },
+    "whiff_brk_minus_fb": {
+      "coverage": "1493/1493",
+      "r_with_ev_p90": -0.0471,
+      "r_with_log_prior_pa": -0.1479,
+      "r_with_stand_is_R": 0.0358
+    },
+    "whiff_rate": {
+      "coverage": "1493/1493",
+      "r_with_ev_p90": 0.2238,
+      "r_with_log_prior_pa": -0.2491,
+      "r_with_stand_is_R": 0.0961
+    },
+    "zone_swing_rate": {
+      "coverage": "1493/1493",
+      "r_with_ev_p90": 0.1233,
+      "r_with_log_prior_pa": 0.0046,
+      "r_with_stand_is_R": -0.0015
+    },
+    "contact_rate": {
+      "coverage": "1493/1493",
+      "r_with_ev_p90": -0.2238,
+      "r_with_log_prior_pa": 0.2491,
+      "r_with_stand_is_R": -0.0961
+    },
+    "ev_p90": {
+      "coverage": "1493/1493",
+      "r_with_ev_p90": 1.0,
+      "r_with_log_prior_pa": 0.4883,
+      "r_with_stand_is_R": 0.0696
+    },
+    "woba_level": {
+      "coverage": "1493/1493",
+      "r_with_ev_p90": 0.4814,
+      "r_with_log_prior_pa": 0.5689,
+      "r_with_stand_is_R": -0.0135
+    },
+    "ev_mean": {
+      "coverage": "1493/1493",
+      "r_with_ev_p90": 0.7034,
+      "r_with_log_prior_pa": 0.3001,
+      "r_with_stand_is_R": 0.0019
+    },
+    "la_mean": {
+      "coverage": "1493/1493",
+      "r_with_ev_p90": 0.079,
+      "r_with_log_prior_pa": 0.1429,
+      "r_with_stand_is_R": -0.0299
+    }
+  },
+  "r_swing_rate_vs_whiff_brk_minus_fb": -0.1581
+}

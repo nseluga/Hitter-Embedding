@@ -20,6 +20,7 @@ mirroring how the live ensemble already averages conditionals before composition
 
 import argparse
 import json
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +28,7 @@ import pandas as pd
 import torch
 
 from src.analysis import claim1_eval
+from src.analysis.embedding_structure import career_pitcher_batter_ids
 from src.analysis.model_visualization_anchors import query_quantities, sample_pool
 from src.analysis.model_visualization_platoon import restore_embedding, set_row0
 from src.data import eval_targets
@@ -49,22 +51,51 @@ N_BOOT = 500
 BOOT_SEED = 0
 
 
-def low_stratum_means(embeddings, stats):
+@lru_cache(maxsize=4)
+def _pitcher_ids(eval_targets_path):
+    """Cached: the career rule reads a parquet, and the bootstrap calls this 500x/seed."""
+    return frozenset(career_pitcher_batter_ids(eval_targets_path))
+
+
+def low_stratum_population(stats, eval_targets_path=DEFAULT_EVAL_TARGETS,
+                           exclude_pitcher_batters=True):
+    """
+    The LOW-stratum rows the cold-start prior averages over.
+
+    Career pitcher-batters are excluded by default. They are not a rounding error in this
+    population: 198 of the 969 low-stratum hitters (20.4%, and 26.5% of the right-handed
+    ones) are pitchers, all carrying `stratum == "low"` because a pitcher's token at-bats
+    are exactly what "little prior exposure" measures. Averaging them in drags the prior
+    vector away from a real debut hitter -- measured cosine 0.72-0.75 (R) and 0.92-0.94
+    (L) against the clean mean, with the contaminated vector the longer of the two.
+
+    `exclude_pitcher_batters=False` reproduces the contaminated population, and exists so
+    the two priors can be scored against one panel; it is not a supported analysis mode.
+    """
+    low = stats[stats["stratum"] == "low"]
+    if exclude_pitcher_batters:
+        low = low[~low["batter"].isin(_pitcher_ids(eval_targets_path))]
+    return low
+
+
+def low_stratum_means(embeddings, stats, eval_targets_path=DEFAULT_EVAL_TARGETS,
+                      exclude_pitcher_batters=True):
     """
     Mean embedding row over LOW-stratum hitters, within each stand.
     `embeddings`: (n_hitters+1, D) for ONE model/seed -- never averaged across seeds,
     only the resulting query output is (see module docstring). `stats`: the
     hitter_stats.csv frame (batter, embedding_index, stand, stratum, ...).
-    Returns {"L": vec, "R": vec}.
+    Population per `low_stratum_population`. Returns {"L": vec, "R": vec}.
     """
-    low = stats[stats["stratum"] == "low"]
+    low = low_stratum_population(stats, eval_targets_path, exclude_pitcher_batters)
     return {stand: embeddings[group["embedding_index"].to_numpy()].mean(axis=0)
             for stand, group in low.groupby("stand")}
 
 
-def _low_stratum_rows(stats, stand):
-    match = (stats["stratum"] == "low") & (stats["stand"] == stand)
-    return stats.loc[match, "embedding_index"].to_numpy()
+def _low_stratum_rows(stats, stand, eval_targets_path=DEFAULT_EVAL_TARGETS,
+                      exclude_pitcher_batters=True):
+    low = low_stratum_population(stats, eval_targets_path, exclude_pitcher_batters)
+    return low.loc[low["stand"] == stand, "embedding_index"].to_numpy()
 
 
 def level_query_at(model, kernel, points, n_bins, context_pool, vector):

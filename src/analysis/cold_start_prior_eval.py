@@ -54,17 +54,20 @@ DEFAULT_EVAL_TARGETS = "data/processed/eval_targets_pa.parquet"
 EVAL_SEASON = 2024
 
 
-def ensemble_cold_start_prior(models, stats):
+def ensemble_cold_start_prior(models, stats, exclude_pitcher_batters=True):
     """
     `query.predict`'s `cold_start_prior` takes ONE vector for the whole ensemble; each
     seed's embedding space is its own, so the low-stratum mean is computed inside each
     seed's own space (`low_stratum_means`) and the per-seed vectors are element-averaged
-    into the single vector the API needs.
+    into the single vector the API needs. The averaged population excludes career
+    pitcher-batters (`low_stratum_population`); `exclude_pitcher_batters=False` restores
+    the contaminated one for delta measurement only.
     # ponytail: cross-seed vector averaging isn't principled (unlike averaging query
     # OUTPUTS, which is how the ensemble already composes) -- upgrade to a per-model
     # cold_start_prior (list matching len(models)) in query.predict if that matters.
     """
-    means = [low_stratum_means(model.embedding.weight.detach().numpy(), stats)
+    means = [low_stratum_means(model.embedding.weight.detach().numpy(), stats,
+                               exclude_pitcher_batters=exclude_pitcher_batters)
              for model in models]
     return {stand: np.mean([m[stand] for m in means], axis=0) for stand in ("L", "R")}
 

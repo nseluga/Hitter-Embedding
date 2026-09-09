@@ -1,0 +1,108 @@
+{
+  "stats_csv": "results/model_visualization/hitter_stats.csv",
+  "population": {
+    "L": {
+      "n_contaminated": 415,
+      "n_clean": 364
+    },
+    "R": {
+      "n_contaminated": 554,
+      "n_clean": 407
+    },
+    "total": {
+      "n_contaminated": 969,
+      "n_clean": 771
+    }
+  },
+  "per_seed": [
+    {
+      "seed": 0,
+      "L": {
+        "cosine": 0.9329997897148132,
+        "delta_norm_over_clean_norm": 0.4570525884628296,
+        "norm_contaminated": 0.24911192059516907,
+        "norm_clean": 0.20507176220417023
+      },
+      "R": {
+        "cosine": 0.7416495680809021,
+        "delta_norm_over_clean_norm": 0.9959474205970764,
+        "norm_contaminated": 0.29427921772003174,
+        "norm_clean": 0.1991298347711563
+      }
+    },
+    {
+      "seed": 1,
+      "L": {
+        "cosine": 0.9236646890640259,
+        "delta_norm_over_clean_norm": 0.4782548248767853,
+        "norm_contaminated": 0.2409776896238327,
+        "norm_clean": 0.19918499886989594
+      },
+      "R": {
+        "cosine": 0.7249036431312561,
+        "delta_norm_over_clean_norm": 0.9897269010543823,
+        "norm_contaminated": 0.2897176742553711,
+        "norm_clean": 0.20181389153003693
+      }
+    },
+    {
+      "seed": 2,
+      "L": {
+        "cosine": 0.9332117438316345,
+        "delta_norm_over_clean_norm": 0.47301214933395386,
+        "norm_contaminated": 0.24559396505355835,
+        "norm_clean": 0.19792836904525757
+      },
+      "R": {
+        "cosine": 0.7181692719459534,
+        "delta_norm_over_clean_norm": 1.0994398593902588,
+        "norm_contaminated": 0.28240805864334106,
+        "norm_clean": 0.17995044589042664
+      }
+    },
+    {
+      "seed": 3,
+      "L": {
+        "cosine": 0.940965473651886,
+        "delta_norm_over_clean_norm": 0.408297598361969,
+        "norm_contaminated": 0.2655932903289795,
+        "norm_clean": 0.22714465856552124
+      },
+      "R": {
+        "cosine": 0.7163515090942383,
+        "delta_norm_over_clean_norm": 1.1727321147918701,
+        "norm_contaminated": 0.28312933444976807,
+        "norm_clean": 0.1706695258617401
+      }
+    },
+    {
+      "seed": 4,
+      "L": {
+        "cosine": 0.9390327334403992,
+        "delta_norm_over_clean_norm": 0.4547432065010071,
+        "norm_contaminated": 0.25101369619369507,
+        "norm_clean": 0.20297934114933014
+      },
+      "R": {
+        "cosine": 0.7458728551864624,
+        "delta_norm_over_clean_norm": 1.0323997735977173,
+        "norm_contaminated": 0.2923104763031006,
+        "norm_clean": 0.19047321379184723
+      }
+    }
+  ],
+  "summary": {
+    "L": {
+      "cosine_min": 0.9236646890640259,
+      "cosine_max": 0.940965473651886,
+      "delta_ratio_min": 0.408297598361969,
+      "delta_ratio_max": 0.4782548248767853
+    },
+    "R": {
+      "cosine_min": 0.7163515090942383,
+      "cosine_max": 0.7458728551864624,
+      "delta_ratio_min": 0.9897269010543823,
+      "delta_ratio_max": 1.1727321147918701
+    }
+  }
+}

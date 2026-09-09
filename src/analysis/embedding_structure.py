@@ -41,6 +41,8 @@ from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import cosine_distances
 
 from src.analysis.model_visualization_arm_agreement import seed_mean_embedding
+from src.data.eval_targets import (  # the pitcher rule has ONE definition, in the data layer
+    CAREER_TWO_WAY_MIN_PA, PITCHER_MIN_BATTERS_FACED, career_pitcher_batters)
 
 DEFAULT_OUT_DIR = "results/embedding_structure"
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
@@ -49,8 +51,6 @@ HITTER_STATS_PATH = "results/model_visualization/hitter_stats.csv"
 NAMES_PATH = "data/processed/hitter_names.csv"
 EVAL_TARGETS_PA_PATH = "data/processed/eval_targets_pa.parquet"
 
-PITCHER_MIN_BATTERS_FACED = 50
-CAREER_TWO_WAY_MIN_PA = 200
 
 SEEDS = (0, 1, 2, 3, 4)
 BOOT_SEED = 7
@@ -81,49 +81,31 @@ def norm_exposure_correlation(norms, log_prior_pa):
 # --------------------------------------------------------------------- (0) career pitcher-batter filter
 
 def career_pitcher_batter_ids(eval_targets_pa_path=EVAL_TARGETS_PA_PATH,
-                               min_batters_faced=PITCHER_MIN_BATTERS_FACED,
-                               career_two_way_min_pa=CAREER_TWO_WAY_MIN_PA):
+                              min_batters_faced=PITCHER_MIN_BATTERS_FACED,
+                              career_two_way_min_pa=CAREER_TWO_WAY_MIN_PA):
     """
-    Batter ids that are real pitchers contaminating the hitter population,
-    at the CAREER level rather than the pipeline's per-season level.
+    Batter ids that are real pitchers contaminating the hitter population, at the CAREER
+    level rather than the pipeline's per-season level. Thin reader over
+    `eval_targets.career_pitcher_batters`, which owns the rule.
 
-    src/data/eval_targets.py's `primarily_pitchers` uses TWO_WAY_MIN_PA=50:
-    any batter with >=50 PA in a SINGLE SEASON is exempted from pitcher
-    exclusion as a "two-way player". That threshold was tuned for Ohtani but
-    also exempts any full-time NL starter in a season before the universal
-    DH (2022) — those pitchers routinely batted 50-97 PA/season, which is
-    exactly the season they'd otherwise be flagged as a pitcher in. Madison
-    Bumgarner has 306 PA surviving the pipeline's drop_pitcher_batters.
+    Why a career rule is needed at all: `eval_targets.primarily_pitchers` uses
+    TWO_WAY_MIN_PA=50, a PER-SEASON gate, so any batter with >=50 PA in one season is
+    exempted as "two-way". That was tuned for Ohtani, but a pre-2022-DH NL starter batted
+    50-97 PA/season and is therefore exempted in exactly the seasons he bats most --
+    Bumgarner has 306 PA surviving `drop_pitcher_batters`. It also returns (season,
+    batter) pairs, and the embedding population has one row per hitter with no season, so
+    a season-keyed set cannot filter it.
 
-    This is an ANALYSIS-layer patch, not a pipeline fix (a pipeline fix
-    would change training tensors and require retraining, out of scope
-    here). It swaps the per-season 50-PA gate for a CAREER-max gate at 200
-    PA in a single season: a batter is "real two-way" only if some season
-    of theirs looks like a real hitter's workload, not a pitcher's token
-    at-bats.
+    This is an ANALYSIS-layer filter. It does not touch the training tensors; the pipeline
+    still builds with the season rule, and switching it over is the deferred retrain.
 
-    Why 200 and not the pipeline's 50: sweeping the threshold across
-    50/100/150/200/300 against this project's hitter_stats.csv population,
-    100/150/200/300 all produce the IDENTICAL result (1927 career pitcher-
-    batter ids, 198 of them present in hitter_stats.csv). 50 is the only
-    value in that region that leaks NL starters back in as "two-way"
-    (1813 ids instead of 1927 -- 114 pitchers wrongly exempted). 200 sits
-    comfortably in the middle of the stable region: well above a starting
-    pitcher's max single-season batting workload, well below a real DH's.
-
-    Returns a set of batter ids. Excludes Trout/Judge/Ohtani (verified: none
-    of them ever appear as a `pitcher` with >=50 batters faced in a season).
+    Yields 1927 ids, 198 of them present in hitter_stats.csv (all `low` stratum).
+    Trout, Judge and Ohtani are all retained -- none appears as a `pitcher` facing >=50
+    batters in any season.
     """
-    pa = pd.read_parquet(eval_targets_pa_path)
-    plate_appearances = pa[["batter", "game_pk", "at_bat_number", "season"]].drop_duplicates()
-    batted = plate_appearances.groupby(["season", "batter"]).size()
-    faced = (pa[["pitcher", "game_pk", "at_bat_number", "season"]].drop_duplicates()
-             .groupby(["season", "pitcher"]).size())
-
-    real_pitchers = {p for (season, p), n in faced.items() if n >= min_batters_faced}
-    career_two_way = {b for b, n in batted.groupby(level=1).max().items()
-                       if n >= career_two_way_min_pa}
-    return real_pitchers - career_two_way
+    return career_pitcher_batters(pd.read_parquet(eval_targets_pa_path),
+                                  min_batters_faced=min_batters_faced,
+                                  career_two_way_min_pa=career_two_way_min_pa)
 
 
 # --------------------------------------------------------------------- (2) cluster in 32-D

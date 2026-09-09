@@ -870,7 +870,8 @@ def league_composition(models, tensors, manifest, frame, tables, shares, eval_se
             "cells": cells}
 
 
-def default_cold_start_prior(models, stats_csv=DEFAULT_HITTER_STATS):
+def default_cold_start_prior(models, stats_csv=DEFAULT_HITTER_STATS,
+                             exclude_pitcher_batters=True):
     """
     The cold-start prior every composition run now uses by default (2026-09-04 decision
     log). Row 0 is `padding_idx` and its embedding is whatever the initialiser left there,
@@ -881,7 +882,8 @@ def default_cold_start_prior(models, stats_csv=DEFAULT_HITTER_STATS):
     """
     from src.analysis.cold_start_prior_eval import ensemble_cold_start_prior
     stats = pd.read_csv(stats_csv)
-    return ensemble_cold_start_prior(models, stats)
+    return ensemble_cold_start_prior(models, stats,
+                                     exclude_pitcher_batters=exclude_pitcher_batters)
 
 
 def build_parser():

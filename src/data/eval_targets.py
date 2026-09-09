@@ -221,6 +221,40 @@ def drop_pitcher_batters(pa_df):
     return pa_df[mask]
 
 
+# The career-level counterpart of `primarily_pitchers`, added 2026-09-09. TWO_WAY_MIN_PA
+# is a PER-SEASON gate: any batter with >=50 PA in a season is exempted as "two-way". A
+# pre-2022-DH NL starter batted 50-97 PA/season, so he is exempted in exactly the seasons
+# he bats most (Bumgarner: 306 PA survive `drop_pitcher_batters`). A career-max gate at
+# 200 PA cannot be reached by a pitcher's token at-bats and is reached by every real
+# hitter. Sweeping it: 100/150/200/300 give an identical id set; 50 is the only value in
+# the region that leaks NL starters back in.
+CAREER_TWO_WAY_MIN_PA = 200
+
+
+def career_pitcher_batters(pa_df, min_batters_faced=PITCHER_MIN_BATTERS_FACED,
+                           career_two_way_min_pa=CAREER_TWO_WAY_MIN_PA):
+    """
+    Batter ids that are real pitchers, judged over a whole career rather than per season.
+
+    Returns a set of BATTER IDS (not (season, batter) pairs like `primarily_pitchers`),
+    because the embedding population is one row per hitter with no season attached and a
+    season-keyed rule cannot filter it.
+
+    `primarily_pitchers` stays as-is: it is what the frozen `phase_d5` tensors were built
+    with, and re-pointing it would desync the build from the code describing it. Switching
+    the pipeline over is the deferred retrain.
+    """
+    plate_appearances = pa_df[["batter", "game_pk", "at_bat_number", "season"]].drop_duplicates()
+    batted = plate_appearances.groupby(["season", "batter"]).size()
+    faced = (pa_df[["pitcher", "game_pk", "at_bat_number", "season"]].drop_duplicates()
+             .groupby(["season", "pitcher"]).size())
+
+    real_pitchers = {p for (_season, p), n in faced.items() if n >= min_batters_faced}
+    career_two_way = {b for b, n in batted.groupby(level=1).max().items()
+                      if n >= career_two_way_min_pa}
+    return real_pitchers - career_two_way
+
+
 def aggregate(pa_df, by=("batter", "season", "p_throws")):
     """
     Roll the PA-level table up to wOBA per group (default: hitter x season x pitcher hand).

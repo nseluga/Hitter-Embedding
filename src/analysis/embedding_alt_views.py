@@ -2,26 +2,34 @@
 Alternative visualizations of the hitter embedding, built because the honest
 2-D PCA/t-SNE map (see embedding_structure.py) is a featureless blob: no
 discrete clusters (silhouette maxes 0.0617 at k=2), and PCA retains only 18%
-of 32-D variance. Local structure IS real (10-NN purity beats permutation
-null for handedness/power/contact), so these three views try to show that
-structure honestly instead of forcing it into an unsupervised 2-D scatter.
+of 32-D variance.
 
-Rough drafts: real data, correct method, readable output, not polished.
+Plots the two winning axes from the frozen axis screen
+(results/embedding_structure/axis_screen.py — read that file for the exact
+metric definitions, min-sample rules, and seed; not re-run here):
 
-1. Cluster-ordered cosine similarity heatmap on a high-exposure subset.
-2. Archetype coordinates: cosine similarity to a small set of reproducibly
-   chosen "pole" hitters.
-3. Supervised projections (LDA, PLS) with held-out separation/R^2, contrasted
-   with PCA's unsupervised 18%.
+- ev_p90: per-hitter 90th-percentile exit velocity (power).
+- whiff_brk_minus_fb: per-hitter (whiff rate on breaking balls) minus
+  (whiff rate on fastballs).
 
-Every figure also reports whether known pitcher-batters (Colon, Bumgarner,
-Greinke — identified by name match against data/processed/hitter_names.csv,
-not a systematic pitcher classifier) sit at an extreme and could be driving
-the visible pattern.
+For each axis: tercile the continuous metric, fit LDA on the frozen
+embedding to predict the tercile, and use the discriminant score as the
+plotted coordinate. Held-out 5-fold CV accuracy is the honest number, since
+a supervised projection always looks good on the data it was fit to.
 
-Reads frozen checkpoints and existing results only. No retraining.
+1. Supervised LDA projection — two panels sharing the SAME (ev_p90-LDA,
+   whiff-LDA) axes, colored by each metric's own tercile.
+2. Density-binned heatmap over the same plane, colored by mean ev_p90 (mph)
+   per bin — a reading aid, not new evidence of structure.
 
-Run: python -m src.analysis.embedding_alt_views --out-dir results/embedding_structure
+whiff_brk_minus_fb is only defined for hitters with >= 20 breaking AND >= 20
+fastball swings (axis_screen.MIN_SWINGS_PER_SLICE); both figures plot that
+valid subset so the two panels/figures show identical points.
+
+Reads frozen checkpoints and existing results only. No retraining, no 2025
+data.
+
+Run: PYTHONPATH=. .venv/bin/python -m src.analysis.embedding_alt_views --out-dir results/embedding_structure
 """
 
 import argparse
@@ -33,156 +41,86 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.cluster.hierarchy import linkage, leaves_list
-from scipy.spatial.distance import squareform
-from sklearn.cross_decomposition import PLSRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.model_selection import KFold
 
 from src.analysis.embedding_structure import (
     DEFAULT_ARM, DEFAULT_CHECKPOINT_DIR, DEFAULT_OUT_DIR, HITTER_STATS_PATH,
     NAMES_PATH, BOOT_SEED, load_hitters, tercile_labels, unit_normalize,
 )
+from results.embedding_structure import axis_screen
 
-PITCHER_BATTER_NAMES = ("Bartolo Col", "Madison Bumgarner", "Zack Greinke")
-HEATMAP_SUBSET_N = 300
-STAND_COLORS = {"L": "#4c8dff", "R": "#e0574a", "S": "#7a7a7a"}
+PITCH_EVENTS_PATH = "data/processed/pitch_events_labeled.parquet"
+# Same fastball/breaking Statcast pitch_type groups as axis_screen.py /
+# baseline_ladder_gbm.PITCH_GROUPS (copied, not imported, to avoid
+# baseline_ladder_gbm's xgboost import; axis_screen.py copies it for the
+# same reason).
+PITCH_GROUPS = {
+    "fastball": {"FF", "SI", "FC", "FA"},
+    "breaking": {"SL", "CU", "KC", "ST", "SV", "CS", "KN", "SC", "EP"},
+}
+AXIS_LABELS = {
+    "ev_p90": "power (90th-pct exit velocity), LDA score",
+    "whiff_brk_minus_fb": "breaking-ball minus fastball whiff, LDA score",
+    "contact_rate": "contact rate, LDA score",
+    "selectivity": "selectivity (zone swing minus chase), LDA score",
+}
+METRIC_TITLES = {
+    "ev_p90": "Power tercile (ev_p90)",
+    "contact_rate": "Contact tercile (contact_rate)",
+    "selectivity": "Selectivity tercile (zone swing minus chase)",
+    "whiff_brk_minus_fb": "Breaking-minus-fastball whiff tercile",
+}
+METRIC_UNITS = {
+    "ev_p90": "mph",
+    "contact_rate": "rate (0-1)",
+    "selectivity": "rate (0-1)",
+    "whiff_brk_minus_fb": "rate (0-1)",
+}
+N_HEATMAP_BINS = 12
+MIN_HITTERS_PER_BIN = 5
 
-
-def flag_pitcher_batters(hitters, names_by_batter):
-    """True for hitters whose name matches a known pitcher-batter. Matched
-    by name substring against the three players named in the task brief
-    (Colon has an accent in the source file, hence the truncated match) —
-    not a general pitcher classifier."""
-    names = hitters["batter"].map(names_by_batter).fillna("")
-    return names.str.contains("|".join(PITCHER_BATTER_NAMES), case=False, regex=True).values
-
-
-# --------------------------------------------------------------------- (1) similarity heatmap
-
-def similarity_heatmap_subset(normalized, hitters, n=HEATMAP_SUBSET_N):
-    """Top-n hitters by log_prior_pa (exposure) — the readable-pixel-count
-    rule stated in the brief. Returns (sub_normalized, sub_hitters)."""
-    order = hitters["log_prior_pa"].to_numpy().argsort()[::-1][:n]
-    order = np.sort(order)
-    return normalized[order], hitters.iloc[order].reset_index(drop=True)
-
-
-def cluster_order(sub_normalized, method="average"):
-    """Leaf order from hierarchical clustering on cosine distance."""
-    sim = cosine_similarity(sub_normalized)
-    dist = np.clip(1 - sim, 0, None)
-    np.fill_diagonal(dist, 0.0)
-    condensed = squareform(dist, checks=False)
-    z = linkage(condensed, method=method)
-    return leaves_list(z), sim
-
-
-def fig_similarity_heatmap(sim, order, sub_hitters, path):
-    ordered_sim = sim[np.ix_(order, order)]
-    ordered_hitters = sub_hitters.iloc[order].reset_index(drop=True)
-    power_tercile = tercile_labels(sub_hitters["ev_p90"]).values[order]
-
-    fig = plt.figure(figsize=(9.5, 9))
-    grid = fig.add_gridspec(2, 2, width_ratios=[40, 1], height_ratios=[1, 40],
-                             wspace=0.03, hspace=0.03)
-    ax_top = fig.add_subplot(grid[0, 0])
-    ax_main = fig.add_subplot(grid[1, 0])
-    ax_right = fig.add_subplot(grid[1, 1])
-
-    im = ax_main.imshow(ordered_sim, cmap="viridis", vmin=-0.2, vmax=1.0, aspect="auto")
-    ax_main.set_xlabel("hitters, hierarchical-cluster order")
-    ax_main.set_ylabel("hitters, same order")
-    fig.colorbar(im, ax=ax_main, fraction=0.03, pad=0.06, label="cosine similarity")
-
-    import matplotlib.colors as mcolors
-    stand_rgb = np.array([mcolors.to_rgb(STAND_COLORS.get(s, "#000000"))
-                           for s in ordered_hitters["stand"]])
-    ax_top.imshow(stand_rgb[np.newaxis, :, :], aspect="auto")
-    ax_top.set_xticks([]); ax_top.set_yticks([])
-    ax_top.set_title(f"cluster-ordered cosine similarity, top {len(sub_hitters)} hitters by exposure "
-                      f"(top strip: stand; right strip: power tercile)", fontsize=10)
-
-    power_palette = ["#d9d9d9", "#8fb3ff", "#1f4fd1"]
-    power_rgb = np.array([mcolors.to_rgb(power_palette[t]) for t in power_tercile])
-    ax_right.imshow(power_rgb[:, np.newaxis, :], aspect="auto")
-    ax_right.set_xticks([]); ax_right.set_yticks([])
-
-    fig.savefig(path, dpi=140)
-    plt.close(fig)
+# id -> (x_metric, y_metric, expected_x_cv, expected_y_cv). ev_p90 is the x
+# axis throughout (frozen "power" axis); y varies. All three metrics besides
+# ev_p90 come straight from axis_screen (either a MARGINAL_COLUMNS hitters
+# column or a build_contrasts() entry) -- reused exactly, not re-derived.
+AXIS_PAIRINGS = [
+    ("power_contact", "ev_p90", "contact_rate", 0.800, 0.765),
+    ("power_discipline", "ev_p90", "selectivity", 0.800, 0.650),
+    ("power_spin", "ev_p90", "whiff_brk_minus_fb", 0.800, 0.633),
+]
+CV_TOLERANCE = 0.02
 
 
-# --------------------------------------------------------------------- (2) archetype coordinates
+# --------------------------------------------------------------------- pitch-level feature
+# NOTE: axis_screen.build_contrasts imports this function from this module
+# (lazily, inside the function) — keep name/signature stable.
 
-def pick_poles(hitters, min_stratum=("medium", "high")):
-    """
-    Reproducible pole-selection rule, restricted to hitters in the medium/high
-    exposure strata (single-extreme values in the low stratum are noisy —
-    see the exposure-confound note in embedding_structure.py):
-      - power pole:   max ev_p90
-      - contact pole: max contact_rate
-      - platoon pole: min |obs_platoon_diff| (most even vs both hands, i.e.
-        least platoon-split — "opposite-hand-friendly" read as hitters who
-        don't lean on facing one hand)
-    Returns dict of pole name -> row index into the full `hitters` frame.
-    """
-    reliable = hitters[hitters["stratum"].isin(min_stratum)]
-    poles = {
-        "power": reliable["ev_p90"].idxmax(),
-        "contact": reliable["contact_rate"].idxmax(),
-        "platoon_neutral": reliable["obs_platoon_diff"].abs().idxmin(),
-    }
-    return poles
-
-
-def archetype_coordinates(normalized, poles):
-    """Cosine similarity of every hitter to each pole vector, plus the
-    pairwise pole-to-pole cosine (tells us if the poles are actually
-    distinct directions or nearly the same vector)."""
-    pole_idx = list(poles.values())
-    pole_vecs = normalized[pole_idx]
-    sims = cosine_similarity(normalized, pole_vecs)  # (n_hitters, n_poles)
-    pole_pole = cosine_similarity(pole_vecs)
-    return sims, pole_pole
+def whiff_brk_minus_fb_by_batter(pitch_events_path=PITCH_EVENTS_PATH):
+    """Per-batter (whiff rate on breaking pitches) minus (whiff rate on
+    fastballs), computed from swing-level pitch_events_labeled.parquet.
+    whiff = swing & not contact. Descriptive-only feature (not a training
+    target), so none of the leakage-window discipline in baseline_ladder_gbm
+    applies. Returns a Series indexed by batter."""
+    df = pd.read_parquet(pitch_events_path, columns=["batter", "pitch_type", "swing", "contact"])
+    df = df[df["swing"] == 1]
+    group = pd.Series(np.nan, index=df.index, dtype=object)
+    for name, codes in PITCH_GROUPS.items():
+        group[df["pitch_type"].isin(codes)] = name
+    df = df.assign(pitch_group=group)
+    df = df[df["pitch_group"].isin(PITCH_GROUPS)]
+    df = df.assign(whiff=(df["contact"] == 0).astype(float))
+    rates = df.groupby(["batter", "pitch_group"])["whiff"].mean().unstack("pitch_group")
+    return (rates["breaking"] - rates["fastball"]).rename("whiff_brk_minus_fb")
 
 
-def ternary_coords(sims):
-    """Rescale each pole's similarity column to [0,1] across hitters, then
-    normalize each row to sum to 1 for barycentric (ternary) coordinates.
-    This is a display convenience, not a claim that similarities are already
-    a simplex — cosine similarity can be negative and doesn't sum to 1."""
-    rescaled = (sims - sims.min(axis=0)) / (sims.max(axis=0) - sims.min(axis=0) + 1e-12)
-    return rescaled / rescaled.sum(axis=1, keepdims=True)
-
-
-def fig_archetype_coords(bary, hitters, pole_names, path):
-    # equilateral-triangle corners for a 3-pole ternary plot
-    corners = np.array([[0, 0], [1, 0], [0.5, np.sqrt(3) / 2]])
-    xy = bary @ corners
-
-    fig, ax = plt.subplots(figsize=(7.5, 7))
-    scatter = ax.scatter(xy[:, 0], xy[:, 1], c=hitters["woba_level"], cmap="viridis", s=10, alpha=0.65)
-    fig.colorbar(scatter, ax=ax, fraction=0.04, pad=0.03, label="woba_level")
-    for corner, name in zip(corners, pole_names):
-        ax.scatter(*corner, marker="*", s=400, color="red", edgecolor="black", zorder=5)
-        ax.annotate(name, corner, textcoords="offset points", xytext=(0, 10),
-                    ha="center", fontsize=10, weight="bold")
-    tri = plt.Polygon(corners, fill=False, edgecolor="gray", linewidth=1)
-    ax.add_patch(tri)
-    ax.set_title("Archetype coordinates: cosine similarity to 3 poles, ternary layout")
-    ax.set_xticks([]); ax.set_yticks([]); ax.set_aspect("equal")
-    fig.tight_layout()
-    fig.savefig(path, dpi=140)
-    plt.close(fig)
-
-
-# --------------------------------------------------------------------- (3) supervised projections
+# --------------------------------------------------------------------- supervised LDA axis
 
 def lda_axis_cv(normalized, labels, seed=BOOT_SEED, n_splits=5):
     """K-fold held-out classification accuracy of an LDA fit per-fold (fit
     on train, scored on held-out test) — the honest number, since a
-    supervised projection always looks good on the data it was fit to."""
+    supervised projection always looks good on the data it was fit to.
+    Returns (model fit on ALL rows, cv_mean, cv_std)."""
     labels = np.asarray(labels)
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
     accs = []
@@ -194,160 +132,308 @@ def lda_axis_cv(normalized, labels, seed=BOOT_SEED, n_splits=5):
     return full_model, float(np.mean(accs)), float(np.std(accs))
 
 
-def pls_cv(normalized, target, n_components=2, seed=BOOT_SEED, n_splits=5):
-    """K-fold held-out R^2 for a 2-component PLS regression."""
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
-    r2s = []
-    for train_idx, test_idx in kf.split(normalized):
-        model = PLSRegression(n_components=n_components)
-        model.fit(normalized[train_idx], target[train_idx])
-        r2s.append(model.score(normalized[test_idx], target[test_idx]))
-    full_model = PLSRegression(n_components=n_components).fit(normalized, target)
-    return full_model, float(np.mean(r2s)), float(np.std(r2s))
+def _padded_lim(values, pad_frac=0.05):
+    lo, hi = float(np.min(values)), float(np.max(values))
+    pad = pad_frac * (hi - lo)
+    return lo - pad, hi + pad
 
 
-def fig_supervised_projection(normalized, hitters, path, seed=BOOT_SEED):
-    stand_mask = hitters["stand"].isin(["L", "R"]).values
-    stand_labels = hitters["stand"].values[stand_mask]
-    power_tercile = tercile_labels(hitters["ev_p90"]).values
+# --------------------------------------------------------------------- (1) supervised projection
 
-    stand_model, stand_cv_mean, stand_cv_std = lda_axis_cv(normalized[stand_mask], stand_labels, seed)
-    power_model, power_cv_mean, power_cv_std = lda_axis_cv(normalized, power_tercile, seed)
-    pls_model, pls_cv_mean, pls_cv_std = pls_cv(
-        normalized, hitters["woba_level"].to_numpy(), n_components=2, seed=seed)
+def fig_supervised_projection(x, y, ev_tercile, whiff_tercile, ev_cv_mean, whiff_cv_mean, path):
+    """Two panels, IDENTICAL (x, y) axes — x = ev_p90 LDA score, y =
+    whiff_brk_minus_fb LDA score. Left colored by ev_p90 tercile, right by
+    whiff_brk_minus_fb tercile."""
+    xlim, ylim = _padded_lim(x), _padded_lim(y)
+    palette = {0: "#d9d9d9", 1: "#8fb3ff", 2: "#1f4fd1"}
+    tercile_names = ["low", "mid", "high"]
 
-    stand_axis = stand_model.transform(normalized)[:, 0]
-    power_axis = power_model.transform(normalized)[:, 0]
-    pls_coords = pls_model.transform(normalized)
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5.5), sharex=True, sharey=True)
+    panels = [
+        (axes[0], np.asarray(ev_tercile), ev_cv_mean, "Power tercile (ev_p90)"),
+        (axes[1], np.asarray(whiff_tercile), whiff_cv_mean, "Breaking-minus-fastball whiff tercile"),
+    ]
+    for ax, tercile, cv_mean, title in panels:
+        for t, color in palette.items():
+            mask = tercile == t
+            ax.scatter(x[mask], y[mask], s=8, alpha=0.6, color=color, label=tercile_names[t])
+        ax.set_xlabel(AXIS_LABELS["ev_p90"])
+        ax.set_ylabel(AXIS_LABELS["whiff_brk_minus_fb"])
+        ax.set_title(f"{title}\nheld-out CV accuracy {cv_mean:.3f} (chance = 0.333)")
+        ax.legend(fontsize=8, title="tercile")
+        ax.set_xlim(xlim); ax.set_ylim(ylim)
 
-    fig, axes = plt.subplots(1, 3, figsize=(18.5, 5.5))
-
-    # Same LDA(hand) x LDA(power) points, shown twice with different color
-    # schemes: colored by handedness (axes[0]) and by power tercile
-    # (axes[1]). Coloring only by handedness hides the power result (0.813
-    # held-out) inside a mixed blob, since power tercile isn't the coloring
-    # variable there -- the whole point of this figure is contrasting an
-    # axis that separates (power) against one that doesn't (handedness), so
-    # both need their own readable coloring.
-    ax = axes[0]
-    for stand, color in STAND_COLORS.items():
-        mask = hitters["stand"] == stand
-        ax.scatter(stand_axis[mask.values], power_axis[mask.values], s=8, alpha=0.6, color=color, label=stand)
-    ax.set_xlabel(f"LDA(handedness) axis  [5-fold held-out acc {stand_cv_mean:.3f}]")
-    ax.set_ylabel(f"LDA(power tercile) axis 1  [5-fold held-out acc {power_cv_mean:.3f}]")
-    ax.set_title("Colored by handedness (near-chance axis)")
-    ax.legend(fontsize=8, title="stand")
-
-    power_palette = {0: "#d9d9d9", 1: "#8fb3ff", 2: "#1f4fd1"}
-    power_tercile_labels = pd.Series(power_tercile, index=hitters.index)
-    ax = axes[1]
-    for tercile, color in power_palette.items():
-        mask = (power_tercile_labels == tercile).values
-        ax.scatter(stand_axis[mask], power_axis[mask], s=8, alpha=0.6, color=color,
-                   label=["low", "mid", "high"][tercile])
-    ax.set_xlabel(f"LDA(handedness) axis  [5-fold held-out acc {stand_cv_mean:.3f}]")
-    ax.set_ylabel(f"LDA(power tercile) axis 1  [5-fold held-out acc {power_cv_mean:.3f}]")
-    ax.set_title("Colored by power tercile (separating axis)")
-    ax.legend(fontsize=8, title="power tercile")
-
-    ax = axes[2]
-    scatter = ax.scatter(pls_coords[:, 0], pls_coords[:, 1], c=hitters["woba_level"], cmap="viridis", s=8, alpha=0.65)
-    fig.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04, label="woba_level")
-    ax.set_xlabel("PLS component 1")
-    ax.set_ylabel("PLS component 2")
-    ax.set_title(f"PLS(woba_level), 2 comp  [5-fold held-out R^2 {pls_cv_mean:.3f}]")
-
-    fig.suptitle("Supervised projections beat PCA's 18% by construction — held-out numbers are the honest check")
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
 
-    return {
-        "lda_handedness_cv_accuracy_mean": stand_cv_mean, "lda_handedness_cv_accuracy_std": stand_cv_std,
-        "lda_power_tercile_cv_accuracy_mean": power_cv_mean, "lda_power_tercile_cv_accuracy_std": power_cv_std,
-        "pls_woba_level_cv_r2_mean": pls_cv_mean, "pls_woba_level_cv_r2_std": pls_cv_std,
-        "n_splits": 5, "seed": seed,
+
+# --------------------------------------------------------------------- (2) density-binned heatmap
+
+def fig_similarity_heatmap(x, y, ev_values, path, n_bins=N_HEATMAP_BINS,
+                            min_per_bin=MIN_HITTERS_PER_BIN):
+    """2-D binned gradient over the SAME (ev_p90-LDA, whiff-LDA) plane as
+    Figure 1 — no individual dots. Each cell colored by the mean ev_p90
+    (mph) of hitters in it; cells with fewer than `min_per_bin` hitters are
+    greyed out."""
+    x, y, ev_values = np.asarray(x), np.asarray(y), np.asarray(ev_values)
+    x_edges = np.linspace(x.min(), x.max(), n_bins + 1)
+    y_edges = np.linspace(y.min(), y.max(), n_bins + 1)
+    xi = np.clip(np.digitize(x, x_edges) - 1, 0, n_bins - 1)
+    yi = np.clip(np.digitize(y, y_edges) - 1, 0, n_bins - 1)
+
+    sums = np.zeros((n_bins, n_bins))
+    counts = np.zeros((n_bins, n_bins))
+    np.add.at(sums, (yi, xi), ev_values)
+    np.add.at(counts, (yi, xi), 1)
+    means = np.divide(sums, counts, out=np.full_like(sums, np.nan), where=counts > 0)
+    means_masked = np.ma.masked_where(counts < min_per_bin, means)
+
+    cmap = plt.get_cmap("viridis").with_extremes(bad="#d0d0d0")
+
+    fig, ax = plt.subplots(figsize=(7.5, 6.5))
+    im = ax.imshow(means_masked, origin="lower", cmap=cmap, aspect="auto",
+                    extent=[x_edges[0], x_edges[-1], y_edges[0], y_edges[-1]])
+    fig.colorbar(im, ax=ax, label="mean 90th-pct exit velocity (mph)")
+    ax.set_xlabel(AXIS_LABELS["ev_p90"])
+    ax.set_ylabel(AXIS_LABELS["whiff_brk_minus_fb"])
+    ax.set_title(
+        f"Same plane as Figure 1, density-binned ({n_bins}x{n_bins}) —\n"
+        f"grey cells have fewer than {min_per_bin} hitters (n={len(x)} hitters)",
+        fontsize=10)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+
+
+# --------------------------------------------------------------------- (3) generalized axis pairing
+
+def metric_series_by_batter(name, hitters, contrasts):
+    """Per-batter Series for any axis_screen candidate: a hitters column for
+    a MARGINAL_COLUMNS metric, or a build_contrasts() entry otherwise. Same
+    lookup axis_screen.score_candidate uses -- reused, not re-derived."""
+    if name in axis_screen.MARGINAL_COLUMNS:
+        return hitters.set_index("batter")[name].dropna()
+    return contrasts[name]
+
+
+def run_pairing(pairing_id, x_metric, y_metric, expected_x_cv, expected_y_cv,
+                 normalized, hitters, contrasts):
+    """Full protocol for one (x_metric, y_metric) axis pair: frozen
+    embedding, tercile labels, LDA, 5-fold shuffled CV (seed=BOOT_SEED),
+    season <=2024 (inherited from hitters/contrasts). Raises if either CV
+    accuracy drifts from its expected value by more than CV_TOLERANCE."""
+    x_series = metric_series_by_batter(x_metric, hitters, contrasts)
+    y_series = metric_series_by_batter(y_metric, hitters, contrasts)
+
+    x_valid = hitters["batter"].isin(x_series.index).to_numpy()
+    y_valid = hitters["batter"].isin(y_series.index).to_numpy()
+
+    # LDA + CV for each axis is fit on ITS OWN valid population (same as the
+    # original ev_p90-vs-whiff code: x fit on the full ev_p90 population,
+    # y fit on the smaller whiff-valid population) -- not the intersection.
+    x_vals_full = hitters.loc[x_valid, "batter"].map(x_series).to_numpy()
+    x_tercile_full = tercile_labels(pd.Series(x_vals_full)).values
+    x_model, x_cv_mean, x_cv_std = lda_axis_cv(normalized[x_valid], x_tercile_full, BOOT_SEED)
+
+    y_vals_full = hitters.loc[y_valid, "batter"].map(y_series).to_numpy()
+    y_tercile_full = tercile_labels(pd.Series(y_vals_full)).values
+    y_model, y_cv_mean, y_cv_std = lda_axis_cv(normalized[y_valid], y_tercile_full, BOOT_SEED)
+
+    if abs(x_cv_mean - expected_x_cv) > CV_TOLERANCE or abs(y_cv_mean - expected_y_cv) > CV_TOLERANCE:
+        raise RuntimeError(
+            f"[{pairing_id}] CV accuracy drifted from expectation: "
+            f"{x_metric}={x_cv_mean:.4f} (expected {expected_x_cv}), "
+            f"{y_metric}={y_cv_mean:.4f} (expected {expected_y_cv}). Stopping.")
+
+    # Plot the population where BOTH axes are defined, and where woba_level
+    # (the gradient panel's color) is also available.
+    woba_series = metric_series_by_batter("woba_level", hitters, contrasts)
+    plot_mask = x_valid & y_valid & hitters["batter"].isin(woba_series.index).to_numpy()
+
+    x_plot_vals = hitters.loc[plot_mask, "batter"].map(x_series).to_numpy()
+    y_plot_vals = hitters.loc[plot_mask, "batter"].map(y_series).to_numpy()
+    x_tercile_plot = tercile_labels(pd.Series(x_plot_vals)).values
+    y_tercile_plot = tercile_labels(pd.Series(y_plot_vals)).values
+    woba_plot_vals = hitters.loc[plot_mask, "batter"].map(woba_series).to_numpy()
+
+    x_proj = x_model.transform(normalized[plot_mask])[:, 0]
+    y_proj = y_model.transform(normalized[plot_mask])[:, 0]
+
+    x_span = (float(x_plot_vals.min()), float(x_plot_vals.max()))
+    y_span = (float(y_plot_vals.min()), float(y_plot_vals.max()))
+
+    definitions = axis_screen.DEFINITIONS
+    summary = {
+        "x": {
+            "metric": x_metric, "definition": definitions[x_metric][0],
+            "label": AXIS_LABELS[x_metric], "lda_cv_accuracy_mean": x_cv_mean,
+            "lda_cv_accuracy_std": x_cv_std, "n": int(x_valid.sum()),
+            "real_unit_span_plotted": x_span, "unit": METRIC_UNITS[x_metric],
+        },
+        "y": {
+            "metric": y_metric, "definition": definitions[y_metric][0],
+            "label": AXIS_LABELS[y_metric], "lda_cv_accuracy_mean": y_cv_mean,
+            "lda_cv_accuracy_std": y_cv_std, "n": int(y_valid.sum()),
+            "real_unit_span_plotted": y_span, "unit": METRIC_UNITS[y_metric],
+        },
+        "n_hitters_plotted": int(plot_mask.sum()),
     }
+    return summary, x_proj, y_proj, x_tercile_plot, y_tercile_plot, woba_plot_vals, x_span, y_span
 
 
-# --------------------------------------------------------------------- pitcher-batter contamination check
+def run_all_pairings(normalized, hitters, out_dir):
+    """Renders each AXIS_PAIRINGS entry as ONE 3-panel PNG (projection x
+    tercile, projection y tercile, woba gradient) sharing identical x/y axes
+    across all three panels."""
+    figures_dir = Path(out_dir) / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    contrasts = axis_screen.build_contrasts(hitters)
 
-def pitcher_batter_report(hitters, pitcher_mask, names_by_batter, **positions):
-    """For each named coordinate array (e.g. heatmap_order=..., pls_comp1=...),
-    report where the pitcher-batters land relative to the full distribution
-    (percentile rank), so an extreme position is visible instead of silent."""
-    matched_batters = hitters.loc[pitcher_mask, "batter"].tolist()
-    report = {"n_pitcher_batters_found": int(pitcher_mask.sum()),
-              "pitcher_batter_names": [names_by_batter.get(b, str(b)) for b in matched_batters]}
-    for name, values in positions.items():
-        values = np.asarray(values, dtype=float)
-        ranks = pd.Series(values).rank(pct=True).to_numpy()
-        report[name] = {"pitcher_batter_percentiles": ranks[pitcher_mask].round(3).tolist()}
-    return report
+    pairings_summary = {}
+    for pairing_id, x_metric, y_metric, exp_x, exp_y in AXIS_PAIRINGS:
+        (summary, x_proj, y_proj, x_tercile_plot, y_tercile_plot, woba_plot_vals,
+         x_span, y_span) = run_pairing(
+            pairing_id, x_metric, y_metric, exp_x, exp_y, normalized, hitters,
+            contrasts)
+
+        xlim, ylim = _padded_lim(x_proj), _padded_lim(y_proj)
+        palette = {0: "#d9d9d9", 1: "#8fb3ff", 2: "#1f4fd1"}
+        tercile_names = ["low", "mid", "high"]
+
+        fig, axes = plt.subplots(1, 3, figsize=(19.5, 5.8))
+        panels = [
+            (axes[0], np.asarray(x_tercile_plot), summary["x"]["lda_cv_accuracy_mean"], METRIC_TITLES[x_metric]),
+            (axes[1], np.asarray(y_tercile_plot), summary["y"]["lda_cv_accuracy_mean"], METRIC_TITLES[y_metric]),
+        ]
+        for ax, tercile, cv_mean, title in panels:
+            for t, color in palette.items():
+                mask = tercile == t
+                ax.scatter(x_proj[mask], y_proj[mask], s=8, alpha=0.6, color=color, label=tercile_names[t])
+            ax.set_xlabel(AXIS_LABELS[x_metric])
+            ax.set_ylabel(AXIS_LABELS[y_metric])
+            ax.set_title(f"{title}\nheld-out CV accuracy {cv_mean:.3f} (chance = 0.333)")
+            ax.legend(fontsize=8, title="tercile")
+            ax.set_xlim(xlim); ax.set_ylim(ylim)
+
+        ax3 = axes[2]
+        x_edges = np.linspace(x_proj.min(), x_proj.max(), N_HEATMAP_BINS + 1)
+        y_edges = np.linspace(y_proj.min(), y_proj.max(), N_HEATMAP_BINS + 1)
+        xi = np.clip(np.digitize(x_proj, x_edges) - 1, 0, N_HEATMAP_BINS - 1)
+        yi = np.clip(np.digitize(y_proj, y_edges) - 1, 0, N_HEATMAP_BINS - 1)
+        sums = np.zeros((N_HEATMAP_BINS, N_HEATMAP_BINS))
+        counts = np.zeros((N_HEATMAP_BINS, N_HEATMAP_BINS))
+        np.add.at(sums, (yi, xi), woba_plot_vals)
+        np.add.at(counts, (yi, xi), 1)
+        means = np.divide(sums, counts, out=np.full_like(sums, np.nan), where=counts > 0)
+        means_masked = np.ma.masked_where(counts < MIN_HITTERS_PER_BIN, means)
+        cmap = plt.get_cmap("viridis").with_extremes(bad="#d0d0d0")
+        im = ax3.imshow(means_masked, origin="lower", cmap=cmap, aspect="auto",
+                         extent=[x_edges[0], x_edges[-1], y_edges[0], y_edges[-1]])
+        fig.colorbar(im, ax=ax3, label="mean observed wOBA (woba_level)")
+        ax3.set_xlabel(AXIS_LABELS[x_metric])
+        ax3.set_ylabel(AXIS_LABELS[y_metric])
+        x_unit, y_unit = METRIC_UNITS[x_metric], METRIC_UNITS[y_metric]
+        ax3.set_title(
+            f"Density-binned wOBA gradient ({N_HEATMAP_BINS}x{N_HEATMAP_BINS}) -- "
+            f"grey <{MIN_HITTERS_PER_BIN} hitters\n"
+            f"x spans {x_metric} in [{x_span[0]:.2f}, {x_span[1]:.2f}] {x_unit}; "
+            f"y spans {y_metric} in [{y_span[0]:.2f}, {y_span[1]:.2f}] {y_unit}",
+            fontsize=8.5)
+        ax3.set_xlim(xlim); ax3.set_ylim(ylim)
+
+        fig.suptitle(f"{pairing_id}: {x_metric} vs {y_metric} (n={summary['n_hitters_plotted']})", fontsize=11)
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        fig.savefig(figures_dir / f"fig_axes_{pairing_id}.png", dpi=130)
+        plt.close(fig)
+
+        pairings_summary[pairing_id] = summary
+
+    return pairings_summary
 
 
 # --------------------------------------------------------------------- pipeline
 
-def run(checkpoint_dir, arm, hitter_stats_path, names_path, out_dir):
+def run(checkpoint_dir, arm, hitter_stats_path, names_path, out_dir,
+        pitch_events_path=PITCH_EVENTS_PATH):
     out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir = out_dir / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
 
-    embedding, hitters, names_by_batter = load_hitters(
+    embedding, hitters, _ = load_hitters(
         checkpoint_dir, arm, hitter_stats_path, names_path)
-    normalized, _ = unit_normalize(embedding)
-    pitcher_mask = flag_pitcher_batters(hitters, names_by_batter)
+    normalized, _ = unit_normalize(embedding)  # positionally aligned to `hitters`
 
-    # (1) similarity heatmap
-    sub_normalized, sub_hitters = similarity_heatmap_subset(normalized, hitters)
-    order, sim = cluster_order(sub_normalized, method="average")
-    fig_similarity_heatmap(sim, order, sub_hitters, out_dir / "fig_similarity_heatmap.png")
-    sub_pitcher_mask = flag_pitcher_batters(sub_hitters, names_by_batter)
-    heatmap_report = {
-        "subset_rule": f"top {HEATMAP_SUBSET_N} hitters by log_prior_pa (exposure)",
-        "linkage_method": "average", "distance": "cosine",
-        "n_subset": int(len(sub_hitters)),
-        "pitcher_batters_in_subset": pitcher_batter_report(
-            sub_hitters, sub_pitcher_mask, names_by_batter,
-            heatmap_leaf_position=np.argsort(order)) if sub_pitcher_mask.any() else
-            {"n_pitcher_batters_found": 0},
-    }
+    # ev_p90 axis: defined for every hitter load_hitters keeps (required
+    # scouting column), same population axis_screen scored (n matches its
+    # ev_p90 candidate, lda_cv_mean ~0.800).
+    ev_tercile_full = tercile_labels(hitters["ev_p90"]).values
+    ev_model, ev_cv_mean, ev_cv_std = lda_axis_cv(normalized, ev_tercile_full, BOOT_SEED)
 
-    # (2) archetype coordinates
-    poles = pick_poles(hitters)
-    sims, pole_pole = archetype_coordinates(normalized, poles)
-    bary = ternary_coords(sims)
-    pole_names = list(poles.keys())
-    fig_archetype_coords(bary, hitters, pole_names, out_dir / "fig_archetype_coords.png")
-    archetype_report = {
-        "pole_selection_rule": "within stratum in {medium, high}: power=argmax ev_p90, "
-                                "contact=argmax contact_rate, platoon_neutral=argmin |obs_platoon_diff|",
-        "pole_hitters": {name: {"batter": int(hitters.loc[idx, "batter"]),
-                                 "name": names_by_batter.get(int(hitters.loc[idx, "batter"]), "?")}
-                          for name, idx in poles.items()},
-        "pole_pole_cosine": {f"{a}_vs_{b}": float(pole_pole[i, j])
-                              for i, a in enumerate(pole_names) for j, b in enumerate(pole_names) if i < j},
-        "pitcher_batters": pitcher_batter_report(
-            hitters, pitcher_mask, names_by_batter,
-            cosine_to_power_pole=sims[:, pole_names.index("power")],
-            cosine_to_contact_pole=sims[:, pole_names.index("contact")],
-        ) if pitcher_mask.any() else {"n_pitcher_batters_found": 0},
-    }
-    max_pole_pole = max(archetype_report["pole_pole_cosine"].values())
-    archetype_report["poles_degenerate"] = bool(max_pole_pole > 0.9)
+    # whiff_brk_minus_fb axis: only defined for hitters with >=20 breaking
+    # AND >=20 fastball swings. Reuse axis_screen's own contrast builder
+    # (not rewritten here) so the validity mask is byte-for-byte the one
+    # that produced lda_cv_mean ~0.633 in the frozen screen.
+    contrasts = axis_screen.build_contrasts(hitters)
+    whiff_series = contrasts["whiff_brk_minus_fb"]
+    valid_mask = hitters["batter"].isin(whiff_series.index).to_numpy()
 
-    # (3) supervised projection
-    sup_report = fig_supervised_projection(normalized, hitters, out_dir / "fig_supervised_projection.png")
-    pls_model = PLSRegression(n_components=2).fit(normalized, hitters["woba_level"].to_numpy())
-    pls_coords_full = pls_model.transform(normalized)
-    sup_report["pitcher_batters"] = pitcher_batter_report(
-        hitters, pitcher_mask, names_by_batter, pls_component_1=pls_coords_full[:, 0]) if pitcher_mask.any() else {
-        "n_pitcher_batters_found": 0}
+    whiff_values_valid = hitters.loc[valid_mask, "batter"].map(whiff_series).to_numpy()
+    whiff_tercile_valid = tercile_labels(pd.Series(whiff_values_valid)).values
+    whiff_model, whiff_cv_mean, whiff_cv_std = lda_axis_cv(
+        normalized[valid_mask], whiff_tercile_valid, BOOT_SEED)
+
+    if abs(ev_cv_mean - 0.800) > 0.03 or abs(whiff_cv_mean - 0.633) > 0.03:
+        raise RuntimeError(
+            f"CV accuracy drifted from the axis screen's expectation: "
+            f"ev_p90={ev_cv_mean:.3f} (expected ~0.800), "
+            f"whiff_brk_minus_fb={whiff_cv_mean:.3f} (expected ~0.633). "
+            f"Stopping instead of proceeding on a possibly-broken axis.")
+
+    # Plot the SAME points (the whiff-valid subset) on both figures so the
+    # two panels of Figure 1 and the Figure 2 heatmap share identical axes.
+    x = ev_model.transform(normalized[valid_mask])[:, 0]
+    y = whiff_model.transform(normalized[valid_mask])[:, 0]
+    ev_tercile_plot = ev_tercile_full[valid_mask]
+    ev_values_plot = hitters.loc[valid_mask, "ev_p90"].to_numpy()
+
+    fig_supervised_projection(
+        x, y, ev_tercile_plot, whiff_tercile_valid, ev_cv_mean, whiff_cv_mean,
+        figures_dir / "fig_supervised_projection.png")
+    fig_similarity_heatmap(x, y, ev_values_plot, figures_dir / "fig_similarity_heatmap.png")
 
     summary = {
         "n_hitters": int(len(hitters)),
-        "similarity_heatmap": heatmap_report,
-        "archetype_coordinates": archetype_report,
-        "supervised_projection": sup_report,
+        "n_hitters_plotted": int(valid_mask.sum()),
+        "axes": {
+            "x": {
+                "metric": "ev_p90",
+                "definition": "Per-hitter 90th-percentile exit velocity.",
+                "label": AXIS_LABELS["ev_p90"],
+                "lda_cv_accuracy_mean": ev_cv_mean,
+                "lda_cv_accuracy_std": ev_cv_std,
+                "n": int(len(hitters)),
+            },
+            "y": {
+                "metric": "whiff_brk_minus_fb",
+                "definition": "Whiff rate on breaking balls minus on fastballs, over swings.",
+                "label": AXIS_LABELS["whiff_brk_minus_fb"],
+                "lda_cv_accuracy_mean": whiff_cv_mean,
+                "lda_cv_accuracy_std": whiff_cv_std,
+                "n": int(valid_mask.sum()),
+                "min_swings_per_pitch_group": axis_screen.MIN_SWINGS_PER_SLICE,
+            },
+        },
+        "method": {
+            "seed": BOOT_SEED,
+            "n_splits": 5,
+            "source_screen": "results/embedding_structure/axis_screen.py",
+        },
+        "fig_similarity_heatmap": {
+            "type": "density-binned mean ev_p90 over the ev_p90-LDA x whiff-LDA plane",
+            "n_bins": N_HEATMAP_BINS,
+            "min_hitters_per_bin": MIN_HITTERS_PER_BIN,
+        },
     }
     with open(out_dir / "embedding_alt_views.json", "w") as f:
         json.dump(summary, f, indent=2, default=str)
@@ -367,8 +453,5 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     summary = run(args.checkpoint_dir, args.arm, args.hitter_stats, args.names, args.out_dir)
-    print(f"pole-pole cosine (max pair): {max(summary['archetype_coordinates']['pole_pole_cosine'].values()):.4f}, "
-          f"degenerate={summary['archetype_coordinates']['poles_degenerate']}")
-    print(f"LDA(handedness) held-out acc: {summary['supervised_projection']['lda_handedness_cv_accuracy_mean']:.4f}")
-    print(f"LDA(power tercile) held-out acc: {summary['supervised_projection']['lda_power_tercile_cv_accuracy_mean']:.4f}")
-    print(f"PLS(woba_level) held-out R^2: {summary['supervised_projection']['pls_woba_level_cv_r2_mean']:.4f}")
+    print(f"ev_p90 LDA held-out CV acc: {summary['axes']['x']['lda_cv_accuracy_mean']:.4f}")
+    print(f"whiff_brk_minus_fb LDA held-out CV acc: {summary['axes']['y']['lda_cv_accuracy_mean']:.4f}")

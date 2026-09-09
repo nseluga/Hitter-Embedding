@@ -39,6 +39,7 @@ def build_model(seed=0):
 def test_low_stratum_means_averages_only_low_stratum_rows_within_each_stand():
     embeddings = np.arange(7 * 4, dtype=float).reshape(7, 4)  # rows 0..6
     stats = pd.DataFrame({
+        "batter": [1, 2, 3, 4, 5, 6],  # 1-digit ids: not real MLBAM ids, so not pitchers
         "embedding_index": [1, 2, 3, 4, 5, 6],
         "stand": ["L", "L", "R", "R", "R", "L"],
         "stratum": ["low", "low", "low", "medium", "low", "medium"],  # row 6 excluded
@@ -215,6 +216,7 @@ def test_the_query_cli_turns_the_cold_start_prior_on_unless_asked_off():
 def test_default_cold_start_prior_averages_the_seeds_in_their_own_spaces(tmp_path):
     models = [build_model(seed) for seed in (0, 1)]
     stats = pd.DataFrame({
+        "batter": [1, 2, 3, 4],
         "embedding_index": [1, 2, 3, 4],
         "stand": ["L", "L", "R", "R"],
         "stratum": ["low", "low", "low", "medium"],
@@ -256,3 +258,22 @@ def test_the_eb_ladder_gets_a_debut_prior_by_default_so_the_comparison_stays_fai
     source = inspect.getsource(report.main)
     assert "--no-debut-prior" in source and "debut_mu_from_stats" in source, \
         "the ladder report must build the debut prior unless --no-debut-prior is passed"
+
+
+def test_low_stratum_means_drops_a_career_pitcher_batter_by_default():
+    """The averaged population must not contain pitchers -- the whole point of the filter."""
+    from src.analysis.embedding_structure import career_pitcher_batter_ids
+    pitcher = sorted(career_pitcher_batter_ids())[0]
+    embeddings = np.arange(4 * 4, dtype=float).reshape(4, 4)
+    stats = pd.DataFrame({
+        "batter": [1, 2, pitcher],
+        "embedding_index": [1, 2, 3],
+        "stand": ["R", "R", "R"],
+        "stratum": ["low", "low", "low"],
+    })
+    np.testing.assert_allclose(low_stratum_means(embeddings, stats)["R"],
+                               embeddings[[1, 2]].mean(axis=0))
+    # and the escape hatch still reproduces the contaminated population
+    np.testing.assert_allclose(
+        low_stratum_means(embeddings, stats, exclude_pitcher_batters=False)["R"],
+        embeddings[[1, 2, 3]].mean(axis=0))

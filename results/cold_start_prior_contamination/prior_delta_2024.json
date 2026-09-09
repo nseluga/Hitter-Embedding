@@ -1,0 +1,27 @@
+{
+  "n_rows": 205,
+  "n_batters": 108,
+  "eval_season": 2024,
+  "arm": "embedding_sgd_sgd_lr1",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "delta_definition": "pred_woba(clean prior) - pred_woba(contaminated prior)",
+  "mean": 0.0014981467074715706,
+  "sd": 0.0005157883403580104,
+  "median": 0.0018972253621363233,
+  "min": 0.0008355377913052686,
+  "max": 0.0019248685123936515,
+  "abs_mean": 0.0014981467074715706,
+  "abs_p90": 0.0019248685123936515,
+  "mean_ci95": [
+    0.001429675427822802,
+    0.001566670904883679
+  ],
+  "n_boot": 10000,
+  "boot_seed": 0
+}

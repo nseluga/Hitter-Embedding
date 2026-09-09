@@ -4,6 +4,7 @@ dependency. The core gate is a hand-computed wOBA: the code must reproduce the
 FanGraphs formula exactly, not a plausible neighbor of it.
 """
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -131,6 +132,67 @@ def test_exclusion_is_per_season_not_career():
                    (500, 998, 2021, 400)])
     excluded = et.primarily_pitchers(df)
     assert (2019, 500) in excluded and (2021, 500) not in excluded
+
+
+# --- the career rule (`career_pitcher_batters`) ---------------------------------------
+# The season rule above is what the frozen phase_d5 build used and stays as it is. The
+# career rule is its counterpart for the embedding population, which has one row per
+# hitter and no season, so a (season, batter) set cannot filter it.
+
+
+def test_career_rule_catches_the_nl_starter_the_season_rule_exempts():
+    """
+    The defect the career rule exists for. TWO_WAY_MIN_PA is per season, so a pre-DH NL
+    starter who bats 60 PA in a season clears it and is exempted as "two-way" in exactly
+    the seasons he bats most. His career best never approaches a real hitter's.
+    """
+    df = _pa_rows([(600, 500, 2019, 300), (500, 998, 2019, 60)])
+    assert (2019, 500) not in et.primarily_pitchers(df), "the season rule lets him through"
+    assert 500 in et.career_pitcher_batters(df), "the career rule must not"
+
+
+def test_career_rule_keeps_the_two_way_player():
+    """Faces 300 batters and reaches 500 PA in a season -> Ohtani, kept as a hitter."""
+    df = _pa_rows([(700, 999, 2021, 500), (800, 700, 2021, 300)])
+    assert 700 not in et.career_pitcher_batters(df)
+
+
+def test_career_rule_judges_the_best_season_not_the_sum():
+    """
+    Career max, not career total: 5 seasons of 60 PA sum past 200 but never make a
+    hitter, while one 250-PA season does.
+    """
+    dribbler = _pa_rows([(600, 500, 2019, 300)] +
+                        [(500, 998, season, 60) for season in range(2016, 2021)])
+    assert 500 in et.career_pitcher_batters(dribbler)
+    late = _pa_rows([(600, 500, 2019, 300), (500, 998, 2019, 60), (500, 998, 2021, 250)])
+    assert 500 not in et.career_pitcher_batters(late)
+
+
+def test_career_rule_keeps_the_position_player_who_mopped_up():
+    """Six batters faced in a blowout is not a pitching career."""
+    df = _pa_rows([(750, 999, 2019, 500), (860, 750, 2019, 6)])
+    assert 750 not in et.career_pitcher_batters(df)
+
+
+def test_career_rule_returns_bare_batter_ids_not_season_pairs():
+    """`primarily_pitchers` returns pairs; the embedding population cannot use those."""
+    df = _pa_rows([(600, 500, 2019, 300), (500, 998, 2019, 60)])
+    ids = et.career_pitcher_batters(df)
+    assert all(isinstance(i, (int, np.integer)) for i in ids), f"not bare ids: {ids}"
+    assert 500 in ids and 600 not in ids
+
+
+def test_two_hundred_pa_is_flat_in_its_region_and_fifty_is_not():
+    """
+    The threshold sweep, pinned. 100-300 give the same answer; 50 is the leaky value that
+    lets the NL starter back in, which is what the pipeline constant currently is.
+    """
+    df = _pa_rows([(600, 500, 2019, 300), (500, 998, 2019, 60)])
+    for threshold in (100, 150, 200, 300):
+        assert 500 in et.career_pitcher_batters(df, career_two_way_min_pa=threshold)
+    assert 500 not in et.career_pitcher_batters(df, career_two_way_min_pa=50)
+    assert et.CAREER_TWO_WAY_MIN_PA == 200
 
 
 # --- the second target: xwOBA (D5-R8) ------------------------------------------------

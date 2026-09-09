@@ -1,51 +1,33 @@
 {
   "n_hitters": 1493,
-  "similarity_heatmap": {
-    "subset_rule": "top 300 hitters by log_prior_pa (exposure)",
-    "linkage_method": "average",
-    "distance": "cosine",
-    "n_subset": 300,
-    "pitcher_batters_in_subset": {
-      "n_pitcher_batters_found": 0
+  "n_hitters_plotted": 1333,
+  "axes": {
+    "x": {
+      "metric": "ev_p90",
+      "definition": "Per-hitter 90th-percentile exit velocity.",
+      "label": "power (90th-pct exit velocity), LDA score",
+      "lda_cv_accuracy_mean": 0.800413009808983,
+      "lda_cv_accuracy_std": 0.017522954355242978,
+      "n": 1493
+    },
+    "y": {
+      "metric": "whiff_brk_minus_fb",
+      "definition": "Whiff rate on breaking balls minus on fastballs, over swings.",
+      "label": "breaking-ball minus fastball whiff, LDA score",
+      "lda_cv_accuracy_mean": 0.6331925318915266,
+      "lda_cv_accuracy_std": 0.021342908268619586,
+      "n": 1333,
+      "min_swings_per_pitch_group": 20
     }
   },
-  "archetype_coordinates": {
-    "pole_selection_rule": "within stratum in {medium, high}: power=argmax ev_p90, contact=argmax contact_rate, platoon_neutral=argmin |obs_platoon_diff|",
-    "pole_hitters": {
-      "power": {
-        "batter": 519317,
-        "name": "Giancarlo Stanton"
-      },
-      "contact": {
-        "batter": 650333,
-        "name": "Luis Arr\u00e1ez"
-      },
-      "platoon_neutral": {
-        "batter": 657061,
-        "name": "Cole Tucker"
-      }
-    },
-    "pole_pole_cosine": {
-      "power_vs_contact": -0.35212110935691737,
-      "power_vs_platoon_neutral": 0.14186189130282428,
-      "contact_vs_platoon_neutral": 0.03154366704778561
-    },
-    "pitcher_batters": {
-      "n_pitcher_batters_found": 0
-    },
-    "poles_degenerate": false
-  },
-  "supervised_projection": {
-    "lda_handedness_cv_accuracy_mean": 0.5505757446521964,
-    "lda_handedness_cv_accuracy_std": 0.016928349237496216,
-    "lda_power_tercile_cv_accuracy_mean": 0.800413009808983,
-    "lda_power_tercile_cv_accuracy_std": 0.017522954355242978,
-    "pls_woba_level_cv_r2_mean": 0.2451932981221386,
-    "pls_woba_level_cv_r2_std": 0.05011804392321609,
-    "n_splits": 5,
+  "method": {
     "seed": 7,
-    "pitcher_batters": {
-      "n_pitcher_batters_found": 0
-    }
+    "n_splits": 5,
+    "source_screen": "results/embedding_structure/axis_screen.py"
+  },
+  "fig_similarity_heatmap": {
+    "type": "density-binned mean ev_p90 over the ev_p90-LDA x whiff-LDA plane",
+    "n_bins": 12,
+    "min_hitters_per_bin": 5
   }
 }
