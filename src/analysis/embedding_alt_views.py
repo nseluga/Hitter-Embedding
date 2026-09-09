@@ -4,27 +4,42 @@ Alternative visualizations of the hitter embedding, built because the honest
 discrete clusters (silhouette maxes 0.0617 at k=2), and PCA retains only 18%
 of 32-D variance.
 
-Plots the two winning axes from the frozen axis screen
+Plots four axis pairings, all scored against the frozen axis screen
 (results/embedding_structure/axis_screen.py — read that file for the exact
 metric definitions, min-sample rules, and seed; not re-run here):
 
-- ev_p90: per-hitter 90th-percentile exit velocity (power).
-- whiff_brk_minus_fb: per-hitter (whiff rate on breaking balls) minus
-  (whiff rate on fastballs).
+- power_contact: ev_p90 (power) vs contact_rate.
+- discipline: zone_swing_rate vs chase_rate.
+- spin_vs_fastball: whiff rate on breaking balls vs whiff rate on fastballs
+  (the two components axis_screen's whiff_brk_minus_fb already derives
+  internally, exposed here as standalone metrics -- same classification,
+  same >=20-swings-per-group validity mask).
+- spin_vs_fastball_damage: ev_p90 on breaking-ball batted balls vs ev_p90 on
+  fastball batted balls (the two components axis_screen's ev_brk_minus_fb
+  already derives internally, exposed here as standalone metrics -- same
+  classification, same >=15-batted-balls-per-group validity mask).
 
 For each axis: tercile the continuous metric, fit LDA on the frozen
 embedding to predict the tercile, and use the discriminant score as the
 plotted coordinate. Held-out 5-fold CV accuracy is the honest number, since
 a supervised projection always looks good on the data it was fit to.
 
-1. Supervised LDA projection — two panels sharing the SAME (ev_p90-LDA,
-   whiff-LDA) axes, colored by each metric's own tercile.
-2. Density-binned heatmap over the same plane, colored by mean ev_p90 (mph)
-   per bin — a reading aid, not new evidence of structure.
+Each pairing renders one 3-panel PNG, all three panels sharing identical
+x/y axes:
+1. scatter colored by the x-metric's own tercile.
+2. scatter colored by the y-metric's own tercile.
+3. density-binned gradient over the same plane, colored by mean woba_level
+   (observed wOBA) -- a quantity on NEITHER axis, so the color carries real
+   information rather than being true by construction.
 
-whiff_brk_minus_fb is only defined for hitters with >= 20 breaking AND >= 20
-fastball swings (axis_screen.MIN_SWINGS_PER_SLICE); both figures plot that
-valid subset so the two panels/figures show identical points.
+On the discipline, spin_vs_fastball, and spin_vs_fastball_damage figures
+(not power_contact, whose axes are in unlike units), panels 1-2 also draw
+the y = x identity line: on those pairings the diagonal is the shared
+"easy" component (overall aggressiveness / overall whiff rate / overall
+power) and perpendicular distance from it is the per-hitter contrast
+(selectivity / spin exposure / damage-vs-spin). The line is drawn in
+LDA-score space -- it marks equal standing on the two axes, not equal raw
+rates.
 
 Reads frozen checkpoints and existing results only. No retraining, no 2025
 data.
@@ -64,44 +79,90 @@ AXIS_LABELS = {
     "whiff_brk_minus_fb": "breaking-ball minus fastball whiff, LDA score",
     "contact_rate": "contact rate, LDA score",
     "selectivity": "selectivity (zone swing minus chase), LDA score",
+    "zone_swing_rate": "in-zone swing rate, LDA score",
+    "chase_rate": "chase rate (out-of-zone swing), LDA score",
+    "whiff_rate_brk": "whiff rate on breaking balls, LDA score",
+    "whiff_rate_fb": "whiff rate on fastballs, LDA score",
+    "ev_p90_brk": "90th-pct exit velocity vs breaking balls, LDA score",
+    "ev_p90_fb": "90th-pct exit velocity vs fastballs, LDA score",
 }
 METRIC_TITLES = {
     "ev_p90": "Power tercile (ev_p90)",
     "contact_rate": "Contact tercile (contact_rate)",
     "selectivity": "Selectivity tercile (zone swing minus chase)",
     "whiff_brk_minus_fb": "Breaking-minus-fastball whiff tercile",
+    "zone_swing_rate": "In-zone swing tercile (zone_swing_rate)",
+    "chase_rate": "Chase tercile (chase_rate)",
+    "whiff_rate_brk": "Breaking-ball whiff tercile (whiff_rate_brk)",
+    "whiff_rate_fb": "Fastball whiff tercile (whiff_rate_fb)",
+    "ev_p90_brk": "Breaking-ball exit-velocity tercile (ev_p90_brk)",
+    "ev_p90_fb": "Fastball exit-velocity tercile (ev_p90_fb)",
 }
 METRIC_UNITS = {
     "ev_p90": "mph",
     "contact_rate": "rate (0-1)",
     "selectivity": "rate (0-1)",
     "whiff_brk_minus_fb": "rate (0-1)",
+    "zone_swing_rate": "rate (0-1)",
+    "chase_rate": "rate (0-1)",
+    "whiff_rate_brk": "rate (0-1)",
+    "whiff_rate_fb": "rate (0-1)",
+    "ev_p90_brk": "mph",
+    "ev_p90_fb": "mph",
 }
 N_HEATMAP_BINS = 12
 MIN_HITTERS_PER_BIN = 5
 
-# id -> (x_metric, y_metric, expected_x_cv, expected_y_cv). ev_p90 is the x
-# axis throughout (frozen "power" axis); y varies. All three metrics besides
-# ev_p90 come straight from axis_screen (either a MARGINAL_COLUMNS hitters
-# column or a build_contrasts() entry) -- reused exactly, not re-derived.
+# id -> (x_metric, y_metric, expected_x_cv, expected_y_cv). None expected
+# means "unmeasured -- just report it" (spin_vs_fastball). x/y metrics come
+# straight from axis_screen (a MARGINAL_COLUMNS hitters column, a
+# build_contrasts() entry, or the local whiff_rate_brk/fb split below) --
+# reused exactly, not re-derived.
 AXIS_PAIRINGS = [
     ("power_contact", "ev_p90", "contact_rate", 0.800, 0.765),
-    ("power_discipline", "ev_p90", "selectivity", 0.800, 0.650),
-    ("power_spin", "ev_p90", "whiff_brk_minus_fb", 0.800, 0.633),
+    ("discipline", "zone_swing_rate", "chase_rate", 0.782, 0.752),
+    ("spin_vs_fastball", "whiff_rate_brk", "whiff_rate_fb", None, None),
+    ("spin_vs_fastball_damage", "ev_p90_brk", "ev_p90_fb", None, None),
 ]
+# Pairings whose two axes are on comparable/aligned scales (both LDA scores
+# of "aggressiveness"/"whiff" style metrics) -- these get the y = x identity
+# line on their scatter panels. power_contact's axes are unlike units
+# (power vs contact) so a diagonal there would be meaningless.
+IDENTITY_LINE_PAIRINGS = {"discipline", "spin_vs_fastball", "spin_vs_fastball_damage"}
 CV_TOLERANCE = 0.02
+
+# Extra metric definitions beyond axis_screen.DEFINITIONS, for pairings that
+# use whiff_rate_brk/whiff_rate_fb (not in axis_screen -- those two are
+# exposed locally, see whiff_rate_components_by_batter below).
+LOCAL_DEFINITIONS = {
+    "whiff_rate_brk": (
+        "Per-hitter whiff rate against breaking balls, over swings.",
+        "Component of axis_screen's whiff_brk_minus_fb, exposed standalone; "
+        "same PITCH_GROUPS classification and min-20-swings-per-family rule."),
+    "whiff_rate_fb": (
+        "Per-hitter whiff rate against fastballs, over swings.",
+        "Component of axis_screen's whiff_brk_minus_fb, exposed standalone; "
+        "same PITCH_GROUPS classification and min-20-swings-per-family rule."),
+    "ev_p90_brk": (
+        "Per-hitter 90th-percentile exit velocity on breaking-ball batted balls.",
+        "Component of axis_screen's ev_brk_minus_fb, exposed standalone; "
+        "same PITCH_GROUPS classification and min-15-batted-balls-per-family rule."),
+    "ev_p90_fb": (
+        "Per-hitter 90th-percentile exit velocity on fastball batted balls.",
+        "Component of axis_screen's ev_brk_minus_fb, exposed standalone; "
+        "same PITCH_GROUPS classification and min-15-batted-balls-per-family rule."),
+}
 
 
 # --------------------------------------------------------------------- pitch-level feature
 # NOTE: axis_screen.build_contrasts imports this function from this module
 # (lazily, inside the function) — keep name/signature stable.
 
-def whiff_brk_minus_fb_by_batter(pitch_events_path=PITCH_EVENTS_PATH):
-    """Per-batter (whiff rate on breaking pitches) minus (whiff rate on
-    fastballs), computed from swing-level pitch_events_labeled.parquet.
-    whiff = swing & not contact. Descriptive-only feature (not a training
-    target), so none of the leakage-window discipline in baseline_ladder_gbm
-    applies. Returns a Series indexed by batter."""
+def _whiff_rates_by_pitch_group(pitch_events_path):
+    """Shared groundwork for whiff_brk_minus_fb_by_batter and
+    whiff_rate_components_by_batter: per-batter x pitch_group whiff rate and
+    swing count, using the frozen PITCH_GROUPS classification. whiff =
+    swing & not contact."""
     df = pd.read_parquet(pitch_events_path, columns=["batter", "pitch_type", "swing", "contact"])
     df = df[df["swing"] == 1]
     group = pd.Series(np.nan, index=df.index, dtype=object)
@@ -110,8 +171,63 @@ def whiff_brk_minus_fb_by_batter(pitch_events_path=PITCH_EVENTS_PATH):
     df = df.assign(pitch_group=group)
     df = df[df["pitch_group"].isin(PITCH_GROUPS)]
     df = df.assign(whiff=(df["contact"] == 0).astype(float))
+    counts = df.groupby(["batter", "pitch_group"]).size().unstack(fill_value=0)
     rates = df.groupby(["batter", "pitch_group"])["whiff"].mean().unstack("pitch_group")
+    return rates, counts
+
+
+def whiff_brk_minus_fb_by_batter(pitch_events_path=PITCH_EVENTS_PATH):
+    """Per-batter (whiff rate on breaking pitches) minus (whiff rate on
+    fastballs), computed from swing-level pitch_events_labeled.parquet.
+    whiff = swing & not contact. Descriptive-only feature (not a training
+    target), so none of the leakage-window discipline in baseline_ladder_gbm
+    applies. Returns a Series indexed by batter."""
+    rates, _ = _whiff_rates_by_pitch_group(pitch_events_path)
     return (rates["breaking"] - rates["fastball"]).rename("whiff_brk_minus_fb")
+
+
+def whiff_rate_components_by_batter(pitch_events_path=PITCH_EVENTS_PATH):
+    """whiff_rate_brk and whiff_rate_fb: the two component rates
+    whiff_brk_minus_fb_by_batter already derives internally, exposed as
+    standalone metrics -- same PITCH_GROUPS classification, and the same
+    >=20-swings-per-group (axis_screen.MIN_SWINGS_PER_SLICE) validity mask
+    axis_screen.build_contrasts applies to whiff_brk_minus_fb. Returns
+    (brk_series, fb_series), both indexed by batter, restricted to hitters
+    valid in BOTH groups."""
+    rates, counts = _whiff_rates_by_pitch_group(pitch_events_path)
+    valid = (counts.get("fastball", 0) >= axis_screen.MIN_SWINGS_PER_SLICE) & \
+            (counts.get("breaking", 0) >= axis_screen.MIN_SWINGS_PER_SLICE)
+    valid_idx = valid[valid].index
+    brk = rates["breaking"].reindex(valid_idx).rename("whiff_rate_brk")
+    fb = rates["fastball"].reindex(valid_idx).rename("whiff_rate_fb")
+    return brk, fb
+
+
+def ev_p90_components_by_batter(pitch_events_path=PITCH_EVENTS_PATH):
+    """ev_p90_brk and ev_p90_fb: per-hitter 90th-percentile exit velocity on
+    breaking-ball and fastball batted balls -- the two component levels
+    axis_screen's ev_brk_minus_fb already derives internally (mask_brk /
+    mask_fb over swings, batted balls only), exposed as standalone metrics.
+    Same PITCH_GROUPS classification and the same
+    >=15-batted-balls-per-group validity rule
+    (axis_screen.MIN_BATTED_BALLS_PER_SLICE) axis_screen.build_contrasts
+    applies to ev_brk_minus_fb. Returns (brk_series, fb_series), both
+    indexed by batter, restricted to hitters valid in BOTH groups."""
+    df = pd.read_parquet(pitch_events_path, columns=["batter", "pitch_type", "swing", "ev"])
+    df = df[(df["swing"] == 1) & df["ev"].notna()]
+    group = pd.Series(np.nan, index=df.index, dtype=object)
+    for name, codes in PITCH_GROUPS.items():
+        group[df["pitch_type"].isin(codes)] = name
+    df = df.assign(pitch_group=group)
+    df = df[df["pitch_group"].isin(PITCH_GROUPS)]
+    counts = df.groupby(["batter", "pitch_group"]).size().unstack(fill_value=0)
+    p90 = df.groupby(["batter", "pitch_group"])["ev"].quantile(0.9).unstack("pitch_group")
+    valid = (counts.get("fastball", 0) >= axis_screen.MIN_BATTED_BALLS_PER_SLICE) & \
+            (counts.get("breaking", 0) >= axis_screen.MIN_BATTED_BALLS_PER_SLICE)
+    valid_idx = valid[valid].index
+    brk = p90["breaking"].reindex(valid_idx).rename("ev_p90_brk")
+    fb = p90["fastball"].reindex(valid_idx).rename("ev_p90_fb")
+    return brk, fb
 
 
 # --------------------------------------------------------------------- supervised LDA axis
@@ -240,7 +356,11 @@ def run_pairing(pairing_id, x_metric, y_metric, expected_x_cv, expected_y_cv,
     y_tercile_full = tercile_labels(pd.Series(y_vals_full)).values
     y_model, y_cv_mean, y_cv_std = lda_axis_cv(normalized[y_valid], y_tercile_full, BOOT_SEED)
 
-    if abs(x_cv_mean - expected_x_cv) > CV_TOLERANCE or abs(y_cv_mean - expected_y_cv) > CV_TOLERANCE:
+    # expected_*_cv of None means "unmeasured -- just report it", not a
+    # frozen expectation to check against.
+    x_drift = expected_x_cv is not None and abs(x_cv_mean - expected_x_cv) > CV_TOLERANCE
+    y_drift = expected_y_cv is not None and abs(y_cv_mean - expected_y_cv) > CV_TOLERANCE
+    if x_drift or y_drift:
         raise RuntimeError(
             f"[{pairing_id}] CV accuracy drifted from expectation: "
             f"{x_metric}={x_cv_mean:.4f} (expected {expected_x_cv}), "
@@ -263,7 +383,7 @@ def run_pairing(pairing_id, x_metric, y_metric, expected_x_cv, expected_y_cv,
     x_span = (float(x_plot_vals.min()), float(x_plot_vals.max()))
     y_span = (float(y_plot_vals.min()), float(y_plot_vals.max()))
 
-    definitions = axis_screen.DEFINITIONS
+    definitions = {**axis_screen.DEFINITIONS, **LOCAL_DEFINITIONS}
     summary = {
         "x": {
             "metric": x_metric, "definition": definitions[x_metric][0],
@@ -278,6 +398,14 @@ def run_pairing(pairing_id, x_metric, y_metric, expected_x_cv, expected_y_cv,
             "real_unit_span_plotted": y_span, "unit": METRIC_UNITS[y_metric],
         },
         "n_hitters_plotted": int(plot_mask.sum()),
+        # The two LDA axes are directions in one low-dimensional learned space,
+        # so they share its dominant variance. Reporting the projected
+        # correlation beside the hitter-level one keeps the figure's visible
+        # tilt separable from the tilt the hitters actually have.
+        "axis_correlation": {
+            "lda_projected": float(np.corrcoef(x_proj, y_proj)[0, 1]),
+            "raw_metric": float(np.corrcoef(x_plot_vals, y_plot_vals)[0, 1]),
+        },
     }
     return summary, x_proj, y_proj, x_tercile_plot, y_tercile_plot, woba_plot_vals, x_span, y_span
 
@@ -289,6 +417,12 @@ def run_all_pairings(normalized, hitters, out_dir):
     figures_dir = Path(out_dir) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
     contrasts = axis_screen.build_contrasts(hitters)
+    whiff_brk, whiff_fb = whiff_rate_components_by_batter()
+    contrasts["whiff_rate_brk"] = whiff_brk
+    contrasts["whiff_rate_fb"] = whiff_fb
+    ev_p90_brk, ev_p90_fb = ev_p90_components_by_batter()
+    contrasts["ev_p90_brk"] = ev_p90_brk
+    contrasts["ev_p90_fb"] = ev_p90_fb
 
     pairings_summary = {}
     for pairing_id, x_metric, y_metric, exp_x, exp_y in AXIS_PAIRINGS:
@@ -300,6 +434,7 @@ def run_all_pairings(normalized, hitters, out_dir):
         xlim, ylim = _padded_lim(x_proj), _padded_lim(y_proj)
         palette = {0: "#d9d9d9", 1: "#8fb3ff", 2: "#1f4fd1"}
         tercile_names = ["low", "mid", "high"]
+        draw_identity = pairing_id in IDENTITY_LINE_PAIRINGS
 
         fig, axes = plt.subplots(1, 3, figsize=(19.5, 5.8))
         panels = [
@@ -309,7 +444,12 @@ def run_all_pairings(normalized, hitters, out_dir):
         for ax, tercile, cv_mean, title in panels:
             for t, color in palette.items():
                 mask = tercile == t
-                ax.scatter(x_proj[mask], y_proj[mask], s=8, alpha=0.6, color=color, label=tercile_names[t])
+                ax.scatter(x_proj[mask], y_proj[mask], s=8, alpha=0.6, color=color,
+                           label=tercile_names[t], zorder=2)
+            if draw_identity:
+                lo, hi = max(xlim[0], ylim[0]), min(xlim[1], ylim[1])
+                ax.plot([lo, hi], [lo, hi], linestyle="--", linewidth=1, color="#999999",
+                        zorder=1, label="y = x")
             ax.set_xlabel(AXIS_LABELS[x_metric])
             ax.set_ylabel(AXIS_LABELS[y_metric])
             ax.set_title(f"{title}\nheld-out CV accuracy {cv_mean:.3f} (chance = 0.333)")
@@ -343,7 +483,14 @@ def run_all_pairings(normalized, hitters, out_dir):
         ax3.set_xlim(xlim); ax3.set_ylim(ylim)
 
         fig.suptitle(f"{pairing_id}: {x_metric} vs {y_metric} (n={summary['n_hitters_plotted']})", fontsize=11)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        if draw_identity:
+            fig.text(0.5, 0.01,
+                "Identity line drawn in LDA-score space: marks equal standing on the two axes, "
+                "not equal raw rates. Perpendicular distance from it is the per-hitter contrast.",
+                ha="center", fontsize=8, color="#555555")
+            fig.tight_layout(rect=[0, 0.04, 1, 0.95])
+        else:
+            fig.tight_layout(rect=[0, 0, 1, 0.95])
         fig.savefig(figures_dir / f"fig_axes_{pairing_id}.png", dpi=130)
         plt.close(fig)
 
@@ -357,82 +504,27 @@ def run_all_pairings(normalized, hitters, out_dir):
 def run(checkpoint_dir, arm, hitter_stats_path, names_path, out_dir,
         pitch_events_path=PITCH_EVENTS_PATH):
     out_dir = Path(out_dir)
-    figures_dir = out_dir / "figures"
-    figures_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     embedding, hitters, _ = load_hitters(
         checkpoint_dir, arm, hitter_stats_path, names_path)
     normalized, _ = unit_normalize(embedding)  # positionally aligned to `hitters`
 
-    # ev_p90 axis: defined for every hitter load_hitters keeps (required
-    # scouting column), same population axis_screen scored (n matches its
-    # ev_p90 candidate, lda_cv_mean ~0.800).
-    ev_tercile_full = tercile_labels(hitters["ev_p90"]).values
-    ev_model, ev_cv_mean, ev_cv_std = lda_axis_cv(normalized, ev_tercile_full, BOOT_SEED)
-
-    # whiff_brk_minus_fb axis: only defined for hitters with >=20 breaking
-    # AND >=20 fastball swings. Reuse axis_screen's own contrast builder
-    # (not rewritten here) so the validity mask is byte-for-byte the one
-    # that produced lda_cv_mean ~0.633 in the frozen screen.
-    contrasts = axis_screen.build_contrasts(hitters)
-    whiff_series = contrasts["whiff_brk_minus_fb"]
-    valid_mask = hitters["batter"].isin(whiff_series.index).to_numpy()
-
-    whiff_values_valid = hitters.loc[valid_mask, "batter"].map(whiff_series).to_numpy()
-    whiff_tercile_valid = tercile_labels(pd.Series(whiff_values_valid)).values
-    whiff_model, whiff_cv_mean, whiff_cv_std = lda_axis_cv(
-        normalized[valid_mask], whiff_tercile_valid, BOOT_SEED)
-
-    if abs(ev_cv_mean - 0.800) > 0.03 or abs(whiff_cv_mean - 0.633) > 0.03:
-        raise RuntimeError(
-            f"CV accuracy drifted from the axis screen's expectation: "
-            f"ev_p90={ev_cv_mean:.3f} (expected ~0.800), "
-            f"whiff_brk_minus_fb={whiff_cv_mean:.3f} (expected ~0.633). "
-            f"Stopping instead of proceeding on a possibly-broken axis.")
-
-    # Plot the SAME points (the whiff-valid subset) on both figures so the
-    # two panels of Figure 1 and the Figure 2 heatmap share identical axes.
-    x = ev_model.transform(normalized[valid_mask])[:, 0]
-    y = whiff_model.transform(normalized[valid_mask])[:, 0]
-    ev_tercile_plot = ev_tercile_full[valid_mask]
-    ev_values_plot = hitters.loc[valid_mask, "ev_p90"].to_numpy()
-
-    fig_supervised_projection(
-        x, y, ev_tercile_plot, whiff_tercile_valid, ev_cv_mean, whiff_cv_mean,
-        figures_dir / "fig_supervised_projection.png")
-    fig_similarity_heatmap(x, y, ev_values_plot, figures_dir / "fig_similarity_heatmap.png")
+    # NOTE: fig_supervised_projection.png / fig_similarity_heatmap.png
+    # (the original ev_p90-vs-whiff_brk_minus_fb figure) are frozen outputs
+    # of an earlier version of this pipeline -- left on disk untouched.
+    # run() no longer regenerates them; see fig_supervised_projection() /
+    # fig_similarity_heatmap() above, still exercised directly by tests.
+    pairings_summary = run_all_pairings(normalized, hitters, out_dir)
 
     summary = {
-        "n_hitters": int(len(hitters)),
-        "n_hitters_plotted": int(valid_mask.sum()),
-        "axes": {
-            "x": {
-                "metric": "ev_p90",
-                "definition": "Per-hitter 90th-percentile exit velocity.",
-                "label": AXIS_LABELS["ev_p90"],
-                "lda_cv_accuracy_mean": ev_cv_mean,
-                "lda_cv_accuracy_std": ev_cv_std,
-                "n": int(len(hitters)),
-            },
-            "y": {
-                "metric": "whiff_brk_minus_fb",
-                "definition": "Whiff rate on breaking balls minus on fastballs, over swings.",
-                "label": AXIS_LABELS["whiff_brk_minus_fb"],
-                "lda_cv_accuracy_mean": whiff_cv_mean,
-                "lda_cv_accuracy_std": whiff_cv_std,
-                "n": int(valid_mask.sum()),
-                "min_swings_per_pitch_group": axis_screen.MIN_SWINGS_PER_SLICE,
-            },
-        },
+        "pairings": pairings_summary,
         "method": {
             "seed": BOOT_SEED,
             "n_splits": 5,
+            "chance": round(1 / 3, 3),
+            "season_filter": "season <= 2024 (inherited from hitters/contrasts)",
             "source_screen": "results/embedding_structure/axis_screen.py",
-        },
-        "fig_similarity_heatmap": {
-            "type": "density-binned mean ev_p90 over the ev_p90-LDA x whiff-LDA plane",
-            "n_bins": N_HEATMAP_BINS,
-            "min_hitters_per_bin": MIN_HITTERS_PER_BIN,
         },
     }
     with open(out_dir / "embedding_alt_views.json", "w") as f:
@@ -453,5 +545,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     summary = run(args.checkpoint_dir, args.arm, args.hitter_stats, args.names, args.out_dir)
-    print(f"ev_p90 LDA held-out CV acc: {summary['axes']['x']['lda_cv_accuracy_mean']:.4f}")
-    print(f"whiff_brk_minus_fb LDA held-out CV acc: {summary['axes']['y']['lda_cv_accuracy_mean']:.4f}")
+    for pairing_id, s in summary["pairings"].items():
+        print(f"{pairing_id}: {s['x']['metric']}={s['x']['lda_cv_accuracy_mean']:.4f}, "
+              f"{s['y']['metric']}={s['y']['lda_cv_accuracy_mean']:.4f} "
+              f"(n_plotted={s['n_hitters_plotted']})")

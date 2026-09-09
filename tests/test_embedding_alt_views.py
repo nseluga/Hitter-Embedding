@@ -72,3 +72,74 @@ def test_whiff_brk_minus_fb_by_batter_still_importable_by_axis_screen():
     from results.embedding_structure import axis_screen
     assert axis_screen.MIN_SWINGS_PER_SLICE == 20
     assert callable(alt.whiff_brk_minus_fb_by_batter)
+
+
+def test_whiff_rate_components_share_index_and_bound_by_zero_one():
+    brk, fb = alt.whiff_rate_components_by_batter()
+    assert brk.index.equals(fb.index)
+    assert len(brk) > 0
+    assert brk.between(0, 1).all() and fb.between(0, 1).all()
+
+
+def test_ev_p90_components_share_index_and_plausible_mph():
+    brk, fb = alt.ev_p90_components_by_batter()
+    assert brk.index.equals(fb.index)
+    assert len(brk) > 0
+    assert brk.between(60, 130).all() and fb.between(60, 130).all()
+
+
+# --------------------------------------------------------------------- run_all_pairings, live data
+
+def _load_normalized_hitters():
+    from src.analysis.embedding_structure import (
+        DEFAULT_ARM, DEFAULT_CHECKPOINT_DIR, HITTER_STATS_PATH, NAMES_PATH,
+        load_hitters, unit_normalize,
+    )
+    embedding, hitters, _ = load_hitters(
+        DEFAULT_CHECKPOINT_DIR, DEFAULT_ARM, HITTER_STATS_PATH, NAMES_PATH)
+    normalized, _ = unit_normalize(embedding)
+    return normalized, hitters
+
+
+def test_all_three_pairings_hit_expected_cv_and_render(tmp_path):
+    """Pins the frozen protocol's held-out CV accuracy for all three axis
+    pairings (power_contact and discipline against their expected values;
+    spin_vs_fastball -- no prior expectation -- against the value this run
+    actually produced) and confirms each renders a 3-panel PNG."""
+    normalized, hitters = _load_normalized_hitters()
+    pairings_summary = alt.run_all_pairings(normalized, hitters, tmp_path)
+
+    expected = {
+        "power_contact": (0.800, 0.765),
+        "discipline": (0.782, 0.752),
+        "spin_vs_fastball": (0.692, 0.733),  # unmeasured before this run; pin to observed
+        "spin_vs_fastball_damage": (0.744, 0.777),  # unmeasured before this run; pin to observed
+    }
+    for pairing_id, (exp_x, exp_y) in expected.items():
+        s = pairings_summary[pairing_id]
+        assert abs(s["x"]["lda_cv_accuracy_mean"] - exp_x) < alt.CV_TOLERANCE
+        assert abs(s["y"]["lda_cv_accuracy_mean"] - exp_y) < alt.CV_TOLERANCE
+        png = tmp_path / "figures" / f"fig_axes_{pairing_id}.png"
+        assert png.exists() and png.stat().st_size > 0
+
+
+def test_lda_axes_overstate_the_hitter_level_correlation(tmp_path):
+    """The reported limitation: both LDA axes are directions in one
+    low-dimensional space, so the projected correlation exceeds the
+    hitter-level one on every pairing. Pins the magnitude, since the figure
+    captions carry it."""
+    normalized, hitters = _load_normalized_hitters()
+    pairings_summary = alt.run_all_pairings(normalized, hitters, tmp_path)
+
+    expected = {
+        "power_contact": (-0.456, -0.224),
+        "discipline": (0.552, 0.375),
+        "spin_vs_fastball": (0.662, 0.532),
+        "spin_vs_fastball_damage": (0.967, 0.831),
+    }
+    for pairing_id, (exp_lda, exp_raw) in expected.items():
+        c = pairings_summary[pairing_id]["axis_correlation"]
+        assert abs(c["lda_projected"] - exp_lda) < 0.01
+        assert abs(c["raw_metric"] - exp_raw) < 0.01
+        # the inflation itself, which is the finding
+        assert abs(c["lda_projected"]) > abs(c["raw_metric"])

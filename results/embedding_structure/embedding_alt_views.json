@@ -1,33 +1,143 @@
 {
-  "n_hitters": 1493,
-  "n_hitters_plotted": 1333,
-  "axes": {
-    "x": {
-      "metric": "ev_p90",
-      "definition": "Per-hitter 90th-percentile exit velocity.",
-      "label": "power (90th-pct exit velocity), LDA score",
-      "lda_cv_accuracy_mean": 0.800413009808983,
-      "lda_cv_accuracy_std": 0.017522954355242978,
-      "n": 1493
+  "pairings": {
+    "power_contact": {
+      "x": {
+        "metric": "ev_p90",
+        "definition": "Per-hitter 90th-percentile exit velocity.",
+        "label": "power (90th-pct exit velocity), LDA score",
+        "lda_cv_accuracy_mean": 0.800413009808983,
+        "lda_cv_accuracy_std": 0.017522954355242978,
+        "n": 1493,
+        "real_unit_span_plotted": [
+          82.46000000000001,
+          114.2
+        ],
+        "unit": "mph"
+      },
+      "y": {
+        "metric": "contact_rate",
+        "definition": "Per-hitter rate of making contact given a swing.",
+        "label": "contact rate, LDA score",
+        "lda_cv_accuracy_mean": 0.7648986554735023,
+        "lda_cv_accuracy_std": 0.023472893665422285,
+        "n": 1493,
+        "real_unit_span_plotted": [
+          0.1428571428571428,
+          1.0
+        ],
+        "unit": "rate (0-1)"
+      },
+      "n_hitters_plotted": 1493,
+      "axis_correlation": {
+        "lda_projected": -0.4555965039197703,
+        "raw_metric": -0.22380272137941612
+      }
     },
-    "y": {
-      "metric": "whiff_brk_minus_fb",
-      "definition": "Whiff rate on breaking balls minus on fastballs, over swings.",
-      "label": "breaking-ball minus fastball whiff, LDA score",
-      "lda_cv_accuracy_mean": 0.6331925318915266,
-      "lda_cv_accuracy_std": 0.021342908268619586,
-      "n": 1333,
-      "min_swings_per_pitch_group": 20
+    "discipline": {
+      "x": {
+        "metric": "zone_swing_rate",
+        "definition": "Per-hitter swing rate on pitches inside the strike zone (zone codes 1-9).",
+        "label": "in-zone swing rate, LDA score",
+        "lda_cv_accuracy_mean": 0.782337096810397,
+        "lda_cv_accuracy_std": 0.018952313150102665,
+        "n": 1493,
+        "real_unit_span_plotted": [
+          0.4,
+          0.8947368421052632
+        ],
+        "unit": "rate (0-1)"
+      },
+      "y": {
+        "metric": "chase_rate",
+        "definition": "Per-hitter swing rate on pitches outside the strike zone (zone codes 11-14).",
+        "label": "chase rate (out-of-zone swing), LDA score",
+        "lda_cv_accuracy_mean": 0.752167179187897,
+        "lda_cv_accuracy_std": 0.01905117988090852,
+        "n": 1493,
+        "real_unit_span_plotted": [
+          0.0,
+          0.6
+        ],
+        "unit": "rate (0-1)"
+      },
+      "n_hitters_plotted": 1493,
+      "axis_correlation": {
+        "lda_projected": 0.5517493482879802,
+        "raw_metric": 0.3754617538051306
+      }
+    },
+    "spin_vs_fastball": {
+      "x": {
+        "metric": "whiff_rate_brk",
+        "definition": "Per-hitter whiff rate against breaking balls, over swings.",
+        "label": "whiff rate on breaking balls, LDA score",
+        "lda_cv_accuracy_mean": 0.6921348314606741,
+        "lda_cv_accuracy_std": 0.021502172426078405,
+        "n": 1335,
+        "real_unit_span_plotted": [
+          0.1,
+          0.6739130434782609
+        ],
+        "unit": "rate (0-1)"
+      },
+      "y": {
+        "metric": "whiff_rate_fb",
+        "definition": "Per-hitter whiff rate against fastballs, over swings.",
+        "label": "whiff rate on fastballs, LDA score",
+        "lda_cv_accuracy_mean": 0.7333333333333334,
+        "lda_cv_accuracy_std": 0.01596050618176967,
+        "n": 1335,
+        "real_unit_span_plotted": [
+          0.03568879371877231,
+          0.43119266055045874
+        ],
+        "unit": "rate (0-1)"
+      },
+      "n_hitters_plotted": 1335,
+      "axis_correlation": {
+        "lda_projected": 0.6618205160805525,
+        "raw_metric": 0.5317148544366396
+      }
+    },
+    "spin_vs_fastball_damage": {
+      "x": {
+        "metric": "ev_p90_brk",
+        "definition": "Per-hitter 90th-percentile exit velocity on breaking-ball batted balls.",
+        "label": "90th-pct exit velocity vs breaking balls, LDA score",
+        "lda_cv_accuracy_mean": 0.7439868603042876,
+        "lda_cv_accuracy_std": 0.02092828833703194,
+        "n": 1203,
+        "real_unit_span_plotted": [
+          88.5,
+          114.2
+        ],
+        "unit": "mph"
+      },
+      "y": {
+        "metric": "ev_p90_fb",
+        "definition": "Per-hitter 90th-percentile exit velocity on fastball batted balls.",
+        "label": "90th-pct exit velocity vs fastballs, LDA score",
+        "lda_cv_accuracy_mean": 0.7771991701244813,
+        "lda_cv_accuracy_std": 0.030256361189586307,
+        "n": 1203,
+        "real_unit_span_plotted": [
+          90.24,
+          113.9
+        ],
+        "unit": "mph"
+      },
+      "n_hitters_plotted": 1203,
+      "axis_correlation": {
+        "lda_projected": 0.9668907856883959,
+        "raw_metric": 0.8310291901148733
+      }
     }
   },
   "method": {
     "seed": 7,
     "n_splits": 5,
+    "chance": 0.333,
+    "season_filter": "season <= 2024 (inherited from hitters/contrasts)",
     "source_screen": "results/embedding_structure/axis_screen.py"
-  },
-  "fig_similarity_heatmap": {
-    "type": "density-binned mean ev_p90 over the ev_p90-LDA x whiff-LDA plane",
-    "n_bins": 12,
-    "min_hitters_per_bin": 5
   }
 }

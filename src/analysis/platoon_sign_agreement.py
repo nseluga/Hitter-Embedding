@@ -325,44 +325,71 @@ def compute_sign_agreement(frame):
 
 def fig_sign_agreement(summary, path):
     """
-    Grouped bar: model within-stand rate vs handedness-only baseline, per
-    group, with each model bar checked against its own permutation null band
-    (mean +/- 95% interval) rather than a flat 50% chance line -- the
-    centered predictions are skewed within a stand, so independence alone
-    does not sit at 0.5. A faint 50% reference line is kept for orientation
-    only; it is not the comparator the caption makes.
+    Two panels, each comparing quantities measured on the SAME scale, because
+    the model's raw rate and its within-stand rate have different denominators
+    and a single axis holding both invites the reading that a handedness rule
+    beats the model.
+
+    Left, raw scale: the model's raw agreement against the handedness-only
+    baseline -- the honest like-for-like comparison, which shows raw agreement
+    is almost entirely batter stand. Right, within-stand scale: the same model
+    with the handedness component removed, against its own permutation null,
+    which is where its added signal is visible. A flat 50% line is not the
+    comparator on either panel; within a stand the centered predictions are
+    skewed, so independence alone does not sit at 0.5.
     """
     groups = ["overall"] + list(STRATA)
-    model_rates = [summary["model_within_stand"][g]["rate"] for g in groups]
-    model_ci = [summary["model_within_stand"][g]["ci95"] for g in groups]
-    baseline_rates = [summary["handedness_only_baseline"][g]["rate"] for g in groups]
-    baseline_ci = [summary["handedness_only_baseline"][g]["ci95"] for g in groups]
-    null_means = [summary["model_within_stand"][g]["permutation_null"]["null_mean"] for g in groups]
-    null_ci = [summary["model_within_stand"][g]["permutation_null"]["null_ci95"] for g in groups]
 
     def error_bars(rates, ci_bounds):
         lower = [max(0.0, rate - ci[0]) for rate, ci in zip(rates, ci_bounds)]
         upper = [max(0.0, ci[1] - rate) for rate, ci in zip(rates, ci_bounds)]
         return [lower, upper]
 
+    def pull(block, field="rate"):
+        return [summary[block][g][field] for g in groups]
+
+    raw_rates = pull("raw_model_agreement")
+    raw_ci = pull("raw_model_agreement", "ci95")
+    base_rates = pull("handedness_only_baseline")
+    base_ci = pull("handedness_only_baseline", "ci95")
+    within_rates = pull("model_within_stand")
+    within_ci = pull("model_within_stand", "ci95")
+    null_means = [summary["model_within_stand"][g]["permutation_null"]["null_mean"]
+                  for g in groups]
+    null_ci = [summary["model_within_stand"][g]["permutation_null"]["null_ci95"]
+               for g in groups]
+
     x = np.arange(len(groups))
-    width = 0.25
-    figure, axis = plt.subplots(figsize=(8.5, 4.5))
-    axis.bar(x - width, model_rates, width, yerr=error_bars(model_rates, model_ci),
-              capsize=4, color="#4c8dff", label="model (within-stand)")
-    axis.bar(x, null_means, width, yerr=error_bars(null_means, null_ci), capsize=4,
+    width = 0.36
+    figure, (left, right) = plt.subplots(1, 2, figsize=(12.0, 4.6), sharey=True)
+
+    left.bar(x - width / 2, raw_rates, width, yerr=error_bars(raw_rates, raw_ci),
+             capsize=4, color="#4c8dff", label="model (raw)")
+    left.bar(x + width / 2, base_rates, width, yerr=error_bars(base_rates, base_ci),
+             capsize=4, color="#b0b0b0", label="handedness-only baseline (raw)")
+    left.set_title("Raw scale: the model against a handedness rule\n"
+                   "raw agreement is almost all batter stand")
+    left.set_ylabel("sign agreement rate")
+
+    right.bar(x - width / 2, within_rates, width,
+              yerr=error_bars(within_rates, within_ci), capsize=4,
+              color="#4c8dff", label="model (within-stand)")
+    right.bar(x + width / 2, null_means, width,
+              yerr=error_bars(null_means, null_ci), capsize=4,
               color="#e0a03c", label="permutation null (within-stand shuffle)")
-    axis.bar(x + width, baseline_rates, width,
-              yerr=error_bars(baseline_rates, baseline_ci), capsize=4,
-              color="#b0b0b0", label="handedness-only baseline (raw)")
-    axis.axhline(0.5, color="#444444", linestyle="--", linewidth=0.75, alpha=0.5,
-                 label="50% (reference only)")
-    axis.set_xticks(x)
-    axis.set_xticklabels(groups)
-    axis.set_ylabel("sign agreement rate")
-    axis.set_ylim(0, 1)
-    axis.set_title("Platoon delta sign agreement: model vs its own permutation null")
-    axis.legend(loc="upper right", frameon=False, fontsize=8)
+    right.set_title("Within-stand scale: handedness removed\n"
+                    "the model against its own permutation null")
+
+    for axis in (left, right):
+        axis.axhline(0.5, color="#444444", linestyle="--", linewidth=0.75,
+                     alpha=0.4, label="50% (orientation only)")
+        axis.set_xticks(x)
+        axis.set_xticklabels(groups)
+        axis.set_ylim(0, 1)
+        axis.legend(loc="upper right", frameon=False, fontsize=8)
+
+    figure.suptitle("Platoon delta sign agreement, compared only within a scale",
+                    fontsize=12)
     figure.tight_layout()
     figure.savefig(path, dpi=200)
     plt.close(figure)
