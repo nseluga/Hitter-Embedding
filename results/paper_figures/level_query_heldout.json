@@ -1,0 +1,34 @@
+{
+  "pooled": {
+    "n": 521,
+    "r_raw": 0.4291713445648346,
+    "r_partial": 0.3815477970067348,
+    "ci_low": 0.30201932779674606,
+    "ci_high": 0.45772567873357195
+  },
+  "high": {
+    "n": 174,
+    "r_raw": 0.5308383921272525,
+    "r_partial": 0.5163690924623892,
+    "ci_low": 0.36974811915783695,
+    "ci_high": 0.6422509941453597
+  },
+  "low": {
+    "n": 160,
+    "r_raw": 0.24516808543478877,
+    "r_partial": 0.18608282562145273,
+    "ci_low": 0.04490677199130931,
+    "ci_high": 0.3247629769736053
+  },
+  "medium": {
+    "n": 187,
+    "r_raw": 0.351496844273123,
+    "r_partial": 0.3776236844202434,
+    "ci_low": 0.2598345850867291,
+    "ci_high": 0.4895415853246542
+  },
+  "supersedes": "results/model_visualization/level_query.json",
+  "note": "target changed from in-sample 2015-2023 woba_level to held-out 2024 wOBA (min 10 PA); level_query values themselves are reused unchanged from results/model_visualization/level_query.csv",
+  "n_hitters_before_join": 541,
+  "n_hitters_lost_in_join": 20
+}

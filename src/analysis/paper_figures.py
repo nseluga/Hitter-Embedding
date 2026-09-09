@@ -29,6 +29,7 @@ SEED_STABILITY_JSON = "results/model_visualization/seed_stability_corrected_null
 DIMENSION_USAGE_JSON = "results/model_visualization/dimension_usage.json"
 EXPOSURE_LOADINGS_JSON = "results/model_visualization/exposure_loadings.json"
 LEVEL_QUERY_JSON = "results/model_visualization/level_query.json"
+LEVEL_QUERY_HELDOUT_JSON = "results/paper_figures/level_query_heldout.json"
 SURFACES_SUMMARY_CSV = "results/model_visualization/surfaces_summary.csv"
 HITTER_STATS_CSV = "results/model_visualization/hitter_stats.csv"
 HITTER_NAMES_CSV = "data/processed/hitter_names.csv"
@@ -51,7 +52,6 @@ FIGURE_NAMES = [
     "calibration_2025",
     "tuned_well",
     "level_query_strata",
-    "platoon_direction_summary",
 ]
 
 
@@ -381,34 +381,50 @@ def fig_tuned_well(root, out_dir):
 
 
 def fig_level_query_strata(root, out_dir):
-    """Figure 5: partial correlation with its CI per stratum plus pooled, from level_query.json."""
+    """
+    Figure 5: partial correlation per stratum, in-sample beside held-out.
+
+    The in-sample series scores the level query against woba_level, built from the
+    same 2015-2023 pitches the embedding trained on. The held-out series scores the
+    same level-query values against 2024 wOBA. Plotting both is the point: the gap
+    between the two series is the part of the in-sample number that does not survive
+    a season the model never saw, and it is concentrated in the high stratum.
+    """
     with open(root / LEVEL_QUERY_JSON) as f:
-        level_query = json.load(f)
+        in_sample = json.load(f)
+    with open(root / LEVEL_QUERY_HELDOUT_JSON) as f:
+        held_out = json.load(f)
 
     row_order = ["pooled", "low", "medium", "high"]
-    r_partial = [level_query[name]["r_partial"] for name in row_order]
-    ci_low = [level_query[name]["ci_low"] for name in row_order]
-    ci_high = [level_query[name]["ci_high"] for name in row_order]
 
-    figure, axis = plt.subplots(figsize=(7, 4))
+    def series(source):
+        r = [source[name]["r_partial"] for name in row_order]
+        return (r,
+                [r_i - source[name]["ci_low"] for r_i, name in zip(r, row_order)],
+                [source[name]["ci_high"] - r_i for r_i, name in zip(r, row_order)])
+
+    figure, axis = plt.subplots(figsize=(7.5, 4.2))
     y_positions = np.arange(len(row_order))
-    error_low = [r - lo for r, lo in zip(r_partial, ci_low)]
-    error_high = [hi - r for hi, r in zip(ci_high, r_partial)]
-    axis.errorbar(r_partial, y_positions, xerr=[error_low, error_high], fmt="o", color="tab:blue", capsize=4)
+    offset = 0.13
+    for source, label, colour, shift in (
+            (in_sample, "in-sample (2015-2023 woba_level)", "#b0b0b0", offset),
+            (held_out, "held out (2024 wOBA)", "#4c8dff", -offset)):
+        r, low, high = series(source)
+        axis.errorbar(r, y_positions + shift, xerr=[low, high], fmt="o",
+                      color=colour, capsize=4, label=label)
+
     axis.axvline(0, color="black", linewidth=0.8)
     axis.set_yticks(y_positions)
-    axis.set_yticklabels(row_order)
-    axis.set_xlabel("partial correlation r (descriptive, in-sample, not a held-out test)")
-    axis.set_title("Level query: partial correlation by exposure stratum")
+    axis.set_yticklabels([f"{name}\n(n={held_out[name]['n']})" for name in row_order])
+    axis.set_xlabel("partial correlation r, controlling for log prior PA")
+    axis.set_title("Level query: the in-sample edge is concentrated in the high stratum")
+    axis.legend(fontsize=8, loc="lower right", frameon=False)
     figure.tight_layout()
 
     output_path = out_dir / "fig_level_query_strata.png"
     figure.savefig(output_path, dpi=150)
     plt.close(figure)
     return output_path
-
-
-PLATOON_BARELY_USED_THRESHOLD = 0.005
 
 
 def load_platoon_lr_gaps(root):
@@ -439,58 +455,17 @@ def load_platoon_lr_gaps(root):
     hitter_stats = pd.read_csv(root / HITTER_STATS_CSV)[["batter", "stand", "obs_platoon_diff"]]
     names = pd.read_csv(root / HITTER_NAMES_CSV)[["batter", "name"]]
     observed = hitter_stats.merge(names, on="batter").rename(columns={"name": "anchor_name"})
-    return gaps.merge(observed, on="anchor_name", how="left")
+    merged = gaps.merge(observed, on="anchor_name", how="left")
 
-
-def fig_platoon_direction_summary(root, out_dir):
-    """
-    Figure 6: the model's platoon gap against the observed one, per anchor hitter.
-
-    Plotting both makes the two facts visible at once: every anchor lands in the
-    correct half of the plot, so the direction is right, and every anchor sits far
-    below the identity line, so the size is heavily compressed.
-    """
-    gaps = load_platoon_lr_gaps(root)
-    if gaps is None:
-        print("skipped fig_platoon_direction_summary: no per-anchor L/R expected-wOBA columns found")
-        return None
-
-    figure, axis = plt.subplots(figsize=(7.5, 5.5))
-    axis.axhline(0, color="gray", linewidth=0.8)
-    axis.axvline(0, color="gray", linewidth=0.8)
-
-    span = [-0.05, 0.10]
-    axis.plot(span, span, color="gray", linestyle="--", linewidth=1,
-              label="identity (model matches observed)")
-    axis.fill_between(span, [-PLATOON_BARELY_USED_THRESHOLD] * 2,
-                      [PLATOON_BARELY_USED_THRESHOLD] * 2, color="black", alpha=0.06,
-                      label=f"model gap below {PLATOON_BARELY_USED_THRESHOLD} (barely used)")
-
-    axis.scatter(gaps["obs_platoon_diff"], gaps["model_gap"], color="tab:blue", zorder=5)
-    # Anchors cluster near the same observed split, so labels alternate above and
-    # below the point rather than all sitting to the upper right of each other.
-    gaps = gaps.sort_values("obs_platoon_diff").reset_index(drop=True)
-    for position, row in gaps.iterrows():
-        label_offset = (8, 6) if position % 2 == 0 else (8, -14)
-        axis.annotate(f"{row['anchor_name']} ({row['stand']}HH)",
-                      xy=(row["obs_platoon_diff"], row["model_gap"]),
-                      xytext=label_offset, textcoords="offset points", fontsize=8)
-
-    correct_direction = int((np.sign(gaps["model_gap"]) == np.sign(gaps["obs_platoon_diff"])).sum())
-    axis.set_xlim(*span)
-    axis.set_ylim(-0.05, 0.10)
-    axis.set_xlabel("observed platoon split, wOBA vs LHP minus vs RHP")
-    axis.set_ylabel("model platoon gap, league context offset removed")
-    axis.set_title(
-        f"Direction right on {correct_direction}/{len(gaps)} anchors, magnitude compressed\n"
-        "(points below the identity line under-state the real split)")
-    axis.legend(fontsize=8, loc="upper left")
-    figure.tight_layout()
-
-    output_path = out_dir / "fig_platoon_direction_summary.png"
-    figure.savefig(output_path, dpi=150)
-    plt.close(figure)
-    return output_path
+    # hitter_stats.csv stores obs_platoon_diff oriented by the batter's own side
+    # (positive = better against the opposite hand), so for a LHB it is already the
+    # negative of L-R. model_gap is fixed-hands L-R. Comparing the two without this
+    # flip scores every left-handed hitter against a reversed observed split.
+    # model_visualization_platoon.py:404 applies the same transform.
+    merged["obs_platoon_lr"] = np.where(merged["stand"] == "L",
+                                        -merged["obs_platoon_diff"],
+                                        merged["obs_platoon_diff"])
+    return merged
 
 
 FIGURE_FUNCTIONS = {
@@ -499,7 +474,6 @@ FIGURE_FUNCTIONS = {
     "calibration_2025": fig_calibration_2025,
     "tuned_well": fig_tuned_well,
     "level_query_strata": fig_level_query_strata,
-    "platoon_direction_summary": fig_platoon_direction_summary,
 }
 
 

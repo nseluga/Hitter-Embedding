@@ -79,3 +79,30 @@ def test_gate_encoding_matches_the_files_own_verdict_columns():
     assert len(sweep) == 6
     assert ((sweep["ci_low_rank"] > 0) == sweep["rank_favours_model_v1"]).all()
     assert ((sweep["ci_high_rmse"] < 0) == sweep["rmse_favours_model_v1"]).all()
+
+
+def test_anchor_observed_split_is_converted_to_fixed_hands():
+    """
+    hitter_stats.csv stores obs_platoon_diff oriented by the batter's own side, while
+    model_gap is fixed-hands L-R. Comparing them unconverted scored 5/5 correct by
+    reversing every left-handed anchor. The loader must expose the converted column,
+    and it must differ from the raw one exactly on the left-handed hitters.
+    """
+    gaps = pf.load_platoon_lr_gaps(pf.repo_root())
+    if gaps is None:
+        pytest.skip("per-anchor L/R expected-wOBA columns absent")
+    assert "obs_platoon_lr" in gaps.columns
+    left = gaps["stand"] == "L"
+    assert left.any() and (~left).any(), "test needs both stands among the anchors"
+    assert (gaps.loc[left, "obs_platoon_lr"] == -gaps.loc[left, "obs_platoon_diff"]).all()
+    assert (gaps.loc[~left, "obs_platoon_lr"] == gaps.loc[~left, "obs_platoon_diff"]).all()
+
+
+def test_anchor_direction_count_is_not_the_retracted_five_of_five():
+    """Regression: the 5/5 count was the sign-convention defect, not a result."""
+    import numpy as np
+    gaps = pf.load_platoon_lr_gaps(pf.repo_root())
+    if gaps is None:
+        pytest.skip("per-anchor L/R expected-wOBA columns absent")
+    correct = int((np.sign(gaps["model_gap"]) == np.sign(gaps["obs_platoon_lr"])).sum())
+    assert correct == 2, f"expected 2/5 under the reconciled convention, got {correct}/5"

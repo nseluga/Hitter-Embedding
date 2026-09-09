@@ -1,0 +1,195 @@
+{
+  "n_hitters": 1493,
+  "norm_vs_log_prior_pa_before_normalization": 0.9147012052438792,
+  "normalized_row_norm_min_max": [
+    0.9999999999999998,
+    1.0000000000000002
+  ],
+  "pca_pc1_vs_log_prior_pa_after_normalization": -0.10688383269769025,
+  "silhouette_curve": [
+    {
+      "k": 2,
+      "silhouette_score": 0.06421975860754871
+    },
+    {
+      "k": 3,
+      "silhouette_score": 0.05680249191902941
+    },
+    {
+      "k": 4,
+      "silhouette_score": 0.054161024655462416
+    },
+    {
+      "k": 5,
+      "silhouette_score": 0.052302580511254734
+    },
+    {
+      "k": 6,
+      "silhouette_score": 0.04918908547449062
+    },
+    {
+      "k": 7,
+      "silhouette_score": 0.04758547295598405
+    },
+    {
+      "k": 8,
+      "silhouette_score": 0.04668085624687129
+    },
+    {
+      "k": 9,
+      "silhouette_score": 0.04550455566818413
+    },
+    {
+      "k": 10,
+      "silhouette_score": 0.04624814171117901
+    }
+  ],
+  "chosen_k": 2,
+  "pca_variance_retained_2d": 0.1817405359732087,
+  "neighbour_purity": [
+    {
+      "observed_purity": 0.6449430676490289,
+      "null_mean": 0.5063576021433356,
+      "null_ci95": [
+        0.49611520428667116,
+        0.5173492967180174
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "stand",
+      "stratum": "all"
+    },
+    {
+      "observed_purity": 0.5751515151515151,
+      "null_mean": 0.5240409090909091,
+      "null_ci95": [
+        0.5039318181818183,
+        0.5439469696969697
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "stand",
+      "stratum": "high"
+    },
+    {
+      "observed_purity": 0.6451428571428571,
+      "null_mean": 0.49949314285714286,
+      "null_ci95": [
+        0.4851392857142857,
+        0.5144428571428572
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "stand",
+      "stratum": "low"
+    },
+    {
+      "observed_purity": 0.5946004319654427,
+      "null_mean": 0.5113302375809935,
+      "null_ci95": [
+        0.4926565874730022,
+        0.5291576673866091
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "stand",
+      "stratum": "medium"
+    },
+    {
+      "observed_purity": 0.573945077026122,
+      "null_mean": 0.33280897521768255,
+      "null_ci95": [
+        0.32297387809778966,
+        0.34273442732752846
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "power_tercile",
+      "stratum": "all"
+    },
+    {
+      "observed_purity": 0.6078787878787879,
+      "null_mean": 0.4000130303030303,
+      "null_ci95": [
+        0.37999999999999995,
+        0.42060606060606065
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "power_tercile",
+      "stratum": "high"
+    },
+    {
+      "observed_purity": 0.5594285714285715,
+      "null_mean": 0.36768271428571425,
+      "null_ci95": [
+        0.3542821428571428,
+        0.381875
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "power_tercile",
+      "stratum": "low"
+    },
+    {
+      "observed_purity": 0.5943844492440605,
+      "null_mean": 0.34745464362850975,
+      "null_ci95": [
+        0.3295896328293737,
+        0.3658801295896328
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "power_tercile",
+      "stratum": "medium"
+    },
+    {
+      "observed_purity": 0.5434025452109845,
+      "null_mean": 0.3327239785666444,
+      "null_ci95": [
+        0.3229688546550569,
+        0.34186369725385135
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "contact_tercile",
+      "stratum": "all"
+    },
+    {
+      "observed_purity": 0.5160606060606061,
+      "null_mean": 0.36806060606060614,
+      "null_ci95": [
+        0.34606060606060607,
+        0.3900075757575757
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "contact_tercile",
+      "stratum": "high"
+    },
+    {
+      "observed_purity": 0.5507142857142857,
+      "null_mean": 0.347263,
+      "null_ci95": [
+        0.33299285714285715,
+        0.36243214285714287
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "contact_tercile",
+      "stratum": "low"
+    },
+    {
+      "observed_purity": 0.5419006479481642,
+      "null_mean": 0.33445896328293734,
+      "null_ci95": [
+        0.31684665226781855,
+        0.3526997840172786
+      ],
+      "p_value": 0.000999000999000999,
+      "n_permutations": 1000,
+      "attribute": "contact_tercile",
+      "stratum": "medium"
+    }
+  ]
+}
