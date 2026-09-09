@@ -1,0 +1,53 @@
+{
+  "arm": "embedding_sgd_sgd_lr1",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "reference_seed": 0,
+  "per_seed": {
+    "1": {
+      "real_median_cosine": 0.9008299368825129,
+      "corrected_null_median_cosine": 0.07906488996316356
+    },
+    "2": {
+      "real_median_cosine": 0.9037802743096615,
+      "corrected_null_median_cosine": 0.07656538234935467
+    },
+    "3": {
+      "real_median_cosine": 0.8975020026764429,
+      "corrected_null_median_cosine": 0.08533855562475767
+    },
+    "4": {
+      "real_median_cosine": 0.9023386177443713,
+      "corrected_null_median_cosine": 0.09063121724978887
+    }
+  },
+  "real_median_per_seed": [
+    0.9008299368825129,
+    0.9037802743096615,
+    0.8975020026764429,
+    0.9023386177443713
+  ],
+  "corrected_null_median_per_seed": [
+    0.07906488996316356,
+    0.07656538234935467,
+    0.08533855562475767,
+    0.09063121724978887
+  ],
+  "real_mean": 0.901112707903247,
+  "corrected_null_mean": 0.08290001129676619,
+  "margin": 0.8182126966064809,
+  "median_diff": 0.8193825545194815,
+  "diff_ci95": [
+    0.8117074004945825,
+    0.8272148919603068
+  ],
+  "n_boot": 1000,
+  "boot_seed": 7,
+  "supersedes": "seed_stability_summary.json",
+  "note": "seed_stability_summary.json's null shuffles rows after fitting the Procrustes rotation, which leaves the fitted alignment intact and reports a null near zero; this sidecar shuffles rows before fitting so the null rotation gets the same fitting freedom as the real one."
+}

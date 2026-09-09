@@ -25,7 +25,7 @@ MIN_PA_SWEEP_CSV = "results/model_evaluation_final/min_pa_sweep_b_min_pa_sweep.c
 CALIBRATION_CSV = "results/model_evaluation_final/calibration.csv"
 CALIBRATION_RELIABILITY_CSV = "results/model_evaluation_final/calibration_reliability.csv"
 REPLAY_SCHEDULE_JSON = "results/model_v1/replay_schedule.json"
-SEED_STABILITY_JSON = "results/model_visualization/seed_stability_summary.json"
+SEED_STABILITY_JSON = "results/model_visualization/seed_stability_corrected_null.json"
 DIMENSION_USAGE_JSON = "results/model_visualization/dimension_usage.json"
 EXPOSURE_LOADINGS_JSON = "results/model_visualization/exposure_loadings.json"
 LEVEL_QUERY_JSON = "results/model_visualization/level_query.json"
@@ -310,7 +310,17 @@ def fig_calibration_2025(root, out_dir):
 
 
 def fig_tuned_well(root, out_dir):
-    """Figure 4: 2x2 grid of small diagnostic tiles, each an independently scaled bar or interval."""
+    """
+    Appendix table: the four build diagnostics, as numbers rather than as four
+    independently scaled tiles.
+
+    The 2x2 tile grid this replaces auto-scaled each panel to its own range, so a
+    0.00007 replay difference and a 0.82 stability margin drew the same size mark.
+    Two of the four rows are gate passes and read as numbers; the other two —
+    effective rank and the norm-exposure correlation — are results that bound how
+    the embedding may be projected, and they are quoted in the representation
+    section's text as well as here.
+    """
     with open(root / REPLAY_SCHEDULE_JSON) as f:
         replay_schedule = json.load(f)
     with open(root / SEED_STABILITY_JSON) as f:
@@ -320,49 +330,50 @@ def fig_tuned_well(root, out_dir):
     with open(root / EXPOSURE_LOADINGS_JSON) as f:
         exposure_loadings = json.load(f)
 
-    figure, axes = plt.subplots(2, 2, figsize=(9, 8))
-
-    # (a) replay gate: arm mean and band vs the refit's achieved ratio.
-    axis = axes[0][0]
-    axis.errorbar([0], [REPLAY_GATE_ARM_MEAN], yerr=[REPLAY_GATE_ARM_BAND], fmt="o", color="tab:blue", capsize=4, label="arm mean +/- band")
-    axis.scatter([1], [REPLAY_GATE_REFIT_ACHIEVED], color="black", marker="D", label="refit achieved")
-    axis.set_xticks([0, 1])
-    axis.set_xticklabels(["arm", "refit"])
-    axis.set_ylabel("replay ratio")
-    axis.set_title(f"(a) replay gate, step budget {replay_schedule['step_budget']}, arm {replay_schedule['arm']}")
-    axis.legend(fontsize=7)
-
-    # (b) seed stability: real vs null median cosine similarity.
-    axis = axes[0][1]
-    axis.bar(["real", "null"], [seed_stability["median_cosine_real"], seed_stability["median_cosine_null"]], color=["tab:blue", "tab:gray"])
-    diff_ci_low, diff_ci_high = seed_stability["diff_ci95"]
-    axis.set_ylabel("median cosine similarity")
-    axis.set_title(f"(b) seed stability, diff 95% CI [{diff_ci_low:.3f}, {diff_ci_high:.3f}]")
-
-    # (c) dimension usage: effective rank out of the embedding's dimensionality.
-    axis = axes[1][0]
-    n_dims = dimension_usage["n_dims"]
-    effective_rank = dimension_usage["effective_rank"]
-    axis.barh(["effective rank"], [effective_rank], color="tab:blue")
-    axis.axvline(n_dims, color="black", linestyle="--", label=f"n_dims = {n_dims}")
-    axis.set_xlim(0, n_dims * 1.1)
-    axis.set_xlabel("dimensions")
-    axis.set_title(f"(c) dimension usage, {effective_rank:.1f} / {n_dims}")
-    axis.legend(fontsize=7)
-
-    # (d) exposure: embedding norm vs log prior PA correlation with its CI.
-    axis = axes[1][1]
+    stability_low, stability_high = seed_stability["diff_ci95"]
     norm_r = exposure_loadings["norm_r"]
-    ci_low, ci_high = exposure_loadings["norm_r_ci95"]
-    axis.errorbar([0], [norm_r], yerr=[[norm_r - ci_low], [ci_high - norm_r]], fmt="o", color="tab:blue", capsize=4)
-    axis.set_xticks([])
-    axis.set_ylim(0, 1)
-    axis.set_ylabel("correlation r")
-    axis.set_title(f"(d) embedding norm vs log prior PA, r={norm_r:.3f}")
+    norm_low, norm_high = exposure_loadings["norm_r_ci95"]
+    effective_rank = dimension_usage["effective_rank"]
+    n_dims = dimension_usage["n_dims"]
 
-    figure.suptitle("Training and embedding diagnostics")
+    rows = [
+        ["replay gate",
+         f"{REPLAY_GATE_REFIT_ACHIEVED:.5f}",
+         f"arm {REPLAY_GATE_ARM_MEAN:.5f} +/- {REPLAY_GATE_ARM_BAND:.5f}",
+         f"step budget {replay_schedule['step_budget']}, arm {replay_schedule['arm']}"],
+        ["seed stability",
+         f"{seed_stability['real_mean']:.4f}",
+         f"corrected null {seed_stability['corrected_null_mean']:.4f}",
+         f"difference 95% CI [{stability_low:.4f}, {stability_high:.4f}]"],
+        ["effective rank",
+         f"{effective_rank:.1f}",
+         f"of {n_dims} dimensions",
+         "a two-dimensional projection discards almost all of it"],
+        ["norm vs log prior PA",
+         f"r = {norm_r:.3f}",
+         f"95% CI [{norm_low:.3f}, {norm_high:.3f}]",
+         f"PC1 vs the same exposure: r = {exposure_loadings['pc1_abs_r']:.3f}"],
+    ]
+
+    figure, axis = plt.subplots(figsize=(11, 2.6))
+    axis.axis("off")
+    table = axis.table(
+        cellText=rows,
+        colLabels=["diagnostic", "value", "reference", "note"],
+        cellLoc="left",
+        colLoc="left",
+        loc="center")
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1, 1.6)
+    for column, width in enumerate([0.18, 0.14, 0.24, 0.44]):
+        for row in range(len(rows) + 1):
+            table[row, column].set_width(width)
+    for column in range(4):
+        table[0, column].set_text_props(weight="bold")
+    axis.set_title("Appendix: build and embedding diagnostics", loc="left")
+
     figure.tight_layout()
-
     output_path = out_dir / "fig_tuned_well.png"
     figure.savefig(output_path, dpi=150)
     plt.close(figure)
