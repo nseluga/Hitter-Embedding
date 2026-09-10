@@ -1,0 +1,123 @@
+% SSAC27 research paper draft. Upload this folder (main.tex + refs.bib) to Overleaf as a new project.
+% Compile with pdfLaTeX. Comments starting with TODO explain what belongs in each section.
+% Check the SSAC27 call for papers for the real page limit and whether they supply a template;
+% if they do, paste the sections below into it.
+
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}     % nicer tables
+\usepackage{graphicx}     % \includegraphics
+\usepackage{hyperref}
+\usepackage[numbers]{natbib}
+
+	itle{Conditional Queries Against a Learned Hitter Process Model}
+\author{Nate Seluga\\ Harvey Mudd College \\ \texttt{nseluga@g.hmc.edu}}
+\date{}
+
+\begin{document}
+\maketitle
+
+% SSAC27 competition abstract: under 500 words including title, sections Introduction /
+% Methods / Results / Conclusion required, up to two tables or figures. Word count of this
+% block is about 466 with the title. Table 1 and Figure 1 are the two slots.
+\section*{Introduction}
+A hitter's platoon split takes several hundred plate appearances against each pitcher hand to stabilize, and teams need the number long before that sample exists. The standard answer is to shrink the observed split toward a league or handedness average, which discards the pitch-level record of how the hitter got there. Prior player embeddings learn from at-bat outcomes or pitch sequences, but they are read out for recent form or game-level predictions; none is composed into a season split a team would project, or scored against how much of that split the data can support. We train a hitter model on pitches and query it for the split.
+
+\section*{Methods}
+The data are 7.3 million Statcast pitches from 2015 through 2024 covering 1,870 hitters. A network of under one million parameters reads a 32-dimensional hitter embedding and the pitch context and predicts, in sequence, whether the hitter swings, whether contact follows, and the exit velocity, launch angle, and spray direction of the ball in play, each as quantile bins. A platoon split is then a query: we average the model over every pitcher in the training seasons weighted by batters faced, compose the pitch outcomes through the count-state Markov chain exactly to wOBA, and average five seeds. Evaluation is walk-forward, with 2025 sealed and scored once against a pre-registered gate: beat a gradient-boosted and an empirical Bayes baseline on both error and rank, reported by prior plate appearances against left-handers. The measurement ceiling is the correlation an error-free predictor could reach given the reliability of one season's side-specific wOBA.
+
+\section*{Results}
+The pre-registered gate did not pass. Pooled error did not separate from either baseline, while pooled rank correlation beat both. Against the ceiling, the model recovers 55 percent of the platoon signal the data can support and 63 percent of the overall level signal (Figure 1). By stratum (Table 1), it beats both baselines on error and rank only for hitters with 113 to 452 prior appearances. Below 113 it is worse than both; 43 percent of those hitters never appeared in training, and the stratum's calibration slope is 0.45, so its predictions are too spread out rather than misordered. Within a handedness the model predicts the direction of a hitter's split at 0.565 against a permutation null of 0.499.
+
+\section*{Conclusion}
+A process model with no split-specific training recovers about half the platoon skill one season can measure. The embedding, trained only on pitch outcomes, separates hitters on power, contact, and plate discipline at 0.75 to 0.80 held-out accuracy. The remaining gap is among hitters the model has barely seen, and it is a calibration problem. A cold-start prior for that stratum is the next step. Code and processed data: \url{https://github.com/nseluga/hitter-embedding} % TODO: make public before Oct 1
+
+% TODO Table 1: 2025 held-out RMSE and weighted rank by stratum for model, gbm_full, eb_bivariate,
+% with paired CIs. Source: results/ claim-1 strata. Figure 1: results/paper_figures/ ceiling vs achieved
+% (platoon B' 0.2965 vs 0.1630; level 0.7420 vs 0.4659).
+
+
+\section{Introduction}
+% TODO: 3-5 paragraphs. (1) The problem in baseball terms: platoon splits stabilize slowly,
+% teams need a number before the sample exists. (2) What people do today: shrinkage,
+% regression to league mean, empirical Bayes. (3) Your idea in one paragraph: learn the
+% hitter's process, then query it. (4) What you found, honestly, including the failed gate.
+% (5) One paragraph on what the paper contains, section by section.
+% Cite \citet{alcorn2018} and \citet{heaton2023} as the closest prior work.
+
+\section{Related work}
+% TODO: Two or three short paragraphs. Player embeddings (\citet{alcorn2018}, \citet{heaton2022},
+% \citet{heaton2023}); platoon split stabilization and shrinkage estimators; anything on
+% process-level (swing / contact / batted ball) modelling. Say in one sentence per paper
+% what it did and how yours differs.
+
+\section{Data}
+% TODO: Statcast 2015--2024, 7,293,321 pitches, 1,870 hitters. Cleaning rules. Frozen
+% walk-forward split: train 2015--2023, validation 2024, test 2025 sealed and scored once.
+% Refit on 2015--2024 before the sealed score. Strata definition: prior side-specific PA
+% vs LHP, low $<113$, medium 113--452, high $\geq 452$. Cold start = 42.7\% of low.
+% A table of counts per split and per stratum belongs here.
+
+\section{Model}
+\subsection{Conditional-query formulation}
+% TODO: Define $p(\text{outcome} \mid h, c)$ for hitter $h$ and pitch context $c$.
+% Explain why the model predicts the process and not the split directly.
+
+\subsection{Factorized process head}
+% TODO: swing $\to$ contact $\to$ \{foul, foul tip, in play\} $\to$ EV $\times$ LA $\times$ spray,
+% 24 quantile bins each, autoregressive. Take outcomes come from the empirical surface.
+% A figure of the head as a tree is worth more than a paragraph here.
+
+\subsection{Architecture and training}
+% TODO: 32-dim hitter embedding, trunk hidden 256, context hidden 128, low-rank bilinear
+% block. AdamW, lr $10^{-3}$, weight decay $10^{-2}$, batch 8192, log-likelihood loss.
+% Five seeds, conditionals averaged before composition. Say what was cut and why
+% (history encoder, pitcher-ID residual).
+
+\subsection{Composing a query}
+% TODO: average over 2,027 training-season pitchers weighted by batters faced; 12-count-state
+% Markov chain solved by backward induction; quality joint enumerated in factored form;
+% value scale is wOBA. Write the recursion out as an equation.
+
+\section{Evaluation protocol}
+% TODO: Baselines (trailing averages, XGBoost \texttt{gbm\_full}, empirical Bayes
+% \texttt{eb\_bivariate}). The pre-registered platoon gate and its two criteria (RMSE, rank).
+% The measurement-ceiling construction from 2024 (route B$'$). Say the gate was fixed
+% before the 2025 score and that it failed.
+
+\section{Results}
+\subsection{Pre-registered gate}
+% TODO: Report the failure first. Table: stratum $\times$ \{model, gbm\_full, eb\_bivariate\}
+% for RMSE and weighted rank on 2025, with paired CIs.
+
+\subsection{Measurement ceiling}
+% TODO: Platoon ceiling 0.2965, achieved 0.1630, fraction 0.55. Level ceiling 0.7420,
+% achieved 0.4659, fraction 0.628. Interval coverage 0.868 vs nominal 0.95.
+
+\subsection{Where the model wins and loses}
+% TODO: Medium stratum beats both baselines on both gates (exploratory, one of 16 cells).
+% Pooled rank edge. Low stratum: no win, calibration slope 0.449 ($z=-4.27$).
+
+\subsection{Platoon direction}
+% TODO: Within-stand sign agreement 0.5651 [0.5232, 0.6062] vs permutation null 0.4987,
+% $p=0.0015$. Do NOT report raw sign agreement 0.6532 as skill (handedness rule alone gives 0.6477).
+
+\subsection{What the embedding encodes}
+% TODO: Held-out LDA accuracies on attribute axes: ev\_p90 0.800, contact\_rate 0.765,
+% zone\_swing 0.782, chase 0.752, whiff 0.69/0.73 (chance 0.333). Whiff-vs-damage is a null.
+% No discrete clusters (silhouette 0.064); say so rather than showing archetypes.
+
+\section{Limitations and open items}
+% TODO: Low-stratum power (about 9,785 batters needed). Medium floor overstatement unchecked.
+% Pitcher contamination (about 0.65\% of training pitches) pending retrain. LDA axis inflation.
+% No learning-curve evidence.
+
+\section{Conclusion}
+% TODO: Four or five sentences. What was built, what it reached, what it did not, and what
+% a reader should take from it. No new claims here.
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}

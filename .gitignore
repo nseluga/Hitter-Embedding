@@ -22,4 +22,7 @@ data/processed/phase_d/
 mlruns/
 mlflow.db
 results/checkpoints/
-results/model_v1/STOP
+results/model_v1/
+
+# Paper folder — local only
+paper/STOP
