@@ -525,7 +525,7 @@ def _sample_grid(repertoire, slots, stand_slot, n_pitches, generator):
 def _group_woba(models, kernels, tensors, frame, tables, points, n_bins, hitter_rows,
                 grid, pitcher_weights, split_head, chunk, w_bb, w_hbp,
                 use_league_split=False, measured_share=1.0, unmeasured_value=0.0,
-                progress=None):
+                progress=None, keep_matrix=False):
     """
     Batters-faced-weighted mean of W(0,0) over the pitchers in `grid`, per hitter.
     Pitchers are processed in chunks so one forward pass covers many of them: the batch is
@@ -534,11 +534,16 @@ def _group_woba(models, kernels, tensors, frame, tables, points, n_bins, hitter_
     under-counts. `absorbing` carries the same weighted sums for the four §8 absorbing rates:
     they ride on the forward passes the wOBA number already paid for, so the fidelity check
     costs four extra 12-state backward inductions per chunk and nothing else.
+
+    `keep_matrix`: also return the (n_hitters, n_pitchers) per-pitcher W(0,0) as a 4th
+    element, so any reweighting of the pitcher set (pitcher-type queries) is a matrix
+    product instead of another multi-hour pass.
     """
     n_hitters = len(hitter_rows)
     n_pitchers, n_states, n_pitches = grid.shape
     total, used = np.zeros(n_hitters, dtype="float64"), 0.0
     absorbing = {key: np.zeros(n_hitters, dtype="float64") for key in ABSORBING_KEYS}
+    matrix = np.zeros((n_hitters, n_pitchers), dtype="float64") if keep_matrix else None
 
     for start in range(0, n_pitchers, chunk):
         stop = min(start + chunk, n_pitchers)
@@ -565,11 +570,15 @@ def _group_woba(models, kernels, tensors, frame, tables, points, n_bins, hitter_
         solved = solve_chain(shaped, w_bb, w_hbp)                   # (H, C, 4, 3)
         weights = pitcher_weights[start:stop]
         total += solved[:, :, 0, 0] @ weights
+        if keep_matrix:
+            matrix[:, start:stop] = solved[:, :, 0, 0]
         for key, rate in absorbing_rates(shaped).items():
             absorbing[key] += rate[:, :, 0, 0] @ weights
         used += float(weights.sum())
         if progress is not None:
             progress(stop, n_pitchers)
+    if keep_matrix:
+        return total, used, absorbing, matrix
     return total, used, absorbing
 
 
@@ -663,7 +672,7 @@ def _restore_cold_start_row(model, original):
 def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
             n_pitchers=DEFAULT_N_PITCHERS, n_pitches=DEFAULT_N_PITCHES, seed=0,
             split_head=None, chunk=DEFAULT_CHUNK_PITCHERS, use_league_split=False,
-            unmeasured_split=True, batters=None, cold_start_prior=None):
+            unmeasured_split=True, batters=None, cold_start_prior=None, keep_matrix=False):
     """
     One pred_woba per (batter, p_throws) active in eval_season (spec §7), plus the four §8
     per-PA absorbing rates the league-fidelity check aggregates.
@@ -683,6 +692,10 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
     appended to a copy of each model's embedding table for that stand's scoring call only,
     then restored (see `_append_cold_start_row`). Default None reproduces today's row-0
     behaviour bit-identically.
+
+    `keep_matrix`: diagnostics gains "per_pitcher", one dict per (p_throws, stand) group with
+    batter ids, pitcher ids, BF weights and the (batters x pitchers) W(0,0) matrix, so
+    pred_woba = w00 @ bf_weight / bf_weight.sum(). Not JSON-serialisable; pop it first.
     """
     weights = eval_targets.load_weights()[str(eval_season)]
     points = torch.from_numpy(qt.woba_points_table(tables["outcome"], weights)).float()
@@ -707,6 +720,7 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
               for hand, (slots, probability) in pool.items()}
 
     predictions, backoff, dropped = [], np.zeros(4, dtype="int64"), 0
+    per_pitcher = []
     # the repertoire is keyed on the BATTER's stand, so hitters standing on different
     # sides cannot share a draw; (hand, stand) is therefore the unit of work
     for hand in sorted(rows["p_throws"].unique()):
@@ -744,12 +758,20 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
                 weight_vector = panel_weights[usable]
                 label = f"{stand}HB vs {hand}HP"
                 _progress(f"{label}: {group.sum()} hitters x {int(usable.sum())} pitchers")
-                total, used, absorbing = _group_woba(
+                result = _group_woba(
                     models, kernels, tensors, frame, tables, points, n_bins, hitter_rows,
                     grid[usable], weight_vector, split_head, chunk, weights["wBB"],
                     weights["wHBP"], use_league_split, share, unmeasured,
                     progress=lambda done, n, label=label: _progress(
-                        f"  {label}: {done}/{n} pitchers"))
+                        f"  {label}: {done}/{n} pitchers"),
+                    # only passed when on, so the default call is the pre-matrix call exactly
+                    **({"keep_matrix": True} if keep_matrix else {}))
+                total, used, absorbing = result[:3]
+                if keep_matrix:
+                    per_pitcher.append({
+                        "p_throws": hand, "stand": stand, "batter": batters[group],
+                        "pitcher": repertoire.pitcher_ids[slots[usable]],
+                        "bf_weight": weight_vector, "w00": result[3]})
                 totals[group] = total / used
                 for key in ABSORBING_KEYS:
                     rates[key][group] = absorbing[key] / used
@@ -779,6 +801,8 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
                    "contact_split_source": "league_table" if (
                        use_league_split or models[0].head_split is None) else "trained_head",
                    "cold_start_prior": cold_start_prior is not None}
+    if keep_matrix:
+        diagnostics["per_pitcher"] = per_pitcher
     return out, diagnostics
 
 

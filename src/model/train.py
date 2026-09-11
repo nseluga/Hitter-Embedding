@@ -44,6 +44,7 @@ import torch
 
 from src.analysis import claim1_eval as evaluation
 from src.config.splits import DEFAULT_SPLIT_CONFIG, load_splits, season_split_map
+from src.data.model_dataset import RESERVED_HITTER_INDEX
 from src.model import loader
 from src.model.v1 import (DEFAULT_EMBEDDING_DIM, HitterEmbeddingV1, LOSS_RULES,
                           WEIGHTINGS, factor_masks, factorized_loss, weight_decay_groups)
@@ -212,9 +213,76 @@ def build_optimizer(model, args):
     trunk = torch.optim.AdamW(
         weight_decay_groups(model, WEIGHT_DECAY, exclude=(model.embedding.weight,)),
         lr=args.lr)
+    # under --embedding-weight-decay-exposure the decay is per row and lives in a grad hook
+    # (`exposure_decay_hook`), so the optimizer's own scalar decay has to be off or the
+    # table would be decayed twice.
     embedding = torch.optim.SGD([model.embedding.weight], lr=args.embedding_lr,
                                 weight_decay=embedding_decay)
     return Optimizers(trunk, embedding)
+
+
+# Both exposure-scaled knobs are anchored at the MEDIAN train pitch count over hitters with
+# a row: the median hitter gets exactly the flag's value, a hitter with half the exposure
+# gets double. Anchoring on the median rather than a fixed pitch count keeps the flag in
+# the same units as WEIGHT_DECAY / a plain dropout rate across builds.
+# Caps: SGD at lr 1 multiplies a row by (1 - lr*decay) each step, so a row decay near 1
+# would zero or flip it; 0.1 is a tenth per step at most. A drop rate is a probability.
+EXPOSURE_DECAY_CAP = 0.1
+
+
+def hitter_exposure(tensors, train_indices, n_rows):
+    """Train pitches per embedding row (row 0 is the reserved index, always 0 here)."""
+    hitter = tensors["hitter"][train_indices]
+    counts = torch.bincount(hitter, minlength=n_rows).double()
+    counts[RESERVED_HITTER_INDEX] = 0
+    return counts
+
+
+def exposure_scaled(counts, value, cap):
+    """value * median/n_h per row, capped; rows with no train pitches take the cap."""
+    seen = counts[counts > 0]
+    median = seen.median() if len(seen) else torch.tensor(1.0, dtype=counts.dtype)
+    scaled = torch.where(counts > 0, value * median / counts.clamp(min=1), torch.full_like(counts, cap))
+    return scaled.clamp(max=cap).float()
+
+
+def exposure_decay_hook(model, tensors, train_indices, args):
+    """
+    --embedding-weight-decay-exposure: coupled L2 on the table with a per-row coefficient
+    proportional to 1/n_h, which is the shrinkage rule EB applies to a rate and the thing
+    a flat decay cannot express (a rare row and a common row shrink at one rate). Applied as
+    grad += d_h * w before SGD steps, which is exactly what torch's scalar weight_decay does
+    per coordinate. Returns the per-row decay vector for the log.
+    """
+    weight = model.embedding.weight
+    counts = hitter_exposure(tensors, train_indices, weight.shape[0])
+    decay = exposure_scaled(counts, args.embedding_weight_decay_exposure,
+                            EXPOSURE_DECAY_CAP)
+    decay[RESERVED_HITTER_INDEX] = 0.0   # the reserved row is never decayed, only dropped into
+    decay = decay.to(weight.device)[:, None]
+    weight.register_hook(lambda grad: grad + decay * weight.detach())
+    return decay[:, 0]
+
+
+def hitter_dropout_rates(tensors, train_indices, n_rows, args):
+    """--hitter-dropout p: per-row probability p * median/n_h (capped at 1) of a pitch being
+    trained with the reserved row in place of its hitter's. None when the knob is off."""
+    p = getattr(args, "hitter_dropout", 0.0) or 0.0
+    if p <= 0:
+        return None
+    counts = hitter_exposure(tensors, train_indices, n_rows)
+    rates = exposure_scaled(counts, p, 1.0)
+    rates[RESERVED_HITTER_INDEX] = 0.0
+    return rates
+
+
+def drop_hitters(hitter, rates, generator):
+    """Swap a random subset of a batch's hitter ids for the reserved row. The trunk then has
+    to carry those pitches on context alone, which is the behaviour the cold-start path
+    needs at inference and the thing a well-exposed row otherwise never teaches it."""
+    draw = torch.rand(hitter.shape[0], generator=generator)
+    mask = (draw < rates[hitter.cpu()]).to(hitter.device)
+    return hitter.masked_fill(mask, RESERVED_HITTER_INDEX)
 
 
 def embedding_weight_decay(args):
@@ -223,6 +291,10 @@ def embedding_weight_decay(args):
     produces comes from the optimizer or from the shrinkage, and those two cannot be told
     apart while both move together."""
     decay = getattr(args, "embedding_weight_decay", None)
+    if getattr(args, "embedding_weight_decay_exposure", None) is not None:
+        assert decay is None, \
+            "--embedding-weight-decay-exposure replaces --embedding-weight-decay; pass one"
+        return 0.0   # per-row decay lives in exposure_decay_hook; the scalar must be off
     return WEIGHT_DECAY if decay is None else float(decay)
 
 
@@ -262,11 +334,17 @@ def run_epoch(model, tensors, indices, optimizer, generator, args, on_step=None,
     model.train(training)
     total, rows, steps = 0.0, 0, 0
     started = time.time()
+    # `indices` IS the train set whenever training, so the exposure counts are the right ones;
+    # recomputed per epoch (one bincount) rather than threaded through fit/fit_to_budget.
+    drop_rates = (hitter_dropout_rates(tensors, indices, model.embedding.weight.shape[0], args)
+                  if training else None)
 
     with torch.set_grad_enabled(training):
         for index in loader.batches(indices, args.batch_size, generator=generator,
                                     shuffle=training):
             hitter, context, labels = loader.gather(tensors, index, device=args.device)
+            if drop_rates is not None:
+                hitter = drop_hitters(hitter, drop_rates, generator)
             loss, _ = factorized_loss(model(hitter, context, labels["ev"], labels["la"]),
                                       labels, **objective)
             if training:
@@ -511,6 +589,14 @@ def run(args):
     if getattr(args, "embedding_lr", None) is None:
         args.embedding_lr = args.lr
     optimizer = build_optimizer(model, args)
+    exposure_decay = None
+    if getattr(args, "embedding_weight_decay_exposure", None) is not None:
+        exposure_decay = exposure_decay_hook(model, tensors, indices["train"], args)
+        seen = exposure_decay[1:][hitter_exposure(tensors, indices["train"],
+                                                  exposure_decay.shape[0])[1:] > 0]
+        print(f"exposure decay: median row {args.embedding_weight_decay_exposure:.1e}, "
+              f"range {seen.min():.1e}..{seen.max():.1e}, "
+              f"{int((seen >= EXPOSURE_DECAY_CAP).sum())} rows at the cap", flush=True)
 
     mlflow.set_tracking_uri(TRACKING_URI)
     mlflow.set_experiment(EXPERIMENT)
@@ -524,6 +610,8 @@ def run(args):
             "embedding_lr": args.embedding_lr,
             "weight_decay": WEIGHT_DECAY,
             "embedding_weight_decay": embedding_weight_decay(args),
+            "embedding_weight_decay_exposure": getattr(args, "embedding_weight_decay_exposure", None),
+            "hitter_dropout": getattr(args, "hitter_dropout", 0.0),
             "split_config": str(getattr(args, "split_config", None) or DEFAULT_SPLIT_CONFIG),
             "step_budget": getattr(args, "step_budget", 0),
             "lr_cut_steps": list(getattr(args, "lr_cut_steps", []) or []),
@@ -612,7 +700,17 @@ def main():
     parser.add_argument("--embedding-weight-decay", type=float, default=None,
                         help="Phase V ablation knob: weight decay on the embedding table only. "
                              "Defaults to the trunk's; 0 is the no-decay arm")
+    parser.add_argument("--embedding-weight-decay-exposure", type=float, default=None,
+                        help="clean-stage arm: per-row table decay = value * median_n / n_h, "
+                             f"capped at {EXPOSURE_DECAY_CAP}. Needs --embedding-optimizer "
+                             "sgd; replaces --embedding-weight-decay")
+    parser.add_argument("--hitter-dropout", type=float, default=0.0,
+                        help="clean-stage arm: train a pitch on the reserved row instead of "
+                             "its hitter's with probability value * median_n / n_h (cap 1)")
     args = parser.parse_args()
+    if args.embedding_weight_decay_exposure is not None:
+        assert args.embedding_optimizer == "sgd", "--embedding-weight-decay-exposure needs sgd"
+    assert 0.0 <= args.hitter_dropout < 1.0, "--hitter-dropout is a probability below 1"
 
     # never score against the frozen test season outside a final run. the season is
     # an explicit argument and the split is derived FROM it, not from --final-run:

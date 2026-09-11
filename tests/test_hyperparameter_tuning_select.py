@@ -427,6 +427,53 @@ def _warm_run(steps=400, warmup_steps=50, seed=3):
     return losses
 
 
+# --------------------------------------------------------------------- the `clean` stage
+
+def test_the_clean_stage_grid_matches_the_stage_it_scores():
+    assert hyperparameter_tuning_select.STAGE_RULES["clean"]["expected_arms"] == \
+        tuple(sorted(name for name, _ in sweep.STAGES["clean"]))
+
+
+def clean_ledger(seeds_per_arm):
+    """One `clean` ledger row per (arm, seed), all at NEUTRAL so only seed counts move."""
+    arms = hyperparameter_tuning_select.STAGE_RULES["clean"]["expected_arms"]
+    rows = [("clean", arm, i, NEUTRAL) for arm in arms
+            for i in range(seeds_per_arm.get(arm, seeds_per_arm.get("*", 1)))]
+    return ledger(rows)
+
+
+def test_one_seed_arms_that_lost_the_screen_are_screened_out_not_underpowered():
+    # pre-registration: deepen only an arm whose one seed beats clean_base seed 0; tie -> base
+    rows = clean_ledger({"clean_base": 5, "*": 1})
+    result = hyperparameter_tuning_select.select(rows, stage="clean")
+    losers = {n for n in hyperparameter_tuning_select.STAGE_RULES["clean"]["expected_arms"]
+              if n != "clean_base"}
+    assert set(result["grid"]["screened_out_arms"]) == losers
+    assert result["grid"]["underpowered_arms"] == []
+    assert result["verdict"] == "incumbent_stands"
+    assert not any(result["arms"][n]["promotable"] for n in losers)
+
+
+def test_a_one_seed_arm_that_beat_the_screen_is_underpowered_until_deepened():
+    rows = clean_ledger({"clean_base": 5, "*": 1})
+    rows = [dict(r, reference=str(NEUTRAL - 0.01)) if r["config"] == "clean_dim64" else r
+            for r in rows]
+    result = hyperparameter_tuning_select.select(rows, stage="clean")
+    assert result["grid"]["underpowered_arms"] == ["clean_dim64"]
+    assert "clean_dim64" not in result["grid"]["screened_out_arms"]
+    assert result["verdict"] == "incomplete_grid"
+
+
+def test_a_two_seed_clean_screen_runs_and_the_floor_is_flagged_as_the_incumbent():
+    rows = clean_ledger({"*": 2})
+    result = hyperparameter_tuning_select.select(rows, stage="clean")
+    assert result["verdict"] in ("incumbent_stands", "tuned_pending_confirmation", "tuned")
+    assert result["guard"]["passed"]
+    assert result["guard"]["shared_seeds"] == [0, 1]
+    assert result["guard"]["drift_is_informative"] is False
+    assert result["guard"]["basis"] == "exact reproduction on shared seeds"
+
+
 def test_the_warm_path_still_overfits_one_batch():
     losses = _warm_run()
     assert losses[-1] < losses[0] * 0.05, \

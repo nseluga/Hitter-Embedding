@@ -19,14 +19,19 @@ P=.venv/bin/python
 LOG=/tmp/hitter-overnight
 FROM=${FROM:-1}
 
-ARM=embedding_sgd_sgd_lr1
-DATA=data/processed/phase_d5
-STATS=results/model_visualization/hitter_stats.csv
+ARM=${ARM:-embedding_sgd_sgd_lr1}
+DATA=${DATA:-data/processed/phase_d5}
+STATS=${STATS:-results/model_visualization/hitter_stats.csv}
 
-FINAL_ARM=embedding_sgd_sgd_lr1_final
-FINAL_DATA=data/processed/phase_d5_final
-FINAL_STATS=results/model_visualization_final/hitter_stats.csv
+FINAL_ARM=${FINAL_ARM:-embedding_sgd_sgd_lr1_final}
+FINAL_DATA=${FINAL_DATA:-data/processed/phase_d5_final}
+FINAL_STATS=${FINAL_STATS:-results/model_visualization_final/hitter_stats.csv}
 FINAL_SEASON=2025
+
+# the arm's own recipe, shared by the stage-3 replay and the stage-4 refit; BUILD_FLAGS only
+# applies to stage 4's tensor build (e.g. the clean winner's --career-pitchers).
+TRAIN_FLAGS=${TRAIN_FLAGS:-"--embedding-optimizer sgd --embedding-lr 1"}
+BUILD_FLAGS=${BUILD_FLAGS:-""}
 # The 2025 chain writes to ITS OWN directories. Every module below writes arm-less, season-less
 # filenames (calibration.csv, pooled_scores.csv, ...) straight into the committed 2024 results,
 # so pointing stage 6 at the default out-dirs would replace the 2024 exhibit with 2025 numbers
@@ -36,9 +41,14 @@ FINAL_PROC_OUT=results/process_calibration_final
 
 # the replay check reproduces the frozen-split arm from a fixed budget instead of from early
 # stopping. Its `reference` has to land inside the five seeds' own spread or the replay is
-# not reproducing them: 1.02386 is their mean, 0.00018 is two SD of it (2026-09-04 log).
-GATE_CENTER=1.02386
-GATE_TOL=0.00018
+# not reproducing them: 1.02386 is their mean, 0.00009 is one SD of it (2026-09-04 log).
+if [[ "$ARM" != embedding_sgd_sgd_lr1 && -z "${GATE_CENTER:-}" ]]; then
+  echo "ARM=$ARM but GATE_CENTER is the 2024 embedding_sgd_sgd_lr1 number; re-derive it from" \
+       "the arm's five seeds (mean) and pass GATE_CENTER= and GATE_TOL= (one SD)" >&2
+  exit 1
+fi
+GATE_CENTER=${GATE_CENTER:-1.02386}
+GATE_TOL=${GATE_TOL:-0.00009}
 
 # budget and cuts are DERIVED (stage 3), never typed: src/model/replay_schedule.py reads them
 # out of the five runs' own logs, which is the only place they were ever recorded.
@@ -125,7 +135,7 @@ if stage 3 "replay check + gate"; then
   say "    budget $BUDGET, cuts $CUTS"
 
   run $P -m src.model.train --split --data-dir $DATA \
-      --embedding-optimizer sgd --embedding-lr 1 --seed 0 \
+      ${=TRAIN_FLAGS} --seed 0 \
       --step-budget $BUDGET --lr-cut-steps ${=CUTS} \
       --run-name replay_check > $LOG/03_replay.log 2>&1
 
@@ -158,7 +168,7 @@ if stage 4 "refit build + 5 seeds (2015-2024)"; then
   fi
   run $P -m src.data.model_dataset --out-dir $FINAL_DATA --n-bins 24 \
       --train-seasons 2015 2016 2017 2018 2019 2020 2021 2022 2023 2024 \
-      > $LOG/04_build.log 2>&1
+      ${=BUILD_FLAGS} > $LOG/04_build.log 2>&1
   if [[ -z "$DRY" ]]; then
     BUDGET=$($P -c "import json;print(json.load(open('$SCHEDULE'))['step_budget'])")
     CUTS=$($P -c "import json;print(' '.join(map(str,json.load(open('$SCHEDULE'))['lr_cut_steps'])))")
@@ -168,7 +178,7 @@ if stage 4 "refit build + 5 seeds (2015-2024)"; then
   for N in 0 1 2 3 4; do
     run $P -m src.model.train --split --data-dir $FINAL_DATA \
         --split-config src/config/split_config_final_run.json \
-        --embedding-optimizer sgd --embedding-lr 1 --seed $N \
+        ${=TRAIN_FLAGS} --seed $N \
         --step-budget $BUDGET --lr-cut-steps ${=CUTS} \
         --run-name $FINAL_ARM > $LOG/04_refit_s$N.log 2>&1
   done
