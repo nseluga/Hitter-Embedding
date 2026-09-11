@@ -134,15 +134,22 @@ def label_far(a, x, y, nm, n=28):
     place_labels(a, [(x[b], y[b], nm[b]) for b in far.index[:n]])
 
 
-def hitter_map(key, S, lvl, nm, pa_r):
-    """x = matchup contrast on one pitcher axis, y = hitter's own level vs RHP, color = same level."""
+HAND_COLORS = {"L": "#2a9d8f", "R": "#e0a030"}  # categorical, kept off red/blue (red = good for hitter site-wide)
+
+
+def hitter_map(key, S, lvl, nm, pa_r, stand):
+    """x = matchup contrast on one pitcher axis, y = hitter's own level vs RHP, color = batter hand."""
     hi, lo, rlab, llab = MAPS[key]
     keep = pa_r >= 300
     x, y = contrast(S, key)[keep], lvl.reindex(S.index)[keep]
     fig, a = plt.subplots(figsize=(10, 7))
     style(a)
     a.axvline(0, color=MUTED, lw=.8)
-    woba_colors(a, y, x=x, y=y)
+    st = stand[keep]
+    for h, c in HAND_COLORS.items():
+        m = st == h
+        a.scatter(x[m], y[m], c=c, alpha=.75, lw=0, s=16, label=f"{h}HB ({m.sum()})")
+    a.legend(loc="lower right", fontsize=8, frameon=False, title="Batter hand", title_fontsize=8)
     label_far(a, x, y, nm)
     kw = dict(fontsize=9, color=MUTED, style="italic", transform=a.transAxes, va="top")
     a.text(.98, .99, f"{rlab} →", ha="right", **kw)
@@ -230,7 +237,7 @@ def main():
     S.assign(name=nm, stand=stand, prior_pa_R=pa_r).to_csv(RES / "matchup_by_type.csv")
     figs = {**{f"profile_{x}_{y}": profiles(x, y, I, a, bf, nm, stand)
                for x, y in (("fb_up", "brk_down"), ("fb_velo", "fb_up"), ("fb_velo", "brk_share"))},
-            **{f"map_{k}": hitter_map(k, S, lvl, nm, pa_r) for k in MAPS},
+            **{f"map_{k}": hitter_map(k, S, lvl, nm, pa_r, stand) for k in MAPS},
             **{f"pair_{x}_{y}": pair_map(x, y, S, lvl, nm, pa_r) for x, y in PAIRS}}
     for name, fig in figs.items():
         fig.savefig(OUT / f"{name}.png", dpi=150)
