@@ -27,14 +27,14 @@ CAVEAT = "2024 exploration build. Model matchup effect, descriptive; one season 
 TYPES = {
     "Hard throwers (top 20% velo)": {"fb_velo": (.8, 1)},
     "Soft tossers (bottom 20% velo)": {"fb_velo": (0, .2)},
-    "FB up (top 20% FB up share)": {"fb_up": (.8, 1)},
-    "FB low (bottom 20% FB up share)": {"fb_up": (0, .2)},
-    "Brk buried (top 20% brk below zone)": {"brk_down": (.8, 1)},
-    "Brk in zone (bottom 20% brk below zone)": {"brk_down": (0, .2)},
+    "Fastballs up (top 20% share of FBs in top third of zone)": {"fb_up": (.8, 1)},
+    "Fastballs rarely up (bottom 20% share of FBs in top third of zone)": {"fb_up": (0, .2)},
+    "Breaking balls buried (top 20% share of breaking balls below zone)": {"brk_down": (.8, 1)},
+    "Breaking balls rarely buried (bottom 20% share of breaking balls below zone)": {"brk_down": (0, .2)},
     "Breaking-ball heavy (top 20%)": {"brk_share": (.8, 1)},
     "Fastball heavy (bottom 20% brk)": {"brk_share": (0, .2)},
-    "North-south (FB up & brk buried top 40%)": {"fb_up": (.6, 1), "brk_down": (.6, 1)},
-    "Power elevators (velo & FB up top 40%)": {"fb_velo": (.6, 1), "fb_up": (.6, 1)},
+    "North-south (top 40% on both: FBs in top third, breaking balls below zone)": {"fb_up": (.6, 1), "brk_down": (.6, 1)},
+    "Power elevators (top 40% on both: velo, FBs in top third of zone)": {"fb_velo": (.6, 1), "fb_up": (.6, 1)},
     "Soft breakers (velo bottom 40%, brk top 40%)": {"fb_velo": (0, .4), "brk_share": (.6, 1)},
 }
 AXES = ("fb_velo", "fb_up", "brk_down", "brk_share")
@@ -101,16 +101,19 @@ def place_labels(a, pts):
 MAPS = {  # one hitter map per pitcher axis: x = matchup contrast between the two ends
     "velo": ("Hard throwers (top 20% velo)", "Soft tossers (bottom 20% velo)", "better vs hard throwers", "better vs soft tossers"),
     "mix": ("Breaking-ball heavy (top 20%)", "Fastball heavy (bottom 20% brk)", "better vs breaking-ball heavy", "better vs fastball heavy"),
-    "location": ("FB up (top 20% FB up share)", "FB low (bottom 20% FB up share)", "better vs fastballs up", "better vs fastballs low"),
-    "brk_location": ("Brk buried (top 20% brk below zone)", "Brk in zone (bottom 20% brk below zone)",
-                     "better vs buried breaking balls", "better vs breaking balls in the zone"),
+    "location": ("Fastballs up (top 20% share of FBs in top third of zone)", "Fastballs rarely up (bottom 20% share of FBs in top third of zone)", "better vs FBs in top third of zone", "better vs FBs rarely in top third"),
+    "brk_location": ("Breaking balls buried (top 20% share of breaking balls below zone)", "Breaking balls rarely buried (bottom 20% share of breaking balls below zone)",
+                     "better vs breaking balls below zone", "better vs breaking balls rarely below zone"),
 }
 
 
+TITLE = {"velo": "Fastball velocity", "mix": "Pitch mix", "location": "Fastball location (top third of zone)",
+         "brk_location": "Breaking-ball location (below zone)"}
 SHORT = {"velo": ("hard throwers", "soft tossers"), "mix": ("breaking-ball heavy", "fastball heavy"),
-         "location": ("fastballs up", "fastballs low"), "brk_location": ("buried breaking balls", "breaking balls in zone")}
-UNITS = {"fb_velo": ("fastball velocity (mph)", "{:.0f}"), "fb_up": ("share of fastballs up in zone", "{:.0%}"),
-         "brk_down": ("share of breaking balls below zone", "{:.0%}"),
+         "location": ("FBs in top third of zone", "FBs rarely in top third"),
+         "brk_location": ("breaking balls below zone", "breaking balls rarely below zone")}
+UNITS = {"fb_velo": ("fastball velocity (mph)", "{:.0f}"), "fb_up": ("share of fastballs in top third of zone or above", "{:.0%}"),
+         "brk_down": ("share of breaking balls below the zone", "{:.0%}"),
          "brk_share": ("breaking-ball share", "{:.0%}")}
 EXAMPLES = (545361, 592450, 660271, 665742, 518692, 605141)  # well-known regulars, not picked for extreme maps
 LIM = 20  # fixed color range (wOBA pts) so hitters compare on one scale
@@ -154,9 +157,9 @@ def hitter_map(key, S, lvl, nm, pa_r, stand):
     kw = dict(fontsize=9, color=MUTED, style="italic", transform=a.transAxes, va="top")
     a.text(.98, .99, f"{rlab} →", ha="right", **kw)
     a.text(.02, .99, f"← {llab}", ha="left", **kw)
-    a.set_xlabel(f"Matchup effect: {hi.split(' (')[0].lower()} minus {lo.split(' (')[0].lower()} (wOBA pts)", fontsize=9, color=INK)
+    a.set_xlabel(f"Matchup effect: {SHORT[key][0]} minus {SHORT[key][1]} (wOBA pts)", fontsize=9, color=INK)
     a.set_ylabel("Hitter's own projected wOBA vs RHP (x1000)", fontsize=9, color=INK)
-    a.set_title(f"{key.replace('_', ' ').title()}: {len(x)} hitters with 300+ prior PA vs RHP.", fontsize=9, color=INK)
+    a.set_title(f"{TITLE[key]}: {len(x)} hitters with 300+ prior PA vs RHP.", fontsize=9, color=INK)
     fig.text(.5, .005, CAVEAT, ha="center", fontsize=7.5, color=MUTED)
     fig.tight_layout(rect=(0, .02, 1, 1))
     return fig
@@ -183,7 +186,7 @@ def pair_map(kx, ky, S, lvl, nm, pa_r):
     a.set_xlabel(f"Matchup effect: {xh} minus {xl} (wOBA pts)", fontsize=9, color=INK)
     a.set_ylabel(f"Matchup effect: {yh} minus {yl} (wOBA pts)", fontsize=9, color=INK)
     r = np.corrcoef(x, y)[0, 1]
-    a.set_title(f"{kx.replace('_', ' ').title()} x {ky.replace('_', ' ')}: {len(x)} hitters with 300+ prior PA vs RHP (top vs bottom 20% on each axis; r = {r:.2f}).",
+    a.set_title(f"{TITLE[kx]} x {TITLE[ky].lower()}: {len(x)} hitters with 300+ prior PA vs RHP (top vs bottom 20% on each axis; r = {r:.2f}).",
                 fontsize=9, color=INK)
     fig.text(.5, .005, CAVEAT, ha="center", fontsize=7.5, color=MUTED)
     fig.tight_layout(rect=(0, .02, 1, 1))
