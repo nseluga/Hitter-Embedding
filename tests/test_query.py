@@ -216,6 +216,41 @@ def test_solve_chain_is_vectorised_over_hitters():
         assert np.allclose(batched[row], single[0])
 
 
+def test_kept_matrix_reproduces_the_weighted_total(monkeypatch):
+    """
+    Pitcher-type queries reweight the per-pitcher W(0,0) matrix instead of re-running the
+    pass, so BF weights applied to that matrix must give exactly today's pred_woba.
+    """
+    rng = np.random.default_rng(7)
+    n_hitters, n_pitchers, n_pitches = 3, 5, 2
+    table = rng.dirichlet([2, 2, 0.4, 3, 3], size=(n_hitters, 10_000))
+
+    def fake_cells(*args):
+        rows = args[8]
+        masses = table[:, rows]                              # (H, rows, 5)
+        cell = {name: masses[..., i] for i, name in
+                enumerate(("ball", "strike", "hbp", "foul", "bip"))}
+        cell["bip_points"] = cell["bip"] * 0.4
+        return cell
+
+    monkeypatch.setattr(query, "_cell_aggregates", fake_cells)
+    grid = rng.integers(0, 10_000, size=(n_pitchers, 12, n_pitches))
+    weights = rng.dirichlet(np.ones(n_pitchers))
+    call = dict(models=None, kernels=None, tensors=None, frame=None, tables=None,
+                points=None, n_bins=None, hitter_rows=np.arange(n_hitters), grid=grid,
+                pitcher_weights=weights, split_head=None, chunk=2, w_bb=0.69, w_hbp=0.72)
+
+    total, used, _ = query._group_woba(**call)
+    kept_total, _, _, matrix = query._group_woba(**call, keep_matrix=True)
+    assert matrix.shape == (n_hitters, n_pitchers)
+    assert np.array_equal(total, kept_total)
+    assert np.allclose(matrix @ weights / weights.sum(), total / used, atol=1e-12)
+    # a one-hot reweighting is that pitcher's own column
+    single, _, _ = query._group_woba(**{**call, "grid": grid[[3]],
+                                        "pitcher_weights": np.ones(1)})
+    assert np.allclose(single, matrix[:, 3])
+
+
 def test_walk_weight_bounds_a_patient_hitter():
     """A hitter who only ever walks or strikes out lands between 0 and the walk weight."""
     aggregates = constant_aggregates(0.5, 0.5, 0.0, 0.0, 0.0, 0.0)

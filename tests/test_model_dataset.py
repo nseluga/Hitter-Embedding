@@ -117,6 +117,28 @@ def test_exclusion_is_per_season_not_per_batter():
     assert ((kept["batter"] == 5) & (kept["season"] == 2020)).any()
 
 
+def test_expand_career_pitchers_hits_every_season_for_a_career_pitcher(monkeypatch):
+    """
+    `--career-pitchers` (main()) adds `eval_targets.career_pitcher_batters` ids on top of
+    `primarily_pitchers`, expanded to (season, batter) since the career function returns
+    bare ids. The default (flag off) path must not see any of this.
+    """
+    pa_df = pd.DataFrame({
+        "batter": [7, 7, 7], "season": [2015, 2020, 2023],
+        "game_pk": [1, 2, 3], "at_bat_number": [1, 1, 1],
+        "pitcher": [50, 51, 52],
+    })
+    monkeypatch.setattr(md, "career_pitcher_batters", lambda df: {7})
+
+    expanded = md.expand_career_pitchers(pa_df)
+    assert expanded == {(2015, 7), (2020, 7), (2023, 7)}
+
+    # default path: build() with no excluded_batters is untouched by this feature
+    frame = synthetic_pitches()
+    _, default_manifest = built(frame)
+    assert "career_pitchers_excluded" not in default_manifest
+
+
 # ---- gate: the vocabulary is train-only, and unseen batters reach the reserved row ----
 
 def test_vocabulary_excludes_batters_who_appear_only_outside_train():

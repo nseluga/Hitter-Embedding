@@ -54,7 +54,7 @@ import numpy as np
 import pandas as pd
 
 from src.config.splits import load_splits
-from src.data.eval_targets import primarily_pitchers
+from src.data.eval_targets import career_pitcher_batters, primarily_pitchers
 from src.features import context_features
 
 # Row 0 of the embedding table: zero-initialized, never trained, the destination for
@@ -133,6 +133,15 @@ def drop_pitcher_at_bats(pitch_df, excluded):
         return pitch_df
     keys = pd.MultiIndex.from_arrays([pitch_df["season"], pitch_df["batter"]])
     return pitch_df[~keys.isin(excluded)]
+
+
+def expand_career_pitchers(pa_df):
+    """
+    `eval_targets.career_pitcher_batters` ids expanded to (season, batter) pairs, one per
+    season in pa_df, so they can join `primarily_pitchers`'s exclusion set (--career-pitchers).
+    """
+    seasons = pa_df["season"].unique()
+    return {(season, batter) for batter in career_pitcher_batters(pa_df) for season in seasons}
 
 
 def build_vocabulary(pitch_df, train_seasons):
@@ -562,14 +571,26 @@ def main():
                         help="defaults to the frozen train split; pass 2015..2024 for the refit")
     parser.add_argument("--no-ablation-block", action="store_true",
                         help="drop B.2's flagged five for the D.8 block ablation")
+    parser.add_argument("--career-pitchers", action="store_true",
+                        help="also exclude career pitcher-batters (eval_targets.career_pitcher_batters), "
+                             "not just per-season primarily_pitchers")
     args = parser.parse_args()
 
+    pa_df = pd.read_parquet(args.eval_targets)
     pitch_df = pd.read_parquet(args.pitch_events, columns=sorted(set(SOURCE_COLUMNS)))
-    excluded = primarily_pitchers(pd.read_parquet(args.eval_targets))
+    excluded = primarily_pitchers(pa_df)
+    career_pitchers_added = 0
+    if args.career_pitchers:
+        expanded = expand_career_pitchers(pa_df)
+        career_pitchers_added = len(expanded - excluded)
+        excluded = excluded | expanded
     arrays, manifest = build(pitch_df, train_seasons=args.train_seasons, n_bins=args.n_bins,
                              include_block=not args.no_ablation_block,
                              excluded_batters=excluded)
+    if args.career_pitchers:
+        manifest["career_pitchers_excluded"] = True
     save(arrays, manifest, args.out_dir)
+    print(f"career pitcher (season, batter) pairs added to the exclusion: {career_pitchers_added}")
 
     print(f"pitcher at-bat pitches dropped: {manifest['n_pitcher_at_bat_pitches_dropped']}")
     print(f"pitches: {manifest['n_pitches']}")

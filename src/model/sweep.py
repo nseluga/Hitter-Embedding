@@ -24,6 +24,7 @@ in, lid open:
 
 import argparse
 import csv
+import json
 import os
 import statistics
 import subprocess
@@ -151,8 +152,26 @@ STAGES["embedding_sgd_nodecay"] = [
                          "--embedding-weight-decay", "0"]),
 ]
 
+# Phase V, item 4+. The pitcher-free build (`--career-pitchers` on model_dataset) crossed with
+# the embedding table's own regularization. `reference` here is NOT comparable to any earlier
+# stage's -- the exclusion changes the vocabulary and the bin edges, so the quality-bin log loss
+# is over a different population and different bins (see the presplit->splithead note above).
+# Screen order is the list order. `--embedding-weight-decay-exposure` and `--hitter-dropout` are
+# being added to train.py by another agent; 1e-2 is the trunk's WEIGHT_DECAY evaluated at the
+# median-exposure hitter.
+CLEAN_DATA_DIR = "data/processed/phase_d5_clean"
+CLEAN_BASE = ["--split", "--data-dir", CLEAN_DATA_DIR, "--embedding-optimizer", "sgd", "--embedding-lr", "1"]
+STAGES["clean"] = [
+    ("clean_base", [*CLEAN_BASE]),
+    ("clean_wd3e-3", [*CLEAN_BASE, "--embedding-weight-decay", "3e-3"]),
+    ("clean_wd3e-2", [*CLEAN_BASE, "--embedding-weight-decay", "3e-2"]),
+    ("clean_wd_exposure", [*CLEAN_BASE, "--embedding-weight-decay-exposure", "1e-2"]),
+    ("clean_dropout", [*CLEAN_BASE, "--hitter-dropout", "0.1"]),
+    ("clean_dim64", [*CLEAN_BASE, "--embedding-dim", "64"]),
+]
+
 DEFAULT_SEEDS = {"screen": 2, "early": 5, "presplit": 5, "splithead": 5, "rebuild": 5,
-                 "selection": 2, "embedding_sgd": 5, "embedding_sgd_nodecay": 1}
+                 "selection": 2, "embedding_sgd": 5, "embedding_sgd_nodecay": 1, "clean": 1}
 
 
 # The ledger is keyed and read as text, so `1e-3` and `0.001` are two different values in a
@@ -232,6 +251,13 @@ def launch(stage, name, extra, seed, args):
                "--device", args.device, "--run-name", f"{stage}_{name}",
                "--data-dir", args.data_dir, *args.train_args, *extra]
 
+    if stage == "clean":
+        # the clean build is the whole point of the stage; a run on plain phase_d5 would still
+        # produce a plausible `reference`, and select's guard cannot tell (its floor is this arm)
+        manifest_path = Path(args.data_dir) / "manifest.json"
+        assert manifest_path.exists() and json.loads(manifest_path.read_text()).get(
+            "career_pitchers_excluded"), \
+            f"clean stage needs a --career-pitchers build; {manifest_path} was not built with it"
     started = time.time()
     with log_path.open("w") as log:
         completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT,
@@ -261,6 +287,9 @@ def main_argv(argv=None):
     parser.add_argument("--train-args", nargs=argparse.REMAINDER, default=[],
                         help="everything after this is passed straight to train.py")
     parser.add_argument("--dry-run", action="store_true", help="print the queue and exit")
+    parser.add_argument("--configs", nargs="+", default=None,
+                        help="run only these arms of the stage (the deepen step: incumbent "
+                             "plus the arms that beat it at one seed)")
     args = parser.parse_args(argv)
 
     # Phase O quarantines batch size and weight decay: they are one setting (the
@@ -281,7 +310,11 @@ def main(argv=None):
     seeds = args.seeds or DEFAULT_SEEDS[args.stage]
     done, history = read_ledger()
     pending = [item for item in queue(args.stage, seeds)
-               if (args.stage, item[0], item[2]) not in done]
+               if (args.stage, item[0], item[2]) not in done
+               and (args.configs is None or item[0] in args.configs)]
+    if args.configs:
+        unknown = sorted(set(args.configs) - {name for name, _ in STAGES[args.stage]})
+        assert not unknown, f"--configs not in stage {args.stage}: {unknown}"
 
     print(f"stage {args.stage}: {len(pending)} runs pending, {len(done)} already done")
     if args.dry_run or not pending:
