@@ -11,9 +11,10 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.colors
+import matplotlib.ticker
 import numpy as np
 import pandas as pd
-from scipy.cluster.hierarchy import leaves_list, linkage
 
 from src.analysis.matchup_explorer_data import double_center, lookup_names
 
@@ -91,27 +92,6 @@ def place_labels(a, pts):
                    arrowprops=dict(arrowstyle="-", color=MUTED, lw=.4) if dy else None)
 
 
-def heatmap(S, nm, stand, pa_r):
-    """45 regulars x 8 pitcher types, rows clustered so similar profiles sit together."""
-    M = S.loc[pa_r.sort_values(ascending=False).index[:45]]
-    M = M.iloc[leaves_list(linkage(M.to_numpy(), "average", metric="correlation"))]
-    fig, a = plt.subplots(figsize=(9.5, 12))
-    lim = np.nanpercentile(np.abs(M.to_numpy()), 97)
-    im = a.imshow(M.to_numpy(), cmap="RdBu_r", vmin=-lim, vmax=lim, aspect="auto")
-    a.set_xticks(range(M.shape[1]), [c.split(" (")[0].replace(" ", "\n", 1) for c in M.columns], fontsize=7.5, color=INK)
-    a.xaxis.tick_top()
-    a.set_yticks(range(len(M)), [f"{nm[b]} ({stand[b]})" for b in M.index], fontsize=7.5, color=INK)
-    for i in range(M.shape[0]):
-        for j in range(M.shape[1]):
-            a.text(j, i, f"{M.iat[i, j]:+.0f}", ha="center", va="center", fontsize=6,
-                   color="white" if abs(M.iat[i, j]) > lim * .6 else INK)
-    cb = fig.colorbar(im, ax=a, shrink=.4, pad=.02)
-    cb.set_label("Matchup effect vs type (wOBA pts)\nred = better than his own RHP average", fontsize=8, color=INK)
-    fig.text(.5, .005, "45 hitters with the most prior PA vs RHP. " + CAVEAT, ha="center", fontsize=7.5, color=MUTED)
-    fig.tight_layout(rect=(0, .015, 1, 1))
-    return fig
-
-
 MAPS = {  # one hitter map per pitcher axis: x = matchup contrast between the two ends
     "velo": ("Hard throwers (top 20% velo)", "Soft tossers (bottom 20% velo)", "better vs hard throwers", "better vs soft tossers"),
     "mix": ("Breaking-ball heavy (top 20%)", "Fastball heavy (bottom 20% brk)", "better vs breaking-ball heavy", "better vs fastball heavy"),
@@ -119,53 +99,119 @@ MAPS = {  # one hitter map per pitcher axis: x = matchup contrast between the tw
 }
 
 
-def hitter_map(key, S, lvl, nm, stand, pa_r):
-    """x = matchup contrast on one pitcher axis, y = hitter's own level vs RHP."""
+SHORT = {"velo": ("hard throwers", "soft tossers"), "mix": ("breaking-ball heavy", "fastball heavy"),
+         "location": ("elevators", "low-zone")}
+UNITS = {"fb_velo": ("fastball velocity (mph)", "{:.0f}"), "fb_height": ("fastball height (ft)", "{:.1f}"),
+         "brk_share": ("breaking-ball share", "{:.0%}")}
+EXAMPLES = (545361, 592450, 660271, 665742, 518692, 605141)  # well-known regulars, not picked for extreme maps
+LIM = 20  # fixed color range (wOBA pts) so hitters compare on one scale
+
+
+def contrast(S, key):
+    hi, lo, *_ = MAPS[key]
+    return S[hi] - S[lo]
+
+
+def woba_colors(a, lvl, **kw):
+    """Scatter colored by the hitter's own projected wOBA vs RHP (red = better)."""
+    norm = matplotlib.colors.TwoSlopeNorm(vcenter=float(np.median(lvl)), vmin=float(lvl.quantile(.02)), vmax=float(lvl.quantile(.98)))
+    sc = a.scatter(c=lvl, cmap="RdBu_r", norm=norm, alpha=.75, lw=0, s=16, **kw)
+    cb = a.figure.colorbar(sc, ax=a, shrink=.5, pad=.01)
+    cb.set_label("His projected wOBA vs RHP (x1000)", fontsize=8, color=INK)
+
+
+def label_far(a, x, y, nm, n=28):
+    far = (np.abs(x.rank(pct=True) - .5) + np.abs(y.rank(pct=True) - .5)).sort_values(ascending=False)
+    place_labels(a, [(x[b], y[b], nm[b]) for b in far.index[:n]])
+
+
+def hitter_map(key, S, lvl, nm, pa_r):
+    """x = matchup contrast on one pitcher axis, y = hitter's own level vs RHP, color = same level."""
     hi, lo, rlab, llab = MAPS[key]
     keep = pa_r >= 300
-    x, y = (S[hi] - S[lo])[keep], lvl.reindex(S.index)[keep]
+    x, y = contrast(S, key)[keep], lvl.reindex(S.index)[keep]
     fig, a = plt.subplots(figsize=(10, 7))
     style(a)
     a.axvline(0, color=MUTED, lw=.8)
-    a.scatter(x, y, s=14, c=np.where(stand[x.index] == "L", "#2f6690", "#c8553d"), alpha=.55, lw=0)
-    far = (np.abs(x.rank(pct=True) - .5) * 2 + (y.rank(pct=True) > .9)).sort_values(ascending=False)
-    place_labels(a, [(x[b], y[b], nm[b]) for b in far.index[:28]])
+    woba_colors(a, y, x=x, y=y)
+    label_far(a, x, y, nm)
     kw = dict(fontsize=9, color=MUTED, style="italic", transform=a.transAxes, va="top")
     a.text(.98, .99, f"{rlab} →", ha="right", **kw)
     a.text(.02, .99, f"← {llab}", ha="left", **kw)
     a.set_xlabel(f"Matchup effect: {hi.split(' (')[0].lower()} minus {lo.split(' (')[0].lower()} (wOBA pts)", fontsize=9, color=INK)
     a.set_ylabel("Hitter's own projected wOBA vs RHP (x1000)", fontsize=9, color=INK)
-    a.set_title(f"{key.title()}: {len(x)} hitters with 300+ prior PA vs RHP. Blue = LHB, red = RHB.", fontsize=9, color=INK)
+    a.set_title(f"{key.title()}: {len(x)} hitters with 300+ prior PA vs RHP.", fontsize=9, color=INK)
     fig.text(.5, .005, CAVEAT, ha="center", fontsize=7.5, color=MUTED)
     fig.tight_layout(rect=(0, .02, 1, 1))
     return fig
 
 
-def gradients(I, a, bf, nm, pa_r):
-    """12 most positive and 12 most negative regulars per axis, effect smoothed along the pitcher axis."""
-    fig, axs = plt.subplots(1, 3, figsize=(15, 8.5))
-    regs = pa_r[pa_r >= 300].index
-    for ax_, (col, lab, fmt) in zip(axs, [("fb_velo", "fastball velocity (mph)", "{:.0f}"),
-                                          ("fb_height", "fastball height (ft)", "{:.1f}"),
-                                          ("brk_share", "breaking-ball share", "{:.0%}")]):
-        v = a[col].to_numpy()
-        grid = np.quantile(v, np.linspace(.05, .95, 40))
-        K = bf.to_numpy()[None, :] * np.exp(-.5 * ((grid[:, None] - v[None, :]) / (.35 * v.std())) ** 2)
-        X = I.loc[regs, a.index]
-        G = (X.fillna(0).to_numpy(float) @ K.T) / (X.notna().to_numpy() @ K.T)
-        o = np.argsort(G[:, -8:].mean(1) - G[:, :8].mean(1))
-        pick = np.r_[o[:12], o[-12:]]
-        lim = np.nanpercentile(np.abs(G[pick]), 97)
-        ax_.imshow(G[pick], cmap="RdBu_r", vmin=-lim, vmax=lim, aspect="auto")
-        ax_.set_yticks(range(24), [nm[regs[i]] for i in pick], fontsize=7.5, color=INK)
-        ax_.axhline(11.5, color=INK, lw=1.2)
-        ticks = np.linspace(0, 39, 5).astype(int)
-        ax_.set_xticks(ticks, [fmt.format(grid[t]) for t in ticks], fontsize=8, color=INK)
+PAIRS = (("location", "mix"), ("velo", "mix"), ("velo", "location"))
+
+
+def pair_map(kx, ky, S, lvl, nm, pa_r):
+    """x, y = matchup contrasts on two pitcher axes; each quadrant = the pitcher combo that suits him."""
+    keep = pa_r >= 300
+    x, y, v = contrast(S, kx)[keep], contrast(S, ky)[keep], lvl.reindex(S.index)[keep]
+    fig, a = plt.subplots(figsize=(10, 8))
+    style(a)
+    a.axvline(0, color=MUTED, lw=.8)
+    a.axhline(0, color=MUTED, lw=.8)
+    woba_colors(a, v, x=x, y=y)
+    label_far(a, x, y, nm, 30)
+    (xh, xl), (yh, yl) = SHORT[kx], SHORT[ky]
+    kw = dict(fontsize=9, color=MUTED, style="italic", transform=a.transAxes)
+    for tx, ty, ha, va, s1, s2 in ((.98, .99, "right", "top", xh, yh), (.02, .99, "left", "top", xl, yh),
+                                   (.98, .01, "right", "bottom", xh, yl), (.02, .01, "left", "bottom", xl, yl)):
+        a.text(tx, ty, f"better vs {s1}\n& {s2}", ha=ha, va=va, **kw)
+    a.set_xlabel(f"Matchup effect: {xh} minus {xl} (wOBA pts)", fontsize=9, color=INK)
+    a.set_ylabel(f"Matchup effect: {yh} minus {yl} (wOBA pts)", fontsize=9, color=INK)
+    r = np.corrcoef(x, y)[0, 1]
+    a.set_title(f"{kx.title()} x {ky}: {len(x)} hitters with 300+ prior PA vs RHP (top vs bottom 20% on each axis; r = {r:.2f}).",
+                fontsize=9, color=INK)
+    fig.text(.5, .005, CAVEAT, ha="center", fontsize=7.5, color=MUTED)
+    fig.tight_layout(rect=(0, .02, 1, 1))
+    return fig
+
+
+def smooth2d(e, a, bf, xa, ya, n=30):
+    """BF-weighted Gaussian kernel average of one hitter's effects over a 2D pitcher-attribute grid.
+    Returns grid axes, smoothed effect, and support (share of peak kernel BF; low = few pitchers nearby)."""
+    ok = e.notna().to_numpy()
+    x, y, w, v = a[xa].to_numpy()[ok], a[ya].to_numpy()[ok], bf.to_numpy()[ok], e.to_numpy()[ok]
+    gx, gy = (np.quantile(q, np.linspace(.05, .95, n)) for q in (x, y))
+    Kx = np.exp(-.5 * ((gx[:, None] - x[None]) / (.35 * x.std())) ** 2)
+    Ky = np.exp(-.5 * ((gy[:, None] - y[None]) / (.35 * y.std())) ** 2)
+    num, den = (Ky * w) @ (Kx * v).T, (Ky * w) @ Kx.T  # [ny, nx]
+    return gx, gy, num / den, den / den.max()
+
+
+def profiles(xa, ya, I, a, bf, nm, stand, bids=EXAMPLES):
+    """One 2D matchup profile per example hitter: color = effect vs pitchers near that (x, y)."""
+    fig, axs = plt.subplots(2, 3, figsize=(15, 9.5), sharex=True, sharey=True)
+    for ax_, b in zip(axs.flat, bids):
+        gx, gy, G, sup = smooth2d(I.loc[b, a.index], a, bf, xa, ya)
+        G = np.where(sup < .08, np.nan, G)  # ponytail: fixed 8% support cutoff, tune if edges look noisy
+        ax_.set_facecolor("#e6e4df")
+        im = ax_.pcolormesh(gx, gy, G, cmap="RdBu_r", vmin=-LIM, vmax=LIM, shading="nearest")
+        ok = I.loc[b, a.index].notna()
+        ax_.scatter(a.loc[ok, xa], a.loc[ok, ya], s=2, c=INK, alpha=.15, lw=0)
+        ax_.set_xlim(gx[0], gx[-1]); ax_.set_ylim(gy[0], gy[-1])
+        ax_.set_title(f"{nm[b]} ({stand[b]}HB)", fontsize=9, color=INK)
+        style(ax_)
+    for ax_ in axs[-1]:
+        lab, fmt = UNITS[xa]
         ax_.set_xlabel(f"RHP {lab} →", fontsize=9, color=INK)
-        ax_.set_title("top 12: worse as it rises · bottom 12: better", fontsize=8, color=MUTED)
-    fig.suptitle("Matchup effect along each pitcher axis (red = better than own RHP average)", fontsize=10, color=INK)
-    fig.text(.5, .005, "Hitters with 300+ prior PA vs RHP. " + CAVEAT, ha="center", fontsize=7.5, color=MUTED)
-    fig.tight_layout(rect=(0, .02, 1, .97))
+        ax_.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda t, _, f=fmt: f.format(t)))
+    for ax_ in axs[:, 0]:
+        lab, fmt = UNITS[ya]
+        ax_.set_ylabel(f"RHP {lab} →", fontsize=9, color=INK)
+        ax_.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda t, _, f=fmt: f.format(t)))
+    cb = fig.colorbar(im, ax=axs, shrink=.5, pad=.02)
+    cb.set_label(f"Matchup effect (wOBA pts, fixed ±{LIM})\nred = better than his own RHP average", fontsize=8, color=INK)
+    fig.suptitle(f"Hitter matchup profiles: {UNITS[xa][0]} x {UNITS[ya][0]} (RHP). Dots = pitchers; gray = too few pitchers nearby.",
+                 fontsize=10, color=INK)
+    fig.text(.5, .005, CAVEAT, ha="center", fontsize=7.5, color=MUTED)
     return fig
 
 
@@ -173,8 +219,10 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     I, a, bf, S, lvl, nm, stand, pa_r = load()
     S.assign(name=nm, stand=stand, prior_pa_R=pa_r).to_csv(RES / "matchup_by_type.csv")
-    figs = {"type_heatmap": heatmap(S, nm, stand, pa_r), "gradients": gradients(I, a, bf, nm, pa_r),
-            **{f"map_{k}": hitter_map(k, S, lvl, nm, stand, pa_r) for k in MAPS}}
+    figs = {**{f"profile_{x}_{y}": profiles(x, y, I, a, bf, nm, stand)
+               for x, y in (("fb_height", "brk_share"), ("fb_velo", "fb_height"), ("fb_velo", "brk_share"))},
+            **{f"map_{k}": hitter_map(k, S, lvl, nm, pa_r) for k in MAPS},
+            **{f"pair_{x}_{y}": pair_map(x, y, S, lvl, nm, pa_r) for x, y in PAIRS}}
     for name, fig in figs.items():
         fig.savefig(OUT / f"{name}.png", dpi=150)
         plt.close(fig)

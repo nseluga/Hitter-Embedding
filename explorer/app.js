@@ -19,7 +19,7 @@ const S = {
   tab: "matchup",
   m: { p: null, hs: [], sort: "pred" },
   l: { mode: "hitters", metric: "eff", minpa: 300, stand: "", n: 15, hand: "R", preset: Object.keys(PRESETS)[0], rng: PRESETS["Hard throwers (top 20% velo)"], p1: null, h1: null, hand1: "R", minbf: 500 },
-  h: { hand: "R", rows: "top", n: 30, cols: "types", cell: "eff", hs: [], ps: [], sort: null },
+  h: { b: 545361, hand: "R", x: "fb_height", y: "brk_share", cell: "eff", zlo: 0, zhi: 100 },
 };
 
 // ---------- data ----------
@@ -77,8 +77,8 @@ const woba = v => v == null ? "–" : v.toFixed(3).replace(/^0/, "");
 const signed = v => { const r = Math.round(v * 1000) || 0; return (r > 0 ? "+" : "") + r; };
 const pts = v => v == null ? "–" : `<span class="${v > 0.0005 ? "pos" : v < -0.0005 ? "neg" : ""}">${signed(v)}</span>`;
 const esc = s => String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
-function color(t) { // t in [-1,1]: red -> neutral -> green
-  const x = Math.max(-1, Math.min(1, t)), a = [247, 246, 243], b = x < 0 ? [214, 120, 108] : [104, 181, 134], f = Math.abs(x);
+function color(t) { // t in [-1,1]: blue (bad for hitter) -> neutral -> red (good)
+  const x = Math.max(-1, Math.min(1, t)), a = [247, 246, 243], b = x < 0 ? [47, 102, 144] : [180, 55, 50], f = Math.abs(x);
   return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * f)).join(",")})`;
 }
 function table(cols, rows) {
@@ -164,43 +164,93 @@ function renderLeader() {
   $("#l-worst").innerHTML = `<b>Worst</b>` + (n ? table(["#", ...cols], rows.slice(-n).reverse().map((r, i) => [rows.length - i, ...r.cells])) : "");
 }
 
-function renderHeat() {
-  const h = S.h;
-  for (const k of ["hand", "rows", "n", "cols", "cell"]) $(`#h-${k}`).value = h[k];
-  chips($("#h-chips"), [...h.hs.map(b => "H: " + hitLabel[b]), ...h.ps.map(k => "P: " + pitLabel[k])], i => {
-    if (i < h.hs.length) h.hs.splice(i, 1); else h.ps.splice(i - h.hs.length, 1); render();
-  });
-  const hand = h.hand;
-  let rowIds;
-  if (h.rows === "top") rowIds = hitters().filter(b => groupFor(b, hand)).sort((a, b) => pa(b, hand) - pa(a, hand)).slice(0, h.n);
-  else if (h.rows === "list") rowIds = h.hs.filter(b => groupFor(b, hand));
-  else {
-    const [attr, dir] = h.rows.split(":");
-    rowIds = hitters().filter(b => groupFor(b, hand) && pa(b, hand) >= 300 && H[b][attr] != null)
-      .sort((a, b) => (dir === "hi" ? -1 : 1) * (H[a][attr] - H[b][attr])).slice(0, h.n);
+const AXN = { fb_velo: ["FB velo", "mph", 1, ["Soft", "Hard"]], fb_height: ["FB height", "ft", 2, ["Low FB", "High FB"]], brk_share: ["Breaking share", "%", 0, ["Fastball-heavy", "Breaking-heavy"]] };
+const fmtAx = (a, v) => a === "brk_share" ? Math.round(v * 100) + "%" : v.toFixed(AXN[a][2]);
+function quantile(sorted, q) { const i = (sorted.length - 1) * q, lo = Math.floor(i); return sorted[lo] + (sorted[Math.min(lo + 1, sorted.length - 1)] - sorted[lo]) * (i - lo); }
+function profileGrid(bid, hand, xa, ya, keys, n = 30) { // same kernel as src/analysis/matchup_figures.smooth2d
+  const pts = keys.map(k => ({ k, x: P[k][xa], y: P[k][ya], w: P[k].bf, c: cell(bid, k) })).filter(p => p.c);
+  if (pts.length < 10) return null;
+  const axis = f => { const v = pts.map(f).sort((a, b) => a - b), m = v.reduce((s, t) => s + t, 0) / v.length;
+    const sd = Math.sqrt(v.reduce((s, t) => s + (t - m) ** 2, 0) / v.length);
+    return { g: Array.from({ length: n }, (_, i) => quantile(v, 0.05 + 0.9 * i / (n - 1))), h: 0.35 * sd }; };
+  const X = axis(p => p.x), Y = axis(p => p.y);
+  const Kx = X.g.map(gx => pts.map(p => Math.exp(-0.5 * ((gx - p.x) / X.h) ** 2)));
+  const Ky = Y.g.map(gy => pts.map(p => Math.exp(-0.5 * ((gy - p.y) / Y.h) ** 2)));
+  const eff = [], pred = [], den = []; let mx = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    let se = 0, sp = 0, sd = 0;
+    pts.forEach((p, t) => { const w = p.w * Ky[i][t] * Kx[j][t]; se += w * p.c.eff; sp += w * p.c.pred; sd += w; });
+    eff.push(se / sd); pred.push(sp / sd); den.push(sd); mx = Math.max(mx, sd);
   }
-  const cols = h.cols === "types"
-    ? Object.entries(PRESETS).map(([name, rng]) => { const keys = typeKeys(hand, rng); return { name: name.replace(/ \(.*/, ""), full: name, f: b => typeScore(b, hand, keys) }; })
-    : h.ps.filter(k => k[0] === hand).map(k => ({ name: P[k].name, full: P[k].name, f: b => cell(b, k) }));
-  if (!rowIds.length || !cols.length) {
-    $("#h-out").innerHTML = `<span class="muted">${!cols.length ? `Add ${hand}HP pitchers to your list, or switch columns to pitcher types.` : "No hitters for these rows. Add hitters to your list."}</span>`; return;
+  return { pts, X, Y, n, eff, pred, sup: den.map(d => d / mx) };
+}
+let PROF = null; // last drawn grid, for hover
+function renderProfile() {
+  const h = S.h, hand = h.hand, z = AX.find(a => a !== h.x && a !== h.y);
+  $("#h-b").value = h.b ? hitLabel[h.b] : "";
+  for (const k of ["hand", "cell", "zlo", "zhi"]) $(`#h-${k}`).value = h[k];
+  for (const k of ["x", "y"]) { $(`#h-${k}`).innerHTML = AX.map(a => `<option value="${a}">${AXN[a][0]}</option>`).join(""); $(`#h-${k}`).value = h[k]; }
+  $("#h-zlab").textContent = z ? AXN[z][0] : "Third axis";
+  const cv = $("#h-cv"), ctx = cv.getContext("2d"), quad = $("#h-quad");
+  const msg = t => { cv.hidden = true; PROF = null; $("#h-legend").innerHTML = `<span class="muted">${t}</span>`; quad.innerHTML = ""; };
+  if (!h.b) return msg("Pick a hitter.");
+  if (h.x === h.y) return msg("Pick two different axes.");
+  const avg = hitterAvg(h.b, hand); if (!avg) return msg(`${esc(H[h.b].name)} is not in the data against ${hand}HP.`);
+  const T = PCT[hand], keys = T.keys.filter(k => T[z][k] >= h.zlo / 100 - 1e-12 && T[z][k] <= h.zhi / 100 + 1e-12);
+  const R = profileGrid(h.b, hand, h.x, h.y, keys); if (!R) return msg("Too few pitchers in that third-axis range.");
+  cv.hidden = false;
+  const W = Math.min(640, cv.parentElement.clientWidth || 640), Hh = Math.round(W * 0.78), m = { l: 58, r: 10, t: 10, b: 40 };
+  const dpr = window.devicePixelRatio || 1; cv.width = W * dpr; cv.height = Hh * dpr; cv.style.width = W + "px"; cv.style.height = Hh + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, Hh);
+  const pw = W - m.l - m.r, ph = Hh - m.t - m.b, { X, Y, n } = R;
+  const sx = v => m.l + (v - X.g[0]) / (X.g[n - 1] - X.g[0]) * pw, sy = v => m.t + ph - (v - Y.g[0]) / (Y.g[n - 1] - Y.g[0]) * ph;
+  const tone = v => h.cell === "eff" ? v / 0.02 : (v - 0.320) / 0.08;
+  const css = getComputedStyle(document.body);
+  const edges = g => g.map((v, i) => i ? (g[i - 1] + v) / 2 : v).concat(g[n - 1]); // quantile grid is uneven: cells span midpoints
+  const ex = edges(X.g).map(sx), ey = edges(Y.g).map(sy);
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const k = i * n + j; ctx.fillStyle = R.sup[k] < 0.08 ? "#cfccc5" : color(tone(R[h.cell][k]));
+    ctx.fillRect(ex[j], ey[i + 1], ex[j + 1] - ex[j] + 0.5, ey[i] - ey[i + 1] + 0.5);
   }
-  const M = rowIds.map(b => cols.map(c => c.f(b)));
-  let order = rowIds.map((_, i) => i);
-  if (h.sort != null && h.sort < cols.length) order.sort((a, b) => (M[b][h.sort]?.[h.cell] ?? -9) - (M[a][h.sort]?.[h.cell] ?? -9));
-  const vals = M.flat().filter(Boolean).map(c => c.pred), mean = vals.reduce((a, b) => a + b, 0) / (vals.length || 1);
-  const tone = c => h.cell === "eff" ? c.eff / 0.02 : (c.pred - mean) / 0.06;
-  $("#h-out").innerHTML = `<table class="hm"><thead><tr><th></th>${cols.map((c, j) => `<th class="col" data-j="${j}" title="${esc(c.full)} (click to sort)">${esc(c.name)}${h.sort === j ? " ▼" : ""}</th>`).join("")}</tr></thead><tbody>` +
-    order.map(i => `<tr><td class="name">${esc(H[rowIds[i]].name)} <span class="muted">${groupFor(rowIds[i], hand).stand}</span></td>` +
-      M[i].map((c, j) => c ? `<td style="background:${color(tone(c))}" title="${esc(H[rowIds[i]].name)} vs ${esc(cols[j].full)}: effect ${Math.round(c.eff * 1000)} pts, projected ${woba(c.pred)}, his avg ${woba(c.avg)}">${h.cell === "eff" ? signed(c.eff) : woba(c.pred)}</td>` : `<td>–</td>`).join("") + `</tr>`).join("") +
-    `</tbody></table><div class="hint">${h.cell === "eff" ? "Green = better than his usual vs this hand, red = worse (wOBA points; color saturates at ±20)." : "Color relative to the table mean."}</div>`;
-  document.querySelectorAll(".hm th.col").forEach(th => th.onclick = () => { h.sort = h.sort === +th.dataset.j ? null : +th.dataset.j; render(); });
+  ctx.save(); ctx.beginPath(); ctx.rect(m.l, m.t, pw, ph); ctx.clip();
+  ctx.fillStyle = "rgba(43,47,53,.35)";
+  for (const p of R.pts) { ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), 1.6, 0, 7); ctx.fill(); }
+  ctx.restore();
+  ctx.fillStyle = css.getPropertyValue("--muted"); ctx.font = "11px system-ui"; ctx.textAlign = "center";
+  for (let t = 0; t < 5; t++) { const j = Math.round(t * (n - 1) / 4); ctx.fillText(fmtAx(h.x, X.g[j]), sx(X.g[j]), Hh - m.b + 16); }
+  ctx.fillText(`${hand}HP ${AXN[h.x][0]} (${AXN[h.x][1]}) →`, m.l + pw / 2, Hh - 6);
+  ctx.textAlign = "right";
+  for (let t = 0; t < 5; t++) { const i = Math.round(t * (n - 1) / 4); ctx.fillText(fmtAx(h.y, Y.g[i]), m.l - 12, sy(Y.g[i]) + 4); }
+  ctx.save(); ctx.translate(12, m.t + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.fillText(`${AXN[h.y][0]} (${AXN[h.y][1]}) →`, 0, 0); ctx.restore();
+  PROF = { R, sx, sy };
+  const bfShare = keys.reduce((s, k) => s + P[k].bf, 0) / T.tot;
+  $("#h-legend").innerHTML = `<b>${esc(H[h.b].name)}</b> (${avg.side}HB) vs ${R.pts.length} ${hand}HP (${Math.round(bfShare * 100)}% of batters faced). His average vs ${hand}HP: ${woba(avg.avg)}. ` +
+    (h.cell === "eff" ? `Red = better than his usual, blue = worse. Fixed scale, saturates at ±20 wOBA points.` : `Red = high projected wOBA, blue = low. Fixed scale, .240 to .400, same for every hitter.`);
+  // four boxes: both axes split at the BF-weighted median, third axis kept at its range
+  const rngFor = (xh, yh) => AX.flatMap(a => a === h.x ? (xh ? [50, 100] : [0, 50]) : a === h.y ? (yh ? [50, 100] : [0, 50]) : [h.zlo, h.zhi]);
+  const box = (xh, yh) => { const ks = typeKeys(hand, rngFor(xh, yh)), c = ks.length ? typeScore(h.b, hand, ks) : null;
+    return c ? `<td style="background:${color(tone(c[h.cell]))}"><b>${signed(c.eff)}</b> pts<br>${woba(c.pred)}<br><span style="font-size:11px">${ks.length} pitchers</span></td>` : `<td>–</td>`; };
+  const [xl, xh] = AXN[h.x][3], [yl, yh] = AXN[h.y][3];
+  quad.innerHTML = `<b>Four pitcher types</b> <span class="muted">(each axis split at the ${hand}HP median)</span>
+    <table class="quad" style="max-width:520px;margin-top:8px"><thead><tr><th></th><th>${xl}</th><th>${xh}</th></tr></thead><tbody>
+    <tr><td class="name">${yh}</td>${box(0, 1)}${box(1, 1)}</tr><tr><td class="name">${yl}</td>${box(0, 0)}${box(1, 0)}</tr></tbody></table>
+    <div class="hint">Each box: matchup effect (pts), then projected wOBA, averaged over the pitchers in that type by batters faced.</div>`;
+}
+function profileHover(e) {
+  const tip = $("#h-tip"); if (!PROF) return;
+  const r = e.target.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  let best = null, bd = 64;
+  for (const p of PROF.R.pts) { const d = (PROF.sx(p.x) - mx) ** 2 + (PROF.sy(p.y) - my) ** 2; if (d < bd) { bd = d; best = p; } }
+  if (!best) { tip.hidden = true; return; }
+  const q = P[best.k];
+  tip.innerHTML = `<b>${esc(q.name)}</b> · ${q.fb_velo.toFixed(1)} mph, FB ${q.fb_height.toFixed(2)} ft, brk ${Math.round(q.brk_share * 100)}%<br>Projected ${woba(best.c.pred)} · effect ${pts(best.c.eff)} · ${q.bf.toLocaleString()} BF`;
+  tip.hidden = false; tip.style.left = Math.min(mx + 12, r.width - 260) + "px"; tip.style.top = (my + 12) + "px";
 }
 
 function render() {
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === S.tab));
   document.querySelectorAll("main section").forEach(s => s.hidden = s.id !== "t-" + S.tab);
-  ({ matchup: renderMatchup, leader: renderLeader, heat: renderHeat, about: () => {} })[S.tab]();
+  ({ matchup: renderMatchup, leader: renderLeader, profile: renderProfile, about: () => {} })[S.tab]();
   history.replaceState(null, "", "#" + encodeURIComponent(JSON.stringify(S)));
 }
 
@@ -215,10 +265,10 @@ function wire() {
   for (const k of ["minpa", "n", "minbf"]) $(`#l-${k}`).onchange = e => { S.l[k] = +e.target.value; render(); };
   pick($("#l-p1"), labelToP, k => { S.l.p1 = k; render(); });
   pick($("#l-h1"), labelToH, b => { S.l.h1 = b; render(); });
-  for (const k of ["hand", "rows", "cols", "cell"]) $(`#h-${k}`).onchange = e => { S.h[k] = e.target.value; S.h.sort = null; render(); };
-  $("#h-n").onchange = e => { S.h.n = +e.target.value; render(); };
-  pick($("#h-addh"), labelToH, b => { if (!S.h.hs.includes(b)) S.h.hs.push(b); $("#h-addh").value = ""; S.h.rows = "list"; render(); });
-  pick($("#h-addp"), labelToP, k => { if (!S.h.ps.includes(k)) S.h.ps.push(k); $("#h-addp").value = ""; S.h.cols = "list"; S.h.hand = k[0]; render(); });
+  for (const k of ["hand", "x", "y", "cell"]) $(`#h-${k}`).onchange = e => { S.h[k] = e.target.value; render(); };
+  for (const k of ["zlo", "zhi"]) $(`#h-${k}`).onchange = e => { S.h[k] = +e.target.value; render(); };
+  pick($("#h-b"), labelToH, b => { S.h.b = b; render(); });
+  $("#h-cv").onmousemove = profileHover; $("#h-cv").onmouseleave = () => $("#h-tip").hidden = true;
 }
 function labels() {
   const dup = (arr) => { const c = {}; arr.forEach(x => c[x] = (c[x] || 0) + 1); return c; };
@@ -238,6 +288,7 @@ function selftest() { // reference values from the Python prototype / npz
   const checks = [
     ["cell RHB_vs_RHP[Trout, Colón] = 0.45344", close(g.w[g.bIdx.get(545361) * g.m + g.pIdx.get(112526)], 0.45344, 1e-4)],
     ["Trout vs hard throwers = -12.65 pts", close(trout.eff * 1000, -12.6475, 0.05)],
+    ["Trout profile grid = Python smooth2d", (R => close(R.eff[15 * 30 + 15], 0.000708, 5e-5) && close(R.eff[5 * 30 + 25], -0.000237, 5e-5))(profileGrid(545361, "R", "fb_height", "brk_share", PCT.R.keys))],
   ];
   const msg = checks.map(([n, ok]) => `${ok ? "PASS" : "FAIL"} ${n}`).join(" · ");
   console.log("selftest:", msg); $("#banner").textContent = "selftest: " + msg;
@@ -252,7 +303,10 @@ async function init() {
   for (const [name, o] of Object.entries(D.groups)) decode(name, o);
   PCT = { R: buildPct("R"), L: buildPct("L") };
   labels(); wire();
+  const h0 = S.h;
   try { Object.assign(S, JSON.parse(decodeURIComponent(location.hash.slice(1)))); } catch (e) { /* fresh state */ }
+  if (!S.h || !S.h.x) S.h = h0; // links from the old heatmap tab
+  if (S.tab === "heat") S.tab = "profile";
   if (!S.m.p) { // friendly default: a well-known matchup
     const k = Object.keys(P).find(k => P[k].name === "Gerrit Cole"); S.m.p = k || null;
     S.m.hs = [545361, 592450, 665742, 660271].filter(b => H[b]);
