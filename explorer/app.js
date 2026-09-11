@@ -18,9 +18,35 @@ const PRESETS = {
 const S = {
   tab: "matchup",
   m: { p: null, hs: [], sort: "pred" },
-  l: { mode: "hitters", metric: "eff", minpa: 300, stand: "", n: 15, hand: "R", preset: Object.keys(PRESETS)[0], rng: PRESETS["Hard throwers (top 20% velo)"], p1: null, h1: null, hand1: "R", minbf: 500 },
-  h: { b: 545361, hand: "R", x: "fb_height", y: "brk_share", cell: "eff", zlo: 0, zhi: 100 },
+  l: { mode: "hitters", metric: "eff", minpa: 300, stand: "", n: 15, hand: "R", preset: Object.keys(PRESETS)[0], rng: PRESETS["Hard throwers (top 20% velo)"], p1: null, h1: null, hand1: "R", minbf: 500, ex: "", exlo: 0, exhi: 100 },
+  h: { b: 545361, hand: "R", x: "fb_up", y: "brk_down", z: "fb_velo", cell: "eff", zlo: 0, zhi: 100 },
 };
+// every pitcher trait: [label, unit, decimals, [low name, high name]]. Horizontal traits are hand-mirrored (+ = glove or arm side as named).
+const AXN = {
+  fb_velo: ["FB velo", "mph", 1, ["Soft", "Hard"]],
+  fb_height: ["FB height", "ft", 2, ["Low FB", "High FB"]],
+  brk_share: ["Breaking share", "%", 0, ["Fastball-heavy", "Breaking-heavy"]],
+  fb_ivb: ["FB ride (vertical break)", "in", 1, ["Sinking FB", "Riding FB"]],
+  fb_run: ["FB arm-side run", "in", 1, ["Little run", "Big run"]],
+  fb_spin: ["FB spin", "rpm", 0, ["Low spin", "High spin"]],
+  si_share: ["Sinker share of FBs", "%", 0, ["Four-seam", "Sinker"]],
+  rel_height: ["Release height", "ft", 2, ["Low release", "High release"]],
+  extension: ["Extension", "ft", 2, ["Short ext.", "Long ext."]],
+  rel_side: ["Release side (arm side)", "ft", 2, ["Over the top", "Wide / sidearm"]],
+  off_share: ["Offspeed share", "%", 0, ["Few offspeed", "Offspeed-heavy"]],
+  velo_gap: ["Velo gap (FB − other pitches)", "mph", 1, ["Small gap", "Big gap"]],
+  mix_depth: ["Mix depth (effective # pitches)", "pitches", 1, ["Narrow mix", "Deep mix"]],
+  brk_sweep: ["Breaking-ball sweep", "in", 1, ["Little sweep", "Big sweep"]],
+  zone_rate: ["Zone rate", "%", 0, ["Nibbler", "Attacks zone"]],
+  glove_side: ["Location (glove side +)", "in", 1, ["Arm side", "Glove side"]],
+  fb_up: ["FB up (top third of zone or above)", "%", 0, ["FB low", "FB up"]],
+  brk_down: ["Breaking balls below zone", "%", 0, ["Brk in zone", "Brk buried"]],
+  brk_height: ["Breaking-ball height", "ft", 2, ["Low breaking", "High breaking"]],
+  off_down: ["Offspeed below zone", "%", 0, ["Offspeed in zone", "Offspeed buried"]],
+};
+const ALL = Object.keys(AXN), SHARE = new Set(["brk_share", "si_share", "off_share", "zone_rate", "fb_up", "brk_down", "off_down"]);
+const fmtAx = (a, v) => SHARE.has(a) ? Math.round(v * 100) + "%" : v.toFixed(AXN[a][2]);
+const axOpts = (blank) => (blank ? `<option value="">${blank}</option>` : "") + ALL.map(a => `<option value="${a}">${AXN[a][0]}</option>`).join("");
 
 // ---------- data ----------
 function decode(name, o) {
@@ -49,15 +75,17 @@ function pitchersOf(hand) { return Object.keys(P).filter(k => k[0] === hand); }
 function buildPct(hand) { // BF-weighted within-hand percentile, as in the prototype
   const ks = pitchersOf(hand).filter(k => AX.every(a => P[k][a] != null) && P[k].bf > 0);
   const tot = ks.reduce((s, k) => s + P[k].bf, 0), out = {};
-  for (const a of AX) {
+  for (const a of ALL) { // percentile among pitchers that have this trait (sweep is missing for a few)
+    const ka = ks.filter(k => P[k][a] != null), ta = ka.reduce((s, k) => s + P[k].bf, 0);
     let cum = 0; out[a] = {};
-    [...ks].sort((x, y) => P[x][a] - P[y][a]).forEach(k => { cum += P[k].bf; out[a][k] = cum / tot; });
+    ka.sort((x, y) => P[x][a] - P[y][a]).forEach(k => { cum += P[k].bf; out[a][k] = cum / ta; });
   }
   out.keys = ks; out.tot = tot; return out;
 }
-function typeKeys(hand, rng) {
+const inPct = (T, a, k, lo, hi) => T[a][k] != null && T[a][k] >= lo / 100 - 1e-12 && T[a][k] <= hi / 100 + 1e-12;
+function typeKeys(hand, rng, ex) { // ex = optional extra filter {a, lo, hi}
   const T = PCT[hand];
-  return T.keys.filter(k => AX.every((a, i) => T[a][k] >= rng[2 * i] / 100 - 1e-12 && T[a][k] <= rng[2 * i + 1] / 100 + 1e-12));
+  return T.keys.filter(k => AX.every((a, i) => inPct(T, a, k, rng[2 * i], rng[2 * i + 1])) && (!ex || !ex.a || inPct(T, ex.a, k, ex.lo, ex.hi)));
 }
 function typeScore(bid, hand, keys) {
   const g = groupFor(bid, hand); if (!g) return null;
@@ -100,11 +128,13 @@ function renderMatchup() {
   const pct = PCT[hand], attr = q.fb_velo == null ? "no pitch attributes" :
     `FB ${q.fb_velo.toFixed(1)} mph (${Math.round(pct.fb_velo[m.p] * 100)}th pct), FB height ${q.fb_height.toFixed(2)} ft (${Math.round(pct.fb_height[m.p] * 100)}th), breaking share ${Math.round(q.brk_share * 100)}% (${Math.round(pct.brk_share[m.p] * 100)}th)` +
     `, ${q.bf.toLocaleString()} training BF${q.bf < 500 ? " (small sample: the model knows him less well)" : ""}`;
+  const more = q.fb_velo == null ? "" : ALL.filter(a => !AX.includes(a) && q[a] != null)
+    .map(a => `${AXN[a][0]} ${fmtAx(a, q[a])}${SHARE.has(a) ? "" : " " + AXN[a][1]} (${Math.round(pct[a][m.p] * 100)}th)`).join(" · ");
   let rows = m.hs.map(b => ({ b, c: cell(b, m.p) }));
   if (m.sort !== "none") rows.sort((x, y) => (y.c ? y.c[m.sort] : -9) - (x.c ? x.c[m.sort] : -9));
   const max = Math.max(0.45, ...rows.map(r => r.c ? r.c.pred : 0));
   out.innerHTML = `<div><b>${esc(q.name)}</b> <span class="muted">${hand}HP · ${attr}</span></div>
-    <div class="hint">Average projected wOBA allowed: ${vs.join(" · ")}</div><div class="scroll" style="margin-top:10px">` +
+    ${more ? `<div class="hint">${more}</div>` : ""}<div class="hint">Average projected wOBA allowed: ${vs.join(" · ")}</div><div class="scroll" style="margin-top:10px">` +
     (rows.length ? table(["Hitter", "Bats", "Projected wOBA", "", `His avg vs ${hand}HP`, "Expected vs this pitcher", "Matchup effect (pts)"],
       rows.map(({ b, c }) => c ? [esc(H[b].name), c.side, `<b>${woba(c.pred)}</b>`, `<span class="bar" style="width:${Math.round(c.pred / max * 160)}px;background:var(--acc)"></span>`, woba(c.avg), woba(c.pred - c.eff), pts(c.eff)]
         : [esc(H[b].name), "–", "not in data for this pitcher", "", "", "", ""]))
@@ -116,8 +146,12 @@ function typeCtl(el, st, onChange) {
   const names = ["Velo", "FB height", "Brk share"];
   el.innerHTML = `<label>Pitcher hand<select data-k="hand"><option>R</option><option>L</option></select></label>
     <label>Pitcher type<select data-k="preset">${Object.keys(PRESETS).map(p => `<option>${p}</option>`).join("")}<option>Custom</option></select></label>` +
-    names.map((n, a) => `<label>${n} pct<span><input type="number" data-r="${2 * a}" min="0" max="100" step="5"> – <input type="number" data-r="${2 * a + 1}" min="0" max="100" step="5"></span></label>`).join("");
-  el.querySelector("[data-k=hand]").value = st.hand; el.querySelector("[data-k=preset]").value = st.preset;
+    names.map((n, a) => `<label>${n} pct<span><input type="number" data-r="${2 * a}" min="0" max="100" step="5"> – <input type="number" data-r="${2 * a + 1}" min="0" max="100" step="5"></span></label>`).join("") +
+    `<label>Also filter by<select data-k="ex">${axOpts("(none)")}</select></label>` +
+    (st.ex ? `<label>pct<span><input type="number" data-e="exlo" min="0" max="100" step="5"> – <input type="number" data-e="exhi" min="0" max="100" step="5"></span></label>` : "");
+  el.querySelector("[data-k=hand]").value = st.hand; el.querySelector("[data-k=preset]").value = st.preset; el.querySelector("[data-k=ex]").value = st.ex;
+  el.querySelector("[data-k=ex]").onchange = e => { st.ex = e.target.value; onChange(); };
+  el.querySelectorAll("[data-e]").forEach(inp => { inp.value = st[inp.dataset.e]; inp.onchange = () => { st[inp.dataset.e] = +inp.value; onChange(); }; });
   el.querySelectorAll("[data-r]").forEach(inp => { inp.value = st.rng[+inp.dataset.r]; inp.onchange = () => { st.rng = [...st.rng]; st.rng[+inp.dataset.r] = +inp.value; st.preset = "Custom"; onChange(); }; });
   el.querySelector("[data-k=hand]").onchange = e => { st.hand = e.target.value; onChange(); };
   el.querySelector("[data-k=preset]").onchange = e => { st.preset = e.target.value; if (PRESETS[st.preset]) st.rng = [...PRESETS[st.preset]]; onChange(); };
@@ -142,7 +176,7 @@ function renderLeader() {
   } else {
     let f;
     if (isType) {
-      hand = l.hand; const keys = typeKeys(hand, l.rng), T = PCT[hand];
+      hand = l.hand; const keys = typeKeys(hand, l.rng, { a: l.ex, lo: l.exlo, hi: l.exhi }), T = PCT[hand];
       const bfShare = keys.reduce((s, k) => s + P[k].bf, 0) / T.tot;
       const ex = [...keys].sort((a, b) => P[b].bf - P[a].bf).slice(0, 4).map(k => P[k].name);
       info = `${keys.length} ${hand}HP, ${Math.round(bfShare * 100)}% of batters faced. Most-used: ${esc(ex.join(", "))}.`;
@@ -164,8 +198,6 @@ function renderLeader() {
   $("#l-worst").innerHTML = `<b>Worst</b>` + (n ? table(["#", ...cols], rows.slice(-n).reverse().map((r, i) => [rows.length - i, ...r.cells])) : "");
 }
 
-const AXN = { fb_velo: ["FB velo", "mph", 1, ["Soft", "Hard"]], fb_height: ["FB height", "ft", 2, ["Low FB", "High FB"]], brk_share: ["Breaking share", "%", 0, ["Fastball-heavy", "Breaking-heavy"]] };
-const fmtAx = (a, v) => a === "brk_share" ? Math.round(v * 100) + "%" : v.toFixed(AXN[a][2]);
 function quantile(sorted, q) { const i = (sorted.length - 1) * q, lo = Math.floor(i); return sorted[lo] + (sorted[Math.min(lo + 1, sorted.length - 1)] - sorted[lo]) * (i - lo); }
 function profileGrid(bid, hand, xa, ya, keys, n = 30) { // same kernel as src/analysis/matchup_figures.smooth2d
   const pts = keys.map(k => ({ k, x: P[k][xa], y: P[k][ya], w: P[k].bf, c: cell(bid, k) })).filter(p => p.c);
@@ -186,18 +218,18 @@ function profileGrid(bid, hand, xa, ya, keys, n = 30) { // same kernel as src/an
 }
 let PROF = null; // last drawn grid, for hover
 function renderProfile() {
-  const h = S.h, hand = h.hand, z = AX.find(a => a !== h.x && a !== h.y);
+  const h = S.h, hand = h.hand, z = h.z;
   $("#h-b").value = h.b ? hitLabel[h.b] : "";
   for (const k of ["hand", "cell", "zlo", "zhi"]) $(`#h-${k}`).value = h[k];
-  for (const k of ["x", "y"]) { $(`#h-${k}`).innerHTML = AX.map(a => `<option value="${a}">${AXN[a][0]}</option>`).join(""); $(`#h-${k}`).value = h[k]; }
-  $("#h-zlab").textContent = z ? AXN[z][0] : "Third axis";
+  for (const k of ["x", "y", "z"]) { const el = $(`#h-${k}`); if (!el.options.length) el.innerHTML = axOpts(k === "z" ? "(none)" : ""); el.value = h[k]; }
+  $("#h-zr").hidden = !z;
   const cv = $("#h-cv"), ctx = cv.getContext("2d"), quad = $("#h-quad");
   const msg = t => { cv.hidden = true; PROF = null; $("#h-legend").innerHTML = `<span class="muted">${t}</span>`; quad.innerHTML = ""; };
   if (!h.b) return msg("Pick a hitter.");
   if (h.x === h.y) return msg("Pick two different axes.");
   const avg = hitterAvg(h.b, hand); if (!avg) return msg(`${esc(H[h.b].name)} is not in the data against ${hand}HP.`);
-  const T = PCT[hand], keys = T.keys.filter(k => T[z][k] >= h.zlo / 100 - 1e-12 && T[z][k] <= h.zhi / 100 + 1e-12);
-  const R = profileGrid(h.b, hand, h.x, h.y, keys); if (!R) return msg("Too few pitchers in that third-axis range.");
+  const T = PCT[hand], keys = T.keys.filter(k => P[k][h.x] != null && P[k][h.y] != null && (!z || inPct(T, z, k, h.zlo, h.zhi)));
+  const R = profileGrid(h.b, hand, h.x, h.y, keys); if (!R) return msg("Too few pitchers in that filter range.");
   cv.hidden = false;
   const W = Math.min(640, cv.parentElement.clientWidth || 640), Hh = Math.round(W * 0.78), m = { l: 58, r: 10, t: 10, b: 40 };
   const dpr = window.devicePixelRatio || 1; cv.width = W * dpr; cv.height = Hh * dpr; cv.style.width = W + "px"; cv.style.height = Hh + "px";
@@ -226,9 +258,8 @@ function renderProfile() {
   const bfShare = keys.reduce((s, k) => s + P[k].bf, 0) / T.tot;
   $("#h-legend").innerHTML = `<b>${esc(H[h.b].name)}</b> (${avg.side}HB) vs ${R.pts.length} ${hand}HP (${Math.round(bfShare * 100)}% of batters faced). His average vs ${hand}HP: ${woba(avg.avg)}. ` +
     (h.cell === "eff" ? `Red = better than his usual, blue = worse. Fixed scale, saturates at ±20 wOBA points.` : `Red = high projected wOBA, blue = low. Fixed scale, .240 to .400, same for every hitter.`);
-  // four boxes: both axes split at the BF-weighted median, third axis kept at its range
-  const rngFor = (xh, yh) => AX.flatMap(a => a === h.x ? (xh ? [50, 100] : [0, 50]) : a === h.y ? (yh ? [50, 100] : [0, 50]) : [h.zlo, h.zhi]);
-  const box = (xh, yh) => { const ks = typeKeys(hand, rngFor(xh, yh)), c = ks.length ? typeScore(h.b, hand, ks) : null;
+  // four boxes: both axes split at the BF-weighted median, among the pitchers on the map (filter kept)
+  const box = (xh, yh) => { const ks = keys.filter(k => (T[h.x][k] > 0.5) === !!xh && (T[h.y][k] > 0.5) === !!yh), c = ks.length ? typeScore(h.b, hand, ks) : null;
     return c ? `<td style="background:${color(tone(c[h.cell]))}"><b>${signed(c.eff)}</b> pts<br>${woba(c.pred)}<br><span style="font-size:11px">${ks.length} pitchers</span></td>` : `<td>–</td>`; };
   const [xl, xh] = AXN[h.x][3], [yl, yh] = AXN[h.y][3];
   quad.innerHTML = `<b>Four pitcher types</b> <span class="muted">(each axis split at the ${hand}HP median)</span>
@@ -243,7 +274,8 @@ function profileHover(e) {
   for (const p of PROF.R.pts) { const d = (PROF.sx(p.x) - mx) ** 2 + (PROF.sy(p.y) - my) ** 2; if (d < bd) { bd = d; best = p; } }
   if (!best) { tip.hidden = true; return; }
   const q = P[best.k];
-  tip.innerHTML = `<b>${esc(q.name)}</b> · ${q.fb_velo.toFixed(1)} mph, FB ${q.fb_height.toFixed(2)} ft, brk ${Math.round(q.brk_share * 100)}%<br>Projected ${woba(best.c.pred)} · effect ${pts(best.c.eff)} · ${q.bf.toLocaleString()} BF`;
+  const h = S.h, shown = [...new Set(["fb_velo", h.x, h.y, h.z].filter(Boolean))];
+  tip.innerHTML = `<b>${esc(q.name)}</b> · ${shown.map(a => `${AXN[a][0]} ${fmtAx(a, q[a])}${SHARE.has(a) ? "" : " " + AXN[a][1]}`).join(", ")}<br>Projected ${woba(best.c.pred)} · effect ${pts(best.c.eff)} · ${q.bf.toLocaleString()} BF`;
   tip.hidden = false; tip.style.left = Math.min(mx + 12, r.width - 260) + "px"; tip.style.top = (my + 12) + "px";
 }
 
@@ -265,7 +297,7 @@ function wire() {
   for (const k of ["minpa", "n", "minbf"]) $(`#l-${k}`).onchange = e => { S.l[k] = +e.target.value; render(); };
   pick($("#l-p1"), labelToP, k => { S.l.p1 = k; render(); });
   pick($("#l-h1"), labelToH, b => { S.l.h1 = b; render(); });
-  for (const k of ["hand", "x", "y", "cell"]) $(`#h-${k}`).onchange = e => { S.h[k] = e.target.value; render(); };
+  for (const k of ["hand", "x", "y", "z", "cell"]) $(`#h-${k}`).onchange = e => { S.h[k] = e.target.value; render(); };
   for (const k of ["zlo", "zhi"]) $(`#h-${k}`).onchange = e => { S.h[k] = +e.target.value; render(); };
   pick($("#h-b"), labelToH, b => { S.h.b = b; render(); });
   $("#h-cv").onmousemove = profileHover; $("#h-cv").onmouseleave = () => $("#h-tip").hidden = true;
@@ -303,9 +335,11 @@ async function init() {
   for (const [name, o] of Object.entries(D.groups)) decode(name, o);
   PCT = { R: buildPct("R"), L: buildPct("L") };
   labels(); wire();
-  const h0 = S.h;
+  const h0 = S.h, l0 = S.l;
   try { Object.assign(S, JSON.parse(decodeURIComponent(location.hash.slice(1)))); } catch (e) { /* fresh state */ }
   if (!S.h || !S.h.x) S.h = h0; // links from the old heatmap tab
+  if (!("z" in S.h)) S.h.z = ["fb_velo", "fb_height", "brk_share"].find(a => a !== S.h.x && a !== S.h.y); // links from before the z picker
+  S.l = { ...l0, ...S.l };
   if (S.tab === "heat") S.tab = "profile";
   if (!S.m.p) { // friendly default: a well-known matchup
     const k = Object.keys(P).find(k => P[k].name === "Gerrit Cole"); S.m.p = k || null;

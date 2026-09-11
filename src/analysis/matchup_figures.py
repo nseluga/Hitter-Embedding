@@ -22,28 +22,34 @@ RES = Path("results/pitcher_type_query")
 OUT = RES / "figures"
 INK, MUTED = "#3a3f47", "#8a9099"
 CAVEAT = "2024 exploration build. Model matchup effect, descriptive; one season cannot validate it."
-TYPES = {  # BF-weighted within-RHP percentile ranges (velo, height, brk), same presets as explorer/app.js
-    "Hard throwers (top 20% velo)": (.8, 1, 0, 1, 0, 1),
-    "Soft tossers (bottom 20% velo)": (0, .2, 0, 1, 0, 1),
-    "Elevators (top 20% FB height)": (0, 1, .8, 1, 0, 1),
-    "Low-zone (bottom 20% FB height)": (0, 1, 0, .2, 0, 1),
-    "Breaking-ball heavy (top 20%)": (0, 1, 0, 1, .8, 1),
-    "Fastball heavy (bottom 20% brk)": (0, 1, 0, 1, 0, .2),
-    "Power elevators (velo & height top 40%)": (.6, 1, .6, 1, 0, 1),
-    "Soft breakers (velo bottom 40%, brk top 40%)": (0, .4, 0, 1, .6, 1),
+# Location is by pitch class against each batter's zone (fb_up, brk_down from matchup_explorer_data),
+# not average fastball height. Each type = BF-weighted within-RHP percentile ranges on the axes it names.
+TYPES = {
+    "Hard throwers (top 20% velo)": {"fb_velo": (.8, 1)},
+    "Soft tossers (bottom 20% velo)": {"fb_velo": (0, .2)},
+    "FB up (top 20% FB up share)": {"fb_up": (.8, 1)},
+    "FB low (bottom 20% FB up share)": {"fb_up": (0, .2)},
+    "Brk buried (top 20% brk below zone)": {"brk_down": (.8, 1)},
+    "Brk in zone (bottom 20% brk below zone)": {"brk_down": (0, .2)},
+    "Breaking-ball heavy (top 20%)": {"brk_share": (.8, 1)},
+    "Fastball heavy (bottom 20% brk)": {"brk_share": (0, .2)},
+    "North-south (FB up & brk buried top 40%)": {"fb_up": (.6, 1), "brk_down": (.6, 1)},
+    "Power elevators (velo & FB up top 40%)": {"fb_velo": (.6, 1), "fb_up": (.6, 1)},
+    "Soft breakers (velo bottom 40%, brk top 40%)": {"fb_velo": (0, .4), "brk_share": (.6, 1)},
 }
-AXES = ("fb_velo", "fb_height", "brk_share")
+AXES = ("fb_velo", "fb_up", "brk_down", "brk_share")
 
 
 def pct(s, bf):
     """BF-weighted percentile of each pitcher within hand."""
-    o = s.sort_values()
-    return (bf.reindex(o.index).cumsum() / bf.sum()).reindex(s.index)
+    o = s.dropna().sort_values()  # pitchers missing the trait get NaN and fall in no type
+    return (bf.reindex(o.index).cumsum() / bf.reindex(o.index).sum()).reindex(s.index)
 
 
 def load():
     z = np.load(RES / "matrix_w00.npz")
     attrs = pd.read_csv(RES / "pitcher_attributes.csv")
+    attrs = attrs.merge(pd.read_csv(RES / "pitcher_attributes_extra.csv"), on=["pitcher", "p_throws"], how="left")
     attrs = attrs[attrs.p_throws == "R"].set_index("pitcher")  # one id can appear under both hands
     names = pd.read_csv("data/processed/hitter_names.csv").set_index("batter")["name"]
     hs = pd.read_csv("results/model_visualization/hitter_stats.csv").set_index("batter")
@@ -54,12 +60,12 @@ def load():
         I_parts.append(pd.DataFrame(double_center(w, bf) * 1000, index=bat, columns=pit))
         lvl.append(pd.Series(w @ (bf / bf.sum()) * 1000, index=bat))
     I, lvl = pd.concat(I_parts), pd.concat(lvl)  # NaN where a pitcher is absent from a stand group
-    a = attrs.reindex(I.columns).dropna(subset=list(AXES))
+    a = attrs.reindex(I.columns).dropna(subset=["fb_velo", "fb_up", "brk_share"])  # brk_down may be NaN
     bf = a["bf"].astype(float)
     P = {ax: pct(a[ax], bf) for ax in AXES}
     S = {}
     for t, r in TYPES.items():
-        m = np.logical_and.reduce([(P[ax] >= r[2 * i]) & (P[ax] <= r[2 * i + 1]) for i, ax in enumerate(AXES)])
+        m = np.logical_and.reduce([(P[ax] >= lo) & (P[ax] <= hi) for ax, (lo, hi) in r.items()])
         ids = a.index[m]
         X, wt = I[ids], bf[ids]
         S[t] = (X.fillna(0) @ wt) / (X.notna() @ wt)
@@ -95,13 +101,16 @@ def place_labels(a, pts):
 MAPS = {  # one hitter map per pitcher axis: x = matchup contrast between the two ends
     "velo": ("Hard throwers (top 20% velo)", "Soft tossers (bottom 20% velo)", "better vs hard throwers", "better vs soft tossers"),
     "mix": ("Breaking-ball heavy (top 20%)", "Fastball heavy (bottom 20% brk)", "better vs breaking-ball heavy", "better vs fastball heavy"),
-    "location": ("Elevators (top 20% FB height)", "Low-zone (bottom 20% FB height)", "better vs elevators", "better vs low-zone"),
+    "location": ("FB up (top 20% FB up share)", "FB low (bottom 20% FB up share)", "better vs fastballs up", "better vs fastballs low"),
+    "brk_location": ("Brk buried (top 20% brk below zone)", "Brk in zone (bottom 20% brk below zone)",
+                     "better vs buried breaking balls", "better vs breaking balls in the zone"),
 }
 
 
 SHORT = {"velo": ("hard throwers", "soft tossers"), "mix": ("breaking-ball heavy", "fastball heavy"),
-         "location": ("elevators", "low-zone")}
-UNITS = {"fb_velo": ("fastball velocity (mph)", "{:.0f}"), "fb_height": ("fastball height (ft)", "{:.1f}"),
+         "location": ("fastballs up", "fastballs low"), "brk_location": ("buried breaking balls", "breaking balls in zone")}
+UNITS = {"fb_velo": ("fastball velocity (mph)", "{:.0f}"), "fb_up": ("share of fastballs up in zone", "{:.0%}"),
+         "brk_down": ("share of breaking balls below zone", "{:.0%}"),
          "brk_share": ("breaking-ball share", "{:.0%}")}
 EXAMPLES = (545361, 592450, 660271, 665742, 518692, 605141)  # well-known regulars, not picked for extreme maps
 LIM = 20  # fixed color range (wOBA pts) so hitters compare on one scale
@@ -125,28 +134,35 @@ def label_far(a, x, y, nm, n=28):
     place_labels(a, [(x[b], y[b], nm[b]) for b in far.index[:n]])
 
 
-def hitter_map(key, S, lvl, nm, pa_r):
-    """x = matchup contrast on one pitcher axis, y = hitter's own level vs RHP, color = same level."""
+HAND_COLORS = {"L": "#2a9d8f", "R": "#e0a030"}  # categorical, kept off red/blue (red = good for hitter site-wide)
+
+
+def hitter_map(key, S, lvl, nm, pa_r, stand):
+    """x = matchup contrast on one pitcher axis, y = hitter's own level vs RHP, color = batter hand."""
     hi, lo, rlab, llab = MAPS[key]
     keep = pa_r >= 300
     x, y = contrast(S, key)[keep], lvl.reindex(S.index)[keep]
     fig, a = plt.subplots(figsize=(10, 7))
     style(a)
     a.axvline(0, color=MUTED, lw=.8)
-    woba_colors(a, y, x=x, y=y)
+    st = stand[keep]
+    for h, c in HAND_COLORS.items():
+        m = st == h
+        a.scatter(x[m], y[m], c=c, alpha=.75, lw=0, s=16, label=f"{h}HB ({m.sum()})")
+    a.legend(loc="lower right", fontsize=8, frameon=False, title="Batter hand", title_fontsize=8)
     label_far(a, x, y, nm)
     kw = dict(fontsize=9, color=MUTED, style="italic", transform=a.transAxes, va="top")
     a.text(.98, .99, f"{rlab} →", ha="right", **kw)
     a.text(.02, .99, f"← {llab}", ha="left", **kw)
     a.set_xlabel(f"Matchup effect: {hi.split(' (')[0].lower()} minus {lo.split(' (')[0].lower()} (wOBA pts)", fontsize=9, color=INK)
     a.set_ylabel("Hitter's own projected wOBA vs RHP (x1000)", fontsize=9, color=INK)
-    a.set_title(f"{key.title()}: {len(x)} hitters with 300+ prior PA vs RHP.", fontsize=9, color=INK)
+    a.set_title(f"{key.replace('_', ' ').title()}: {len(x)} hitters with 300+ prior PA vs RHP.", fontsize=9, color=INK)
     fig.text(.5, .005, CAVEAT, ha="center", fontsize=7.5, color=MUTED)
     fig.tight_layout(rect=(0, .02, 1, 1))
     return fig
 
 
-PAIRS = (("location", "mix"), ("velo", "mix"), ("velo", "location"))
+PAIRS = (("location", "brk_location"), ("velo", "mix"), ("velo", "location"))  # first = north-south
 
 
 def pair_map(kx, ky, S, lvl, nm, pa_r):
@@ -167,7 +183,7 @@ def pair_map(kx, ky, S, lvl, nm, pa_r):
     a.set_xlabel(f"Matchup effect: {xh} minus {xl} (wOBA pts)", fontsize=9, color=INK)
     a.set_ylabel(f"Matchup effect: {yh} minus {yl} (wOBA pts)", fontsize=9, color=INK)
     r = np.corrcoef(x, y)[0, 1]
-    a.set_title(f"{kx.title()} x {ky}: {len(x)} hitters with 300+ prior PA vs RHP (top vs bottom 20% on each axis; r = {r:.2f}).",
+    a.set_title(f"{kx.replace('_', ' ').title()} x {ky.replace('_', ' ')}: {len(x)} hitters with 300+ prior PA vs RHP (top vs bottom 20% on each axis; r = {r:.2f}).",
                 fontsize=9, color=INK)
     fig.text(.5, .005, CAVEAT, ha="center", fontsize=7.5, color=MUTED)
     fig.tight_layout(rect=(0, .02, 1, 1))
@@ -177,7 +193,7 @@ def pair_map(kx, ky, S, lvl, nm, pa_r):
 def smooth2d(e, a, bf, xa, ya, n=30):
     """BF-weighted Gaussian kernel average of one hitter's effects over a 2D pitcher-attribute grid.
     Returns grid axes, smoothed effect, and support (share of peak kernel BF; low = few pitchers nearby)."""
-    ok = e.notna().to_numpy()
+    ok = (e.notna() & a[xa].notna() & a[ya].notna()).to_numpy()
     x, y, w, v = a[xa].to_numpy()[ok], a[ya].to_numpy()[ok], bf.to_numpy()[ok], e.to_numpy()[ok]
     gx, gy = (np.quantile(q, np.linspace(.05, .95, n)) for q in (x, y))
     Kx = np.exp(-.5 * ((gx[:, None] - x[None]) / (.35 * x.std())) ** 2)
@@ -194,7 +210,7 @@ def profiles(xa, ya, I, a, bf, nm, stand, bids=EXAMPLES):
         G = np.where(sup < .08, np.nan, G)  # ponytail: fixed 8% support cutoff, tune if edges look noisy
         ax_.set_facecolor("#e6e4df")
         im = ax_.pcolormesh(gx, gy, G, cmap="RdBu_r", vmin=-LIM, vmax=LIM, shading="nearest")
-        ok = I.loc[b, a.index].notna()
+        ok = I.loc[b, a.index].notna() & a[xa].notna() & a[ya].notna()
         ax_.scatter(a.loc[ok, xa], a.loc[ok, ya], s=2, c=INK, alpha=.15, lw=0)
         ax_.set_xlim(gx[0], gx[-1]); ax_.set_ylim(gy[0], gy[-1])
         ax_.set_title(f"{nm[b]} ({stand[b]}HB)", fontsize=9, color=INK)
@@ -220,8 +236,8 @@ def main():
     I, a, bf, S, lvl, nm, stand, pa_r = load()
     S.assign(name=nm, stand=stand, prior_pa_R=pa_r).to_csv(RES / "matchup_by_type.csv")
     figs = {**{f"profile_{x}_{y}": profiles(x, y, I, a, bf, nm, stand)
-               for x, y in (("fb_height", "brk_share"), ("fb_velo", "fb_height"), ("fb_velo", "brk_share"))},
-            **{f"map_{k}": hitter_map(k, S, lvl, nm, pa_r) for k in MAPS},
+               for x, y in (("fb_up", "brk_down"), ("fb_velo", "fb_up"), ("fb_velo", "brk_share"))},
+            **{f"map_{k}": hitter_map(k, S, lvl, nm, pa_r, stand) for k in MAPS},
             **{f"pair_{x}_{y}": pair_map(x, y, S, lvl, nm, pa_r) for x, y in PAIRS}}
     for name, fig in figs.items():
         fig.savefig(OUT / f"{name}.png", dpi=150)
