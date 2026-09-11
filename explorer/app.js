@@ -2,6 +2,7 @@
 // Matchup effect = w - hitter's BF-weighted avg (row) - pitcher's avg over hitters (col) + grand mean,
 // the same double-centering as src/analysis/matchup_explorer_data.double_center.
 const $ = s => document.querySelector(s);
+const APP_V = (document.currentScript?.src.split("?")[1]) || "v=0"; // index.html's ?v=N, reused for the data file
 const G = {}, pitLabel = {}, hitLabel = {}, labelToP = {}, labelToH = {};
 let D, H, P, PCT = {};
 const AX = ["fb_velo", "fb_height", "brk_share"];
@@ -39,10 +40,10 @@ const AXN = {
   brk_sweep: ["Breaking-ball sweep", "in", 1, ["Little sweep", "Big sweep"]],
   zone_rate: ["Zone rate", "%", 0, ["Nibbler", "Attacks zone"]],
   glove_side: ["Location (glove side +)", "in", 1, ["Arm side", "Glove side"]],
-  fb_up: ["FB up (top third of zone or above)", "%", 0, ["FB low", "FB up"]],
-  brk_down: ["Breaking balls below zone", "%", 0, ["Brk in zone", "Brk buried"]],
-  brk_height: ["Breaking-ball height", "ft", 2, ["Low breaking", "High breaking"]],
-  off_down: ["Offspeed below zone", "%", 0, ["Offspeed in zone", "Offspeed buried"]],
+  fb_up: ["Share of FBs in top third of zone or above", "%", 0, ["FBs rarely up", "FBs up"]],
+  brk_down: ["Share of breaking balls below the zone", "%", 0, ["Brk rarely below", "Brk buried"]],
+  brk_height: ["Breaking-ball height at plate", "ft", 2, ["Low breaking", "High breaking"]],
+  off_down: ["Share of offspeed below the zone", "%", 0, ["Offspeed rarely below", "Offspeed buried"]],
 };
 const ALL = Object.keys(AXN), SHARE = new Set(["brk_share", "si_share", "off_share", "zone_rate", "fb_up", "brk_down", "off_down"]);
 const fmtAx = (a, v) => SHARE.has(a) ? Math.round(v * 100) + "%" : v.toFixed(AXN[a][2]);
@@ -328,7 +329,7 @@ function selftest() { // reference values from the Python prototype / npz
 
 async function init() {
   try {
-    D = await (await fetch("data/matchups.json")).json();
+    D = await (await fetch(`data/matchups.json?${APP_V}`)).json(); // same cache-bust as app.js: a stale json lacks new traits
   } catch (e) { $("#loading").textContent = "Could not load data/matchups.json. Serve this folder over http (python -m http.server)."; return; }
   H = D.hitters; P = D.pitchers;
   H = Object.fromEntries(Object.entries(H).map(([k, v]) => [+k, v]));
