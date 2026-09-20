@@ -46,7 +46,7 @@ import pandas as pd
 
 from src.analysis.stabilization import stabilization_point_vc, variance_components
 from src.data.eval_targets import primarily_pitchers
-from src.data.model_dataset import MASKED, drop_pitcher_at_bats
+from src.data.model_dataset import MASKED, drop_pitcher_at_bats, expand_career_pitchers
 
 # outcome classes, in the fixed order every array in this module uses
 CONTACT_CLASSES = ("foul", "foul_tip", "in_play")
@@ -80,14 +80,21 @@ ALIGN_COLUMNS = ["batter", "season", "pitcher", "description", "zone", "balls", 
                  "stand", "p_throws", "plate_x", "plate_z", "game_pk", "at_bat_number"]
 
 
-def align_pitch_frame(pitch_events_path, eval_targets_path, season_tensor):
+def align_pitch_frame(pitch_events_path, eval_targets_path, season_tensor, career_pitchers=False):
     """
     The labeled parquet, filtered and ordered to match the built Phase D tensors row for row.
     season_tensor: the tensors' season array, used as the alignment assertion.
+    career_pitchers: pass manifest.get("career_pitchers_excluded", False) -- True when the
+    tensors were built with model_dataset.py's --career-pitchers, which excludes
+    eval_targets.career_pitcher_batters in addition to primarily_pitchers. Getting this wrong
+    desyncs the row count/order from the tensor and the asserts below catch it.
     Returns a DataFrame carrying the columns the model's context deliberately excludes.
     """
     frame = pd.read_parquet(pitch_events_path, columns=ALIGN_COLUMNS)
-    excluded = primarily_pitchers(pd.read_parquet(eval_targets_path))
+    pa_df = pd.read_parquet(eval_targets_path)
+    excluded = primarily_pitchers(pa_df)
+    if career_pitchers:
+        excluded = excluded | expand_career_pitchers(pa_df)
     frame = drop_pitcher_at_bats(frame, excluded).reset_index(drop=True)
 
     season = np.asarray(season_tensor)

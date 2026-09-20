@@ -1,0 +1,95 @@
+{
+  "decisive_stratum": "low",
+  "rmse_gate_vs_gbm_full": false,
+  "ordering_gate_vs_both": false,
+  "by_stratum": {
+    "all": {
+      "rmse_gate_vs_gbm_full": false,
+      "ordering_gate_vs_both": true,
+      "n_comparisons": 2
+    },
+    "high": {
+      "rmse_gate_vs_gbm_full": false,
+      "ordering_gate_vs_both": false,
+      "n_comparisons": 2
+    },
+    "low": {
+      "rmse_gate_vs_gbm_full": false,
+      "ordering_gate_vs_both": false,
+      "n_comparisons": 2
+    },
+    "medium": {
+      "rmse_gate_vs_gbm_full": true,
+      "ordering_gate_vs_both": true,
+      "n_comparisons": 2
+    }
+  },
+  "debiased_mean_excess_removed": 0.00458661921470575,
+  "debiased_rmse_difference": {
+    "low": {
+      "rmse_difference": 0.00034988641854778735,
+      "ci_low": -0.00225658394371987,
+      "ci_high": 0.0029148412566603445
+    },
+    "medium": {
+      "rmse_difference": -0.0021768739345878266,
+      "ci_low": -0.004303285787873857,
+      "ci_high": 4.978565665599697e-05
+    },
+    "high": {
+      "rmse_difference": 0.0001610154343299336,
+      "ci_low": -0.0012097829765660112,
+      "ci_high": 0.0015068210039057945
+    },
+    "all": {
+      "rmse_difference": -0.00029929768823072633,
+      "ci_low": -0.0013231605350209254,
+      "ci_high": 0.0007677494760364305
+    }
+  },
+  "rank_power": {
+    "low": {
+      "se_rank": 0.05999678044123744,
+      "z": 0.6118539458096351,
+      "batters_multiplier": 20.965834070667974,
+      "batters_needed": 5158
+    },
+    "medium": {
+      "se_rank": 0.06494698320084843,
+      "z": 2.2163402437394084,
+      "batters_multiplier": 1.5978455957257711,
+      "batters_needed": 377
+    },
+    "high": {
+      "se_rank": 0.029305395379105047,
+      "z": 0.31694994698196,
+      "batters_multiplier": 78.13152617953077,
+      "batters_needed": 25080
+    },
+    "all": {
+      "se_rank": 0.0200208658379456,
+      "z": 2.485702040693183,
+      "batters_multiplier": 1.2703094733900289,
+      "batters_needed": 785
+    }
+  },
+  "trained_row_spread": {
+    "low": {
+      "sd_pooled": 0.017005441702697043,
+      "sd_trained": 0.0176472952339723,
+      "cold_start_share": 0.4270833333333333
+    },
+    "medium": {
+      "sd_pooled": 0.021070955865532388,
+      "sd_trained": 0.021070955865532388,
+      "cold_start_share": 0.0
+    },
+    "high": {
+      "sd_pooled": 0.026315731751134247,
+      "sd_trained": 0.026315731751134247,
+      "cold_start_share": 0.0
+    }
+  },
+  "eval_season": 2025,
+  "label": "min_pa_sweep_clean_dim64_final"
+}

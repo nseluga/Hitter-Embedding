@@ -200,7 +200,8 @@ def main():
     print(f"reference fit rows: {int(train_rows.sum())}, eval rows: {int(eval_rows.sum())}")
 
     n_bins = len(manifest["quality_bin_edges"]["ev"]) + 1
-    pitch_frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, season_all)
+    pitch_frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, season_all,
+                                        career_pitchers=manifest.get("career_pitchers_excluded", False))
     frame = pitch_frame.iloc[keep].reset_index(drop=True)
 
     paths = [Path(args.checkpoint_dir) / f"{args.arm}_s{seed}.pt" for seed in args.seeds]

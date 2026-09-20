@@ -109,7 +109,8 @@ def _compare(label, frame_a, frame_b, n_boot, seed):
 def run_eval(checkpoint_dir, arm, seeds, stats_csv, data_dir, pitch_events, eval_targets_path,
             eval_season=EVAL_SEASON, n_boot=2000, seed=0):
     tensors, manifest = loader.load_tensors(data_dir)
-    frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"])
+    frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"],
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(eval_targets_path)
     tables = query.build_tables(frame, tensors, manifest, pa_df)
     stats = pd.read_csv(stats_csv)

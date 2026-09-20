@@ -476,7 +476,8 @@ def main():
     if not args.skip_hbp:
         from src.model import loader
         tensors, manifest = loader.load_tensors(args.data_dir)
-        frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, tensors["season"])
+        frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, tensors["season"],
+                                      career_pitchers=manifest.get("career_pitchers_excluded", False))
         # the same mask `build_tables` fits every auxiliary table under, so the surface this
         # diagnoses is the surface the composition actually used
         train_mask = np.isin(frame["season"].to_numpy(), manifest["train_seasons"])

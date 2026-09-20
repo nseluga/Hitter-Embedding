@@ -489,8 +489,16 @@ def main():
     parser = argparse.ArgumentParser(description="Render the six paper figures from committed result artifacts.")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR, help="directory to write figures into")
     parser.add_argument("--smoke", action="store_true", help="tiny run for tests, still writes real figures")
+    parser.add_argument("--eval-dir", default=None,
+                        help="swap results/model_evaluation_final for this dir (clean-refit build)")
     parser.add_argument("--only", default=None, choices=FIGURE_NAMES, help="render a single figure by name")
     args = parser.parse_args()
+    if args.eval_dir:
+        global MIN_PA_SWEEP_CSV, CALIBRATION_CSV, CALIBRATION_RELIABILITY_CSV
+        old = "results/model_evaluation_final/"
+        MIN_PA_SWEEP_CSV, CALIBRATION_CSV, CALIBRATION_RELIABILITY_CSV = (
+            c.replace(old, args.eval_dir.rstrip("/") + "/")
+            for c in (MIN_PA_SWEEP_CSV, CALIBRATION_CSV, CALIBRATION_RELIABILITY_CSV))
 
     root = repo_root()
     out_dir = Path(args.out_dir)

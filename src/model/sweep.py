@@ -253,8 +253,12 @@ def launch(stage, name, extra, seed, args):
 
     if stage == "clean":
         # the clean build is the whole point of the stage; a run on plain phase_d5 would still
-        # produce a plausible `reference`, and select's guard cannot tell (its floor is this arm)
-        manifest_path = Path(args.data_dir) / "manifest.json"
+        # produce a plausible `reference`, and select's guard cannot tell (its floor is this arm).
+        # Resolve the SAME way `knobs` does: CLEAN_BASE's own --data-dir lives in `extra` and
+        # wins over the sweep-level default, so checking args.data_dir directly checks the
+        # wrong path whenever the caller didn't also pass --data-dir on the command line.
+        _, _, effective_data_dir = knobs(extra, args.data_dir)
+        manifest_path = Path(effective_data_dir) / "manifest.json"
         assert manifest_path.exists() and json.loads(manifest_path.read_text()).get(
             "career_pitchers_excluded"), \
             f"clean stage needs a --career-pitchers build; {manifest_path} was not built with it"

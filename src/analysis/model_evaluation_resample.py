@@ -143,7 +143,8 @@ def main():
 
     season = np.load(Path(args.data_dir) / "season.npy", mmap_mode="r")
     manifest = json.loads((Path(args.data_dir) / "manifest.json").read_text())
-    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, np.asarray(season))
+    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, np.asarray(season),
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(args.eval_targets)
 
     print("fitting the take surface, repertoire and pitcher weights")

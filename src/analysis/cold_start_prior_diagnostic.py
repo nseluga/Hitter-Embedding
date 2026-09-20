@@ -159,7 +159,8 @@ def run_diagnostic(checkpoint_dir, arm, seeds, stats_csv, data_dir,
                    pitch_events=DEFAULT_PITCH_EVENTS, eval_targets_path=DEFAULT_EVAL_TARGETS,
                    n_pitches=N_PITCHES, n_boot=N_BOOT):
     tensors, manifest = loader.load_tensors(data_dir)
-    frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"])
+    frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"],
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(eval_targets_path)
     tables = query.build_tables(frame, tensors, manifest, pa_df)
     weights = eval_targets.load_weights()[EVAL_SEASON_WEIGHTS]

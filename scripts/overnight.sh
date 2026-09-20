@@ -6,6 +6,7 @@
 #   ./scripts/overnight.sh          run every stage
 #   DRY=1 ./scripts/overnight.sh    print the commands and evaluate no gate
 #   FROM=4 ./scripts/overnight.sh   resume at stage 4 (stages are numbered below)
+#   TO=3 ./scripts/overnight.sh     stop after stage 3, e.g. to review the gate before the refit
 #   GATE_OVERRIDE=1 ...             let stage 4 start without stage 3's sentinel
 #
 # STAGE 4 IS THE ONE THAT CANNOT BE UNDONE: it builds the tensors and models that stage 6
@@ -16,8 +17,9 @@ set -e
 cd ~/hitter-embedding
 
 P=.venv/bin/python
-LOG=/tmp/hitter-overnight
+LOG=${LOG:-/tmp/hitter-overnight}
 FROM=${FROM:-1}
+TO=${TO:-6}
 
 ARM=${ARM:-embedding_sgd_sgd_lr1}
 DATA=${DATA:-data/processed/phase_d5}
@@ -35,9 +37,11 @@ BUILD_FLAGS=${BUILD_FLAGS:-""}
 # The 2025 chain writes to ITS OWN directories. Every module below writes arm-less, season-less
 # filenames (calibration.csv, pooled_scores.csv, ...) straight into the committed 2024 results,
 # so pointing stage 6 at the default out-dirs would replace the 2024 exhibit with 2025 numbers
-# in place, on the same night stage 1 rebuilt it, recoverable only from git.
-FINAL_EVAL_OUT=results/model_evaluation_final
-FINAL_PROC_OUT=results/process_calibration_final
+# in place, on the same night stage 1 rebuilt it, recoverable only from git. Overridable so a
+# different FINAL_ARM doesn't overwrite an earlier arm's already-spent 2025 exhibit.
+FINAL_EVAL_OUT=${FINAL_EVAL_OUT:-results/model_evaluation_final}
+FINAL_PROC_OUT=${FINAL_PROC_OUT:-results/process_calibration_final}
+FINAL_VIZ_OUT=${FINAL_VIZ_OUT:-results/model_visualization_final}
 
 # the replay check reproduces the frozen-split arm from a fixed budget instead of from early
 # stopping. Its `reference` has to land inside the five seeds' own spread or the replay is
@@ -51,8 +55,9 @@ GATE_CENTER=${GATE_CENTER:-1.02386}
 GATE_TOL=${GATE_TOL:-0.00009}
 
 # budget and cuts are DERIVED (stage 3), never typed: src/model/replay_schedule.py reads them
-# out of the five runs' own logs, which is the only place they were ever recorded.
-SCHEDULE=results/model_v1/replay_schedule.json
+# out of the five runs' own logs, which is the only place they were ever recorded. Overridable
+# so a different ARM doesn't overwrite the committed embedding_sgd_sgd_lr1 schedule.
+SCHEDULE=${SCHEDULE:-results/model_v1/replay_schedule.json}
 
 mkdir -p $LOG
 
@@ -69,8 +74,9 @@ run() {
   caffeinate -i "$@"
 }
 
-stage() {  # stage <n> <name>; returns 1 when the stage is being skipped by FROM
+stage() {  # stage <n> <name>; returns 1 when the stage is outside [FROM, TO]
   if (( $1 < FROM )); then say "=== $(date +%H:%M) stage $1 ($2) SKIPPED (FROM=$FROM)"; return 1; fi
+  if (( $1 > TO )); then say "=== $(date +%H:%M) stage $1 ($2) SKIPPED (TO=$TO)"; return 1; fi
   say "=== $(date +%H:%M) stage $1: $2"
   return 0
 }
@@ -184,7 +190,7 @@ if stage 4 "refit build + 5 seeds (2015-2024)"; then
   done
   # the prior's population has to be rebuilt too: it is defined by the BUILD's train seasons
   run $P -m src.analysis.model_visualization_stats --manifest $FINAL_DATA/manifest.json \
-      --out-dir results/model_visualization_final > $LOG/04_stats.log 2>&1
+      --out-dir $FINAL_VIZ_OUT > $LOG/04_stats.log 2>&1
 fi
 
 # --- 5. the 2025 queries. THIS IS WHERE THE TEST SEASON IS SPENT ---------------------

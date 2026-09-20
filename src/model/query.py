@@ -964,7 +964,8 @@ def main():
 
     _progress("loading tensors and aligning the pitch frame")
     tensors, manifest = loader.load_tensors(args.data_dir)
-    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, tensors["season"])
+    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, tensors["season"],
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(args.eval_targets)
     _progress("fitting the four auxiliary tables")
     tables = build_tables(frame, tensors, manifest, pa_df,

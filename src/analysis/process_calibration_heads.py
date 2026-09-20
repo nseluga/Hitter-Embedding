@@ -206,7 +206,8 @@ def main():
 
     season = np.load(Path(args.data_dir) / "season.npy", mmap_mode="r")
     pitch_frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets,
-                                       np.asarray(season))
+                                       np.asarray(season),
+                                       career_pitchers=manifest.get("career_pitchers_excluded", False))
     frame = pitch_frame.iloc[rows].reset_index(drop=True)
     assert (frame["season"].to_numpy() == args.eval_season).all(), \
         "the pitch frame and the tensor season mask disagree"

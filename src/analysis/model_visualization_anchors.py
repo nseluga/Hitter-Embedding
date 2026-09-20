@@ -308,7 +308,8 @@ def run_v9(checkpoint, out_dir, data_dir, pitch_events, eval_targets_path, names
     train_seasons = manifest["train_seasons"]
     assert max(train_seasons) <= 2023, "2025 must never be read (spec §0.3)"
 
-    frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"])
+    frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"],
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(eval_targets_path)
     tables = query.build_tables(frame, tensors, manifest, pa_df)
     weights = eval_targets.load_weights()[EVAL_SEASON_WEIGHTS]

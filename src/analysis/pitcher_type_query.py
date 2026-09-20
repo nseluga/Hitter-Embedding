@@ -194,7 +194,8 @@ def query_stage(args):
     out.mkdir(parents=True, exist_ok=True)
     tensors, manifest = loader.load_tensors(args.data_dir)
     assert EVAL_SEASON not in manifest["train_seasons"], "eval season inside the train window"
-    frame = qt.align_pitch_frame(args.pitches, args.eval_targets, tensors["season"])
+    frame = qt.align_pitch_frame(args.pitches, args.eval_targets, tensors["season"],
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(args.eval_targets)
     tables = query.build_tables(frame, tensors, manifest, pa_df)
     paths = [Path(args.checkpoint_dir) / f"{args.arm}_s{seed}.pt" for seed in args.seeds]

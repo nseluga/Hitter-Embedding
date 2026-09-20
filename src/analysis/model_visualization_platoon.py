@@ -172,7 +172,8 @@ def run_gradient(out_dir, n_pitchers, dims, passes_filter, resume, smoke):
 
     print("loading tensors, pitch frame, and the seed-0 checkpoint")
     tensors, manifest = loader.load_tensors(DEFAULT_DATA_DIR)
-    frame = qt.align_pitch_frame(PITCH_EVENTS, EVAL_TARGETS, tensors["season"])
+    frame = qt.align_pitch_frame(PITCH_EVENTS, EVAL_TARGETS, tensors["season"],
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(EVAL_TARGETS)
     tables = query.build_tables(frame, tensors, manifest, pa_df)
     models = query.load_ensemble([Path(CHECKPOINT_DIR) / f"{ARM}_s0.pt"], manifest,
@@ -229,11 +230,12 @@ def gap_by_batter(raw, pass_id):
     return wide["L"] - wide["R"]
 
 
-def compute_gradient_table(raw, dims=range(N_DIMS)):
+def compute_gradient_table(raw, dims=None):
     """
     Per-hitter, per-dim gradient g[k] = (gap_k - gap_0) / eps_k. Dims absent from `raw`
     come back all-NaN. Returns a DataFrame (batter, dim, gradient).
     """
+    dims = range(N_DIMS) if dims is None else dims
     gap_base = gap_by_batter(raw, BASE_PASS)
     present_dims = set(raw.loc[raw["dim"] >= 0, "dim"].unique())
     rows = []
@@ -523,8 +525,20 @@ def run_analyse(raw_path, out_dir):
     print(f"wrote {out_dir / 'platoon_projection.json'}")
 
 
+def configure(args):
+    """Repoint the module at another build/arm (e.g. the clean-refit model). Defaults = canonical."""
+    global DEFAULT_DATA_DIR, ARM, PLATOON_FRAME, HITTER_STATS, N_DIMS
+    DEFAULT_DATA_DIR, ARM = args.data_dir, args.arm
+    PLATOON_FRAME, HITTER_STATS, N_DIMS = args.platoon_frame, args.hitter_stats, args.n_dims
+
+
 def main():
     parser = argparse.ArgumentParser(description="V.5 — the platoon direction.")
+    parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
+    parser.add_argument("--arm", default=ARM)
+    parser.add_argument("--platoon-frame", default=PLATOON_FRAME)
+    parser.add_argument("--hitter-stats", default=HITTER_STATS)
+    parser.add_argument("--n-dims", type=int, default=N_DIMS, help="embedding dimension")
     sub = parser.add_subparsers(dest="stage", required=True)
 
     gradient = sub.add_parser("gradient")
@@ -541,6 +555,7 @@ def main():
     analyse.add_argument("--out-dir", required=True)
 
     args = parser.parse_args()
+    configure(args)
     if args.stage == "gradient":
         dims = parse_dims(args.dims)
         run_gradient(args.out_dir, args.n_pitchers, dims, args.passes, args.resume, args.smoke)

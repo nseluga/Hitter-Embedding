@@ -288,7 +288,8 @@ def main():
     data_dir = Path(args.data_dir)
     manifest = json.loads((data_dir / "manifest.json").read_text())
     season = np.asarray(np.load(data_dir / "season.npy", mmap_mode="r"))
-    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, season)
+    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, season,
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     bins = {name: np.asarray(np.load(data_dir / f"{name}.npy")) for name in
             ("ev", "la", "spray")}
     for name, array in bins.items():

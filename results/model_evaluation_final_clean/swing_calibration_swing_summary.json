@@ -1,0 +1,20 @@
+{
+  "arm": "clean_dim64_final",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "eval_season": 2025,
+  "n_pitches": 705307,
+  "overall_observed": 0.4757701256332349,
+  "overall_predicted": 0.48500274063377025,
+  "overall_relative_gap": 0.019405621545167496,
+  "three_ball_observed": 0.5864811477682285,
+  "three_ball_predicted": 0.6026546122724712,
+  "three_ball_relative_gap": 0.027577125992521045,
+  "under_three_ball_relative_gap": 0.01848893169663568,
+  "max_abs_count_relative_gap": 0.14703031612283085
+}

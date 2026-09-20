@@ -118,7 +118,8 @@ def main():
     manifest = json.loads((directory / "manifest.json").read_text())
     season = np.load(directory / "season.npy", mmap_mode="r")
     context_memmap = np.load(directory / "context.npy", mmap_mode="r")
-    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, np.asarray(season))
+    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, np.asarray(season),
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(args.eval_targets)
     train_mask = np.isin(frame["season"].to_numpy(), manifest["train_seasons"])
     shares = query.handedness_shares(pa_df, manifest["train_seasons"])

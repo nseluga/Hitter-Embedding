@@ -16,6 +16,7 @@ model/pipeline changes. Season filtered to <=2024 throughout (no 2025 data).
 Run: PYTHONPATH=. .venv/bin/python results/embedding_structure/axis_screen.py
 """
 
+import argparse
 import json
 from pathlib import Path
 
@@ -261,8 +262,15 @@ DEFINITIONS = {
 
 
 def main():
-    emb, hitters, _ = es.load_hitters(es.DEFAULT_CHECKPOINT_DIR, es.DEFAULT_ARM,
-                                       es.HITTER_STATS_PATH, es.NAMES_PATH)
+    global OUT_DIR
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--arm", default=es.DEFAULT_ARM)
+    parser.add_argument("--hitter-stats", default=es.HITTER_STATS_PATH)
+    parser.add_argument("--out-dir", default=str(OUT_DIR))
+    args = parser.parse_args()
+    OUT_DIR = Path(args.out_dir)
+    emb, hitters, _ = es.load_hitters(es.DEFAULT_CHECKPOINT_DIR, args.arm,
+                                       args.hitter_stats, es.NAMES_PATH)
     normalized, _ = es.unit_normalize(emb)
 
     contrasts = build_contrasts(hitters)
@@ -319,7 +327,7 @@ def main():
             "min_batted_balls_per_slice": MIN_BATTED_BALLS_PER_SLICE,
             "min_swings_for_slope": MIN_SWINGS_FOR_SLOPE,
             "embedding_checkpoint_dir": es.DEFAULT_CHECKPOINT_DIR,
-            "embedding_arm": es.DEFAULT_ARM,
+            "embedding_arm": args.arm,
         },
     }
 
