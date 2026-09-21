@@ -18,7 +18,7 @@ import pyarrow.parquet as pq
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MANIFEST_PATH = "data/processed/phase_d5/manifest.json"
+DEFAULT_MANIFEST_PATH = "data/processed/phase_d5_clean/manifest.json"
 DEFAULT_PITCH_TABLE_PATH = "data/processed/pitch_events_labeled.parquet"
 STAND_TRAIN_SEASONS = range(2015, 2024)  # 2015..2023 inclusive, training seasons only
 

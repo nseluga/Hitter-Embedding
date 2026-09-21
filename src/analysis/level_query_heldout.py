@@ -12,6 +12,7 @@ predictions -- it is read-only inference and analysis over an existing CSV plus
 data/processed/eval_targets_pa.parquet.
 
 Run: python -m src.analysis.level_query_heldout --out-dir results/paper_figures
+     [--level-query-csv PATH]
 """
 
 import argparse
@@ -125,11 +126,15 @@ def main():
     parser = argparse.ArgumentParser(
         description="Held-out (2024 wOBA) version of the V.4 level query check.")
     parser.add_argument("--out-dir", default="results/paper_figures")
+    parser.add_argument("--level-query-csv", default=LEVEL_QUERY_CSV,
+                        help="per-hitter level_query values from build_level_query")
+    parser.add_argument("--supersedes", default=SUPERSEDES_PATH,
+                        help="the in-sample level_query.json this result supersedes")
     args = parser.parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    merged, n_before, n_after = build_heldout_frame()
+    merged, n_before, n_after = build_heldout_frame(args.level_query_csv)
     n_lost = n_before - n_after
     print(f"level_query hitters: {n_before}, joined to 2024 wOBA (pa >= {MIN_EVAL_PA}): "
           f"{n_after}, lost: {n_lost}")
@@ -137,10 +142,10 @@ def main():
     merged.to_csv(out_dir / "level_query_heldout.csv", index=False)
 
     stats = heldout_level_query_stats(merged)
-    stats["supersedes"] = SUPERSEDES_PATH
+    stats["supersedes"] = args.supersedes
     stats["note"] = ("target changed from in-sample 2015-2023 woba_level to held-out "
                      f"{HELDOUT_SEASON} wOBA (min {MIN_EVAL_PA} PA); level_query values "
-                     "themselves are reused unchanged from " + LEVEL_QUERY_CSV)
+                     "themselves are reused unchanged from " + args.level_query_csv)
     stats["n_hitters_before_join"] = n_before
     stats["n_hitters_lost_in_join"] = n_lost
     (out_dir / "level_query_heldout.json").write_text(json.dumps(stats, indent=2))

@@ -14,7 +14,7 @@ Numbers only where marked.
    or game predictions, not composed into a season split.
 4. **What we do.** Train a hitter model on pitches, query it for any split. Handedness is
    the first validated query.
-5. **Model.** Under 1M params; 32-dim hitter embedding plus pitch context; predicts swing,
+5. **Model.** Under 1M params; 64-dim hitter embedding plus pitch context; predicts swing,
    then contact, then EV, LA, spray as bins. *(Numbers: 1M, 32.)*
 6. **Data.** 7.3M Statcast pitches, 2015 to 2024, 1,870 hitters. *(Numbers: all three.)*
 7. **Query.** A weight vector over pitchers (BF-weighted), composed through the count-state

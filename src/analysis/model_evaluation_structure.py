@@ -101,7 +101,7 @@ def main():
         description="Phase E.10 — structural bias of the independent-pitch count chain.")
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
-    parser.add_argument("--data-dir", default="data/processed/phase_d5")
+    parser.add_argument("--data-dir", default="data/processed/phase_d5_clean")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--out-dir", default="results/model_evaluation")
@@ -111,7 +111,8 @@ def main():
     out_dir = Path(args.out_dir)
     manifest = json.loads((Path(args.data_dir) / "manifest.json").read_text())
     season = np.load(Path(args.data_dir) / "season.npy", mmap_mode="r")
-    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, np.asarray(season))
+    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, np.asarray(season),
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(args.eval_targets)
     seasons = manifest["train_seasons"]
     keep = (np.isin(frame["season"].to_numpy(), seasons)

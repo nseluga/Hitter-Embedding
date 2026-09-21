@@ -22,8 +22,10 @@ import json
 import subprocess
 from pathlib import Path
 
-# the build D.10 trained on; the arrays whose contents differ between builds
-CANONICAL_DATA_DIR = "data/processed/phase_d5"
+# the build the shipped arm trained on; the arrays whose contents differ between builds.
+# `phase_d5_clean` since the pitcher-free retrain: same pipeline, career pitcher-batters
+# dropped, so its quality-bin edges and vocabulary both differ from `phase_d5`.
+CANONICAL_DATA_DIR = "data/processed/phase_d5_clean"
 QUALITY_ARRAYS = ("ev", "la", "spray")
 
 

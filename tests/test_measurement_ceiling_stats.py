@@ -303,6 +303,49 @@ def test_the_fast_within_stand_statistic_equals_e5s_own_implementation(different
     assert fast == pytest.approx(reference, abs=1e-13)
 
 
+@pytest.fixture(scope="module")
+def clean_intersection_frame():
+    """
+    The same M.6 intersection frame on the clean (pitcher-free) build.
+
+    Deliberately lighter than `differential_frame`: it stops before `attach_differentials`.
+    The baseline differential columns cost a full read of `pitch_events.parquet` and a GBM
+    fit, and the statistic under test here reads only `delta_obs`, `delta_pred`, `weight`
+    and `stand`, all of which come straight off the E.5 platoon frame.
+    """
+    from src.analysis import measurement_ceiling_report
+    platoon_path = REPO_ROOT / "results/v_chain_clean/model_evaluation/platoon_frame.csv"
+    model_path = (REPO_ROOT
+                  / "results/model_v1/model_v1_predictions_clean_clean_dim64.csv")
+    if not (platoon_path.exists() and model_path.exists()):
+        pytest.skip("the clean 2024 platoon frame or predictions are not in this checkout")
+    pa_df = pd.read_parquet(REPO_ROOT / "data/processed/eval_targets_pa.parquet")
+    platoon_frame = pd.read_csv(platoon_path)
+    model = pd.read_csv(model_path)
+    model = model[model["season"] == 2024]
+    population, _ = measurement_ceiling_report.m6_population(pa_df, platoon_frame, model, 2024)
+    frame, _ = measurement_ceiling_report.intersection_frame(platoon_frame, pa_df, population, 2024)
+    return frame
+
+
+def test_the_fast_within_stand_statistic_holds_on_the_clean_build(clean_intersection_frame):
+    """
+    TRANSLATION FIDELITY on the build the paper reports.
+
+    The test above pins the rewrite against E.5 on the pre-clean frame, which is the
+    reproduction guarantee and must not move. This one asserts the same identity on the
+    clean frame, so a rewrite that happens to agree on one hitter population and not the
+    other cannot pass. It is not a second reproduction pin: no committed value appears
+    here, only the two implementations against each other.
+    """
+    from src.analysis import model_evaluation_platoon_ceiling as ceiling
+    reference, _ = ceiling.recompute_platoon_rank_correlation(clean_intersection_frame)
+    fast = measurement_ceiling_stats.within_stand_rank_correlation(
+        clean_intersection_frame["delta_obs"], clean_intersection_frame["delta_pred"],
+        clean_intersection_frame["weight"], clean_intersection_frame["stand"])
+    assert fast == pytest.approx(reference, abs=1e-13)
+
+
 def test_within_stand_residual_removes_each_stands_weighted_mean(differential_frame):
     residual = measurement_ceiling_stats.within_stand_residual(
         differential_frame["delta_obs"], differential_frame["weight"], differential_frame["stand"])

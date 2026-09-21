@@ -99,7 +99,7 @@ from src.analysis.baseline_ladder_trailing import TRAILING_SEASONS, trailing_win
 from src.data.eval_targets import drop_pitcher_batters
 
 DEFAULT_OUT_DIR = "results/model_evaluation"
-DEFAULT_ARM = "embedding_sgd_sgd_lr1"
+DEFAULT_ARM = "clean_clean_dim64"
 SEEDS = (0, 1, 2, 3, 4)
 
 # Two-sided normal quantiles for the nominal levels §12.4 names. Stated explicitly
@@ -565,7 +565,7 @@ def main():
     parser.add_argument("--arm", default=DEFAULT_ARM)
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
-    parser.add_argument("--data-dir", default="data/processed/phase_d5")
+    parser.add_argument("--data-dir", default="data/processed/phase_d5_clean")
     parser.add_argument("--checkpoint-dir", default="results/checkpoints")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)

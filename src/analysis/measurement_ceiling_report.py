@@ -716,10 +716,12 @@ def stratum_ceiling_stratum(frame, routes, params_b_prime, n_boot=2000, seed=0):
 # ------------------------------------------------------------------ the main exhibit
 
 EXHIBIT_COLUMNS = ("pooled",) + tuple(claim1_eval.STRATUM_NAMES)
-BUILD_STAMP = "pre_hyperparameter_tuning"
+BUILD_STAMP = "clean_dim64"
 BUILD_STAMP_NOTE = (
-    "scored on the rebuild-baseline build that every pre-selection run used: lr 1e-3, "
-    "warmup 0. Regenerate with `PYTHONPATH=. .venv/bin/python -m "
+    "scored on the pitcher-free clean build that won selection: embedding dim 64, "
+    "career pitcher-batters excluded from training. The pre-selection exhibit it "
+    "replaces is preserved under `results/measurement_ceiling/` and is stamped "
+    "`pre_hyperparameter_tuning`. Regenerate with `PYTHONPATH=. .venv/bin/python -m "
     "src.analysis.measurement_ceiling_report` if the selection stage ever promotes an arm.")
 # The committed route table simulates the rank ceiling at 300 draws from seed 7
 # (`route_tables`, `results/measurement_ceiling/routes.json` -> monte_carlo_rank_ceiling).
@@ -1250,11 +1252,11 @@ def main():
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
     parser.add_argument("--platoon-frame", default="results/model_evaluation/platoon_frame.csv")
     parser.add_argument("--model-predictions",
-                        default="results/model_v1/model_v1_predictions_embedding_sgd_sgd_lr1.csv")
+                        default="results/model_v1/model_v1_predictions_clean_clean_dim64.csv")
     parser.add_argument("--seed-predictions",
-                        default="results/model_v1/model_v1_predictions_embedding_sgd_sgd_lr1_s{seed}.csv")
+                        default="results/model_v1/model_v1_predictions_clean_clean_dim64_s{seed}.csv")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
-    parser.add_argument("--manifest", default="data/processed/phase_d5/manifest.json")
+    parser.add_argument("--manifest", default="data/processed/phase_d5_clean/manifest.json")
     parser.add_argument("--pooled-scores", default="results/process_calibration/pooled_scores.csv")
     parser.add_argument("--ceiling-json", default="results/model_evaluation/ceiling.json")
     parser.add_argument("--n-boot", type=int, default=2000)

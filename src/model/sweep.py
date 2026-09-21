@@ -115,7 +115,9 @@ O1_WARMUP_STEPS = "719"
 # loss over those bins. Inheriting the default would put selection and its own rebuild incumbent in
 # different units while every column still lined up, which is the failure mode the
 # presplit->splithead and splithead->rebuild notes above exist to prevent. Pin it to the build rebuild shipped on.
-O1_DATA_DIR = provenance.CANONICAL_DATA_DIR
+# Literal, not `provenance.CANONICAL_DATA_DIR`: that constant now points at the clean
+# build, and this stage must stay on the build its own incumbent trained on.
+O1_DATA_DIR = "data/processed/phase_d5"
 O1_BASE = ["--split", "--data-dir", O1_DATA_DIR]
 STAGES["selection"] = [
     ("lr3e4", [*O1_BASE, "--lr", "3e-4"]),
@@ -253,8 +255,12 @@ def launch(stage, name, extra, seed, args):
 
     if stage == "clean":
         # the clean build is the whole point of the stage; a run on plain phase_d5 would still
-        # produce a plausible `reference`, and select's guard cannot tell (its floor is this arm)
-        manifest_path = Path(args.data_dir) / "manifest.json"
+        # produce a plausible `reference`, and select's guard cannot tell (its floor is this arm).
+        # Resolve the SAME way `knobs` does: CLEAN_BASE's own --data-dir lives in `extra` and
+        # wins over the sweep-level default, so checking args.data_dir directly checks the
+        # wrong path whenever the caller didn't also pass --data-dir on the command line.
+        _, _, effective_data_dir = knobs(extra, args.data_dir)
+        manifest_path = Path(effective_data_dir) / "manifest.json"
         assert manifest_path.exists() and json.loads(manifest_path.read_text()).get(
             "career_pitchers_excluded"), \
             f"clean stage needs a --career-pitchers build; {manifest_path} was not built with it"

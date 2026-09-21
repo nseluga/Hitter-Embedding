@@ -44,11 +44,11 @@ from src.analysis.cold_start_prior_diagnostic import low_stratum_means
 from src.model import loader, query, query_tables as qt
 
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
-DEFAULT_ARM = "embedding_sgd_sgd_lr1"
+DEFAULT_ARM = "clean_clean_dim64"
 DEFAULT_SEEDS = list(range(5))
 DEFAULT_STATS_CSV = "results/model_visualization/hitter_stats.csv"
 DEFAULT_OUT_DIR = "results/model_visualization"
-DEFAULT_DATA_DIR = "data/processed/phase_d5"
+DEFAULT_DATA_DIR = "data/processed/phase_d5_clean"
 DEFAULT_PITCH_EVENTS = "data/processed/pitch_events_labeled.parquet"
 DEFAULT_EVAL_TARGETS = "data/processed/eval_targets_pa.parquet"
 EVAL_SEASON = 2024
@@ -109,7 +109,8 @@ def _compare(label, frame_a, frame_b, n_boot, seed):
 def run_eval(checkpoint_dir, arm, seeds, stats_csv, data_dir, pitch_events, eval_targets_path,
             eval_season=EVAL_SEASON, n_boot=2000, seed=0):
     tensors, manifest = loader.load_tensors(data_dir)
-    frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"])
+    frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"],
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(eval_targets_path)
     tables = query.build_tables(frame, tensors, manifest, pa_df)
     stats = pd.read_csv(stats_csv)

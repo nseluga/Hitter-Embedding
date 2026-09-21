@@ -6,6 +6,7 @@
 #   ./scripts/overnight.sh          run every stage
 #   DRY=1 ./scripts/overnight.sh    print the commands and evaluate no gate
 #   FROM=4 ./scripts/overnight.sh   resume at stage 4 (stages are numbered below)
+#   TO=3 ./scripts/overnight.sh     stop after stage 3, e.g. to review the gate before the refit
 #   GATE_OVERRIDE=1 ...             let stage 4 start without stage 3's sentinel
 #
 # STAGE 4 IS THE ONE THAT CANNOT BE UNDONE: it builds the tensors and models that stage 6
@@ -16,43 +17,52 @@ set -e
 cd ~/hitter-embedding
 
 P=.venv/bin/python
-LOG=/tmp/hitter-overnight
+LOG=${LOG:-/tmp/hitter-overnight}
 FROM=${FROM:-1}
+TO=${TO:-6}
 
-ARM=${ARM:-embedding_sgd_sgd_lr1}
-DATA=${DATA:-data/processed/phase_d5}
-STATS=${STATS:-results/model_visualization/hitter_stats.csv}
+ARM=${ARM:-clean_clean_dim64}
+DATA=${DATA:-data/processed/phase_d5_clean}
+STATS=${STATS:-results/v_chain_clean/hitter_stats.csv}
 
-FINAL_ARM=${FINAL_ARM:-embedding_sgd_sgd_lr1_final}
-FINAL_DATA=${FINAL_DATA:-data/processed/phase_d5_final}
-FINAL_STATS=${FINAL_STATS:-results/model_visualization_final/hitter_stats.csv}
+FINAL_ARM=${FINAL_ARM:-clean_dim64_final}
+FINAL_DATA=${FINAL_DATA:-data/processed/phase_d5_clean_final}
+FINAL_STATS=${FINAL_STATS:-results/model_visualization_final_clean/hitter_stats.csv}
 FINAL_SEASON=2025
 
 # the arm's own recipe, shared by the stage-3 replay and the stage-4 refit; BUILD_FLAGS only
 # applies to stage 4's tensor build (e.g. the clean winner's --career-pitchers).
-TRAIN_FLAGS=${TRAIN_FLAGS:-"--embedding-optimizer sgd --embedding-lr 1"}
-BUILD_FLAGS=${BUILD_FLAGS:-""}
+TRAIN_FLAGS=${TRAIN_FLAGS:-"--embedding-optimizer sgd --embedding-lr 1 --embedding-dim 64"}
+BUILD_FLAGS=${BUILD_FLAGS:-"--career-pitchers"}
 # The 2025 chain writes to ITS OWN directories. Every module below writes arm-less, season-less
 # filenames (calibration.csv, pooled_scores.csv, ...) straight into the committed 2024 results,
 # so pointing stage 6 at the default out-dirs would replace the 2024 exhibit with 2025 numbers
-# in place, on the same night stage 1 rebuilt it, recoverable only from git.
-FINAL_EVAL_OUT=results/model_evaluation_final
-FINAL_PROC_OUT=results/process_calibration_final
+# in place, on the same night stage 1 rebuilt it, recoverable only from git. Overridable so a
+# different FINAL_ARM doesn't overwrite an earlier arm's already-spent 2025 exhibit.
+FINAL_EVAL_OUT=${FINAL_EVAL_OUT:-results/model_evaluation_final_clean}
+FINAL_PROC_OUT=${FINAL_PROC_OUT:-results/process_calibration_final_clean}
+FINAL_VIZ_OUT=${FINAL_VIZ_OUT:-results/model_visualization_final_clean}
 
 # the replay check reproduces the frozen-split arm from a fixed budget instead of from early
 # stopping. Its `reference` has to land inside the five seeds' own spread or the replay is
-# not reproducing them: 1.02386 is their mean, 0.00009 is one SD of it (2026-09-04 log).
-if [[ "$ARM" != embedding_sgd_sgd_lr1 && -z "${GATE_CENTER:-}" ]]; then
-  echo "ARM=$ARM but GATE_CENTER is the 2024 embedding_sgd_sgd_lr1 number; re-derive it from" \
+# not reproducing them: 1.023268 is their mean, 0.00013 is one SD of it, both read off
+# `results/model_v1/sweep_log.csv` (stage `clean`, config `clean_dim64`).
+if [[ "$ARM" != clean_clean_dim64 && -z "${GATE_CENTER:-}" ]]; then
+  echo "ARM=$ARM but GATE_CENTER is the 2024 clean_clean_dim64 number; re-derive it from" \
        "the arm's five seeds (mean) and pass GATE_CENTER= and GATE_TOL= (one SD)" >&2
   exit 1
 fi
-GATE_CENTER=${GATE_CENTER:-1.02386}
-GATE_TOL=${GATE_TOL:-0.00009}
+# ONE SD, which is what nights 3 and 4 actually passed. The design entry (decision-log
+# 2026-09-04, restated in docs/review-pack-refit.md §1) sets the gate at TWO SD, because
+# it checks one seed against a five-seed mean; one SD is strictly tighter, so a pass here
+# is a pass there. `src/analysis/paper_figures.py` draws the published band at two SD.
+GATE_CENTER=${GATE_CENTER:-1.023268}
+GATE_TOL=${GATE_TOL:-0.00013}
 
 # budget and cuts are DERIVED (stage 3), never typed: src/model/replay_schedule.py reads them
-# out of the five runs' own logs, which is the only place they were ever recorded.
-SCHEDULE=results/model_v1/replay_schedule.json
+# out of the five runs' own logs, which is the only place they were ever recorded. Overridable
+# so a different ARM doesn't overwrite the committed clean_dim64 schedule.
+SCHEDULE=${SCHEDULE:-results/model_v1/replay_schedule_clean_dim64.json}
 
 mkdir -p $LOG
 
@@ -69,8 +79,9 @@ run() {
   caffeinate -i "$@"
 }
 
-stage() {  # stage <n> <name>; returns 1 when the stage is being skipped by FROM
+stage() {  # stage <n> <name>; returns 1 when the stage is outside [FROM, TO]
   if (( $1 < FROM )); then say "=== $(date +%H:%M) stage $1 ($2) SKIPPED (FROM=$FROM)"; return 1; fi
+  if (( $1 > TO )); then say "=== $(date +%H:%M) stage $1 ($2) SKIPPED (TO=$TO)"; return 1; fi
   say "=== $(date +%H:%M) stage $1: $2"
   return 0
 }
@@ -85,8 +96,11 @@ if stage 1 "2024 chain, prior on"; then
     run ${=Q} --seeds $N --label ${ARM}_s$N > $LOG/01_query_s$N.log 2>&1
   done
 
+  # model_evaluation_bip_value is NOT in this loop. It ASSERTS its E.3 pins, which were
+  # measured on embedding_sgd_sgd_lr1 / phase_d5, so running it on any other arm is a
+  # guaranteed mid-chain abort. Run it by hand against the preserved old-build artifacts.
   for M in model_evaluation_eval model_evaluation_swing model_evaluation_price_draw \
-           model_evaluation_take_mass model_evaluation_min_pa_sweep model_evaluation_bip_value \
+           model_evaluation_take_mass model_evaluation_min_pa_sweep \
            model_evaluation_probe_coverage model_evaluation_platoon_ceiling \
            process_calibration_heads process_calibration_process process_calibration_pooled \
            measurement_ceiling_report model_visualization_heads model_visualization_disagreement; do
@@ -184,7 +198,7 @@ if stage 4 "refit build + 5 seeds (2015-2024)"; then
   done
   # the prior's population has to be rebuilt too: it is defined by the BUILD's train seasons
   run $P -m src.analysis.model_visualization_stats --manifest $FINAL_DATA/manifest.json \
-      --out-dir results/model_visualization_final > $LOG/04_stats.log 2>&1
+      --out-dir $FINAL_VIZ_OUT > $LOG/04_stats.log 2>&1
 fi
 
 # --- 5. the 2025 queries. THIS IS WHERE THE TEST SEASON IS SPENT ---------------------

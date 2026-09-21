@@ -20,27 +20,34 @@ import pandas as pd
 
 # Repo-relative locations of the read-only input artifacts.
 STABILIZATION_PANEL_CSV = "results/feature_screening/stabilization_panel.csv"
-LEVEL_CEILING_JSON = "results/measurement_ceiling/level_ceiling_level_ceiling.json"
-MIN_PA_SWEEP_CSV = "results/model_evaluation_final/min_pa_sweep_b_min_pa_sweep.csv"
-CALIBRATION_CSV = "results/model_evaluation_final/calibration.csv"
-CALIBRATION_RELIABILITY_CSV = "results/model_evaluation_final/calibration_reliability.csv"
-REPLAY_SCHEDULE_JSON = "results/model_v1/replay_schedule.json"
-SEED_STABILITY_JSON = "results/model_visualization/seed_stability_corrected_null.json"
-DIMENSION_USAGE_JSON = "results/model_visualization/dimension_usage.json"
-EXPOSURE_LOADINGS_JSON = "results/model_visualization/exposure_loadings.json"
-LEVEL_QUERY_JSON = "results/model_visualization/level_query.json"
-LEVEL_QUERY_HELDOUT_JSON = "results/paper_figures/level_query_heldout.json"
-SURFACES_SUMMARY_CSV = "results/model_visualization/surfaces_summary.csv"
-HITTER_STATS_CSV = "results/model_visualization/hitter_stats.csv"
-HITTER_NAMES_CSV = "data/processed/hitter_names.csv"
+LEVEL_CEILING_JSON = "results/measurement_ceiling_clean/level_ceiling_level_ceiling.json"
+MIN_PA_SWEEP_CSV = "results/model_evaluation_final_clean/min_pa_sweep_b_min_pa_sweep.csv"
+CALIBRATION_CSV = "results/model_evaluation_final_clean/calibration.csv"
+CALIBRATION_RELIABILITY_CSV = "results/model_evaluation_final_clean/calibration_reliability.csv"
+REPLAY_SCHEDULE_JSON = "results/model_v1/replay_schedule_clean_dim64.json"
+SEED_STABILITY_JSON = "results/v_chain_clean/seed_stability_corrected_null.json"
+DIMENSION_USAGE_JSON = "results/v_chain_clean/dimension_usage.json"
+EXPOSURE_LOADINGS_JSON = "results/v_chain_clean/exposure_loadings.json"
+LEVEL_QUERY_JSON = "results/v_chain_clean/level_query.json"
+LEVEL_QUERY_HELDOUT_JSON = "results/v_chain_clean/paper_figures/level_query_heldout.json"
+SURFACES_SUMMARY_CSV = "results/v_chain_clean/surfaces_summary.csv"
+HITTER_STATS_CSV = "results/v_chain_clean/hitter_stats.csv"
+HITTER_NAMES_CSV = "data/processed/hitter_names_clean.csv"
 
-# Frozen numbers used by fig 4 tile (a), the replay gate, sourced from the
-# sealed refit reported in the research manifest (not present as a standalone
-# artifact, so they are recorded here as named constants rather than a magic
-# number inline).
-REPLAY_GATE_ARM_MEAN = 1.02386
-REPLAY_GATE_ARM_BAND = 0.00018
-REPLAY_GATE_REFIT_ACHIEVED = 1.02393
+# Frozen numbers used by fig 4 tile (a), the replay gate.
+# ARM_MEAN and ARM_BAND are the clean_clean_dim64 five-seed held-out losses read off
+# `results/model_v1/sweep_log.csv` (stage `clean`, config `clean_dim64`): mean 1.023268,
+# sample SD 0.000128. The band is two SD, which is the convention this figure has always
+# used; `scripts/overnight.sh` GATE_TOL is ONE SD and is a different, tighter gate.
+# State the two-SD convention in the caption.
+REPLAY_GATE_ARM_MEAN = 1.023268
+REPLAY_GATE_ARM_BAND = 0.00026
+# UNRECOVERABLE on the clean build. The stage-3 replay check's `reference` was only ever
+# written to /tmp/hitter-night3-overnight/03_replay.log, which macOS has since reaped, and
+# it is not carried in the sweep ledger. Reproducing it is a five-seed replay RETRAIN.
+# Until that run happens this is the OLD build's number and fig_tuned_well's replay row
+# must not be published. See docs/decision-log.md, 2026-09-20.
+REPLAY_GATE_REFIT_ACHIEVED = 1.02393  # old build (embedding_sgd_sgd_lr1) -- DO NOT PUBLISH
 
 DEFAULT_OUT_DIR = "results/paper_figures"
 SMOKE_MAX_PA = 200
@@ -337,10 +344,16 @@ def fig_tuned_well(root, out_dir):
     n_dims = dimension_usage["n_dims"]
 
     rows = [
+        # The achieved value is UNRECOVERABLE on the clean build: it lived only in a
+        # reaped /tmp log and reproducing it is a five-seed replay retrain. The row is
+        # kept with the value withheld rather than dropped, so the gap is visible in
+        # the figure instead of silently absent, and rather than filled with
+        # REPLAY_GATE_REFIT_ACHIEVED, which is the OLD arm's number.
         ["replay gate",
-         f"{REPLAY_GATE_REFIT_ACHIEVED:.5f}",
+         "not available",
          f"arm {REPLAY_GATE_ARM_MEAN:.5f} +/- {REPLAY_GATE_ARM_BAND:.5f}",
-         f"step budget {replay_schedule['step_budget']}, arm {replay_schedule['arm']}"],
+         f"step budget {replay_schedule['step_budget']}, arm {replay_schedule['arm']}; "
+         "achieved loss not recoverable without a replay retrain"],
         ["seed stability",
          f"{seed_stability['real_mean']:.4f}",
          f"corrected null {seed_stability['corrected_null_mean']:.4f}",
@@ -439,7 +452,10 @@ def load_platoon_lr_gaps(root):
     any hitter. Subtracting the same gap computed on league_value removes it, which is
     why the adjusted gap and not the raw gap is the hitter's platoon signal.
     """
-    surfaces = pd.read_csv(root / SURFACES_SUMMARY_CSV)
+    surfaces_path = root / SURFACES_SUMMARY_CSV
+    if not surfaces_path.exists():
+        return None
+    surfaces = pd.read_csv(surfaces_path)
     expected_woba_rows = surfaces[surfaces["quantity"] == "q"]
     pivoted = expected_woba_rows.pivot(index="anchor_name", columns="p_throws",
                                        values=["anchor_value", "league_value"])
@@ -489,8 +505,16 @@ def main():
     parser = argparse.ArgumentParser(description="Render the six paper figures from committed result artifacts.")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR, help="directory to write figures into")
     parser.add_argument("--smoke", action="store_true", help="tiny run for tests, still writes real figures")
+    parser.add_argument("--eval-dir", default=None,
+                        help="swap results/model_evaluation_final for this dir (clean-refit build)")
     parser.add_argument("--only", default=None, choices=FIGURE_NAMES, help="render a single figure by name")
     args = parser.parse_args()
+    if args.eval_dir:
+        global MIN_PA_SWEEP_CSV, CALIBRATION_CSV, CALIBRATION_RELIABILITY_CSV
+        old = "results/model_evaluation_final/"
+        MIN_PA_SWEEP_CSV, CALIBRATION_CSV, CALIBRATION_RELIABILITY_CSV = (
+            c.replace(old, args.eval_dir.rstrip("/") + "/")
+            for c in (MIN_PA_SWEEP_CSV, CALIBRATION_CSV, CALIBRATION_RELIABILITY_CSV))
 
     root = repo_root()
     out_dir = Path(args.out_dir)

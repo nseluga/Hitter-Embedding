@@ -97,11 +97,11 @@ def score_take_mass(models, context_memmap, hitter_rows, pitch_rows, batch=32768
 def main():
     parser = argparse.ArgumentParser(
         description="Phase E.9 — take-mass shift from the resampled pitch mix.")
-    parser.add_argument("--arm", default="embedding_sgd_sgd_lr1")
+    parser.add_argument("--arm", default="clean_clean_dim64")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
-    parser.add_argument("--data-dir", default="data/processed/phase_d5")
+    parser.add_argument("--data-dir", default="data/processed/phase_d5_clean")
     parser.add_argument("--checkpoint-dir", default="results/checkpoints")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
@@ -118,7 +118,8 @@ def main():
     manifest = json.loads((directory / "manifest.json").read_text())
     season = np.load(directory / "season.npy", mmap_mode="r")
     context_memmap = np.load(directory / "context.npy", mmap_mode="r")
-    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, np.asarray(season))
+    frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, np.asarray(season),
+                                  career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(args.eval_targets)
     train_mask = np.isin(frame["season"].to_numpy(), manifest["train_seasons"])
     shares = query.handedness_shares(pa_df, manifest["train_seasons"])

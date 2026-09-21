@@ -91,11 +91,11 @@ def calibration_table(frame, by, label):
 def main():
     parser = argparse.ArgumentParser(
         description="Phase E.6 — swing-head calibration on real held-out pitches.")
-    parser.add_argument("--arm", default="embedding_sgd_sgd_lr1")
+    parser.add_argument("--arm", default="clean_clean_dim64")
     parser.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     parser.add_argument("--eval-season", type=int, default=2024)
     parser.add_argument("--final-run", action="store_true")
-    parser.add_argument("--data-dir", default="data/processed/phase_d5")
+    parser.add_argument("--data-dir", default="data/processed/phase_d5_clean")
     parser.add_argument("--checkpoint-dir", default="results/checkpoints")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
@@ -112,7 +112,8 @@ def main():
 
     season = np.load(Path(args.data_dir) / "season.npy", mmap_mode="r")
     pitch_frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets,
-                                       np.asarray(season))
+                                       np.asarray(season),
+                                       career_pitchers=manifest.get("career_pitchers_excluded", False))
     frame = pitch_frame.iloc[rows].reset_index(drop=True)
     assert (frame["season"].to_numpy() == args.eval_season).all(), \
         "the pitch frame and the tensor season mask disagree"

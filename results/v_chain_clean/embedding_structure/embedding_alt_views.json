@@ -1,0 +1,143 @@
+{
+  "pairings": {
+    "power_contact": {
+      "x": {
+        "metric": "ev_p90",
+        "definition": "Per-hitter 90th-percentile exit velocity.",
+        "label": "power (90th-pct exit velocity), LDA score",
+        "lda_cv_accuracy_mean": 0.7910103027990394,
+        "lda_cv_accuracy_std": 0.014042695883211805,
+        "n": 1493,
+        "real_unit_span_plotted": [
+          82.46000000000001,
+          114.2
+        ],
+        "unit": "mph"
+      },
+      "y": {
+        "metric": "contact_rate",
+        "definition": "Per-hitter rate of making contact given a swing.",
+        "label": "contact rate, LDA score",
+        "lda_cv_accuracy_mean": 0.753516194922673,
+        "lda_cv_accuracy_std": 0.013498338574318395,
+        "n": 1493,
+        "real_unit_span_plotted": [
+          0.1428571428571428,
+          1.0
+        ],
+        "unit": "rate (0-1)"
+      },
+      "n_hitters_plotted": 1493,
+      "axis_correlation": {
+        "lda_projected": -0.43845964957091427,
+        "raw_metric": -0.22380272137941612
+      }
+    },
+    "discipline": {
+      "x": {
+        "metric": "zone_swing_rate",
+        "definition": "Per-hitter swing rate on pitches inside the strike zone (zone codes 1-9).",
+        "label": "in-zone swing rate, LDA score",
+        "lda_cv_accuracy_mean": 0.7461718031020628,
+        "lda_cv_accuracy_std": 0.0240252265647391,
+        "n": 1493,
+        "real_unit_span_plotted": [
+          0.4,
+          0.8947368421052632
+        ],
+        "unit": "rate (0-1)"
+      },
+      "y": {
+        "metric": "chase_rate",
+        "definition": "Per-hitter swing rate on pitches outside the strike zone (zone codes 11-14).",
+        "label": "chase rate (out-of-zone swing), LDA score",
+        "lda_cv_accuracy_mean": 0.7340665753855131,
+        "lda_cv_accuracy_std": 0.030481194302972206,
+        "n": 1493,
+        "real_unit_span_plotted": [
+          0.0,
+          0.6
+        ],
+        "unit": "rate (0-1)"
+      },
+      "n_hitters_plotted": 1493,
+      "axis_correlation": {
+        "lda_projected": 0.5309427594606903,
+        "raw_metric": 0.3754617538051306
+      }
+    },
+    "spin_vs_fastball": {
+      "x": {
+        "metric": "whiff_rate_brk",
+        "definition": "Per-hitter whiff rate against breaking balls, over swings.",
+        "label": "whiff rate on breaking balls, LDA score",
+        "lda_cv_accuracy_mean": 0.6981273408239701,
+        "lda_cv_accuracy_std": 0.026013116635483672,
+        "n": 1335,
+        "real_unit_span_plotted": [
+          0.1,
+          0.6739130434782609
+        ],
+        "unit": "rate (0-1)"
+      },
+      "y": {
+        "metric": "whiff_rate_fb",
+        "definition": "Per-hitter whiff rate against fastballs, over swings.",
+        "label": "whiff rate on fastballs, LDA score",
+        "lda_cv_accuracy_mean": 0.752808988764045,
+        "lda_cv_accuracy_std": 0.020238585896788452,
+        "n": 1335,
+        "real_unit_span_plotted": [
+          0.03568879371877231,
+          0.43119266055045874
+        ],
+        "unit": "rate (0-1)"
+      },
+      "n_hitters_plotted": 1335,
+      "axis_correlation": {
+        "lda_projected": 0.6399841708401087,
+        "raw_metric": 0.5317148544366396
+      }
+    },
+    "spin_vs_fastball_damage": {
+      "x": {
+        "metric": "ev_p90_brk",
+        "definition": "Per-hitter 90th-percentile exit velocity on breaking-ball batted balls.",
+        "label": "90th-pct exit velocity vs breaking balls, LDA score",
+        "lda_cv_accuracy_mean": 0.7431604426002767,
+        "lda_cv_accuracy_std": 0.009843017911056847,
+        "n": 1203,
+        "real_unit_span_plotted": [
+          88.5,
+          114.2
+        ],
+        "unit": "mph"
+      },
+      "y": {
+        "metric": "ev_p90_fb",
+        "definition": "Per-hitter 90th-percentile exit velocity on fastball batted balls.",
+        "label": "90th-pct exit velocity vs fastballs, LDA score",
+        "lda_cv_accuracy_mean": 0.8046300138312587,
+        "lda_cv_accuracy_std": 0.02193326591873068,
+        "n": 1203,
+        "real_unit_span_plotted": [
+          90.24,
+          113.9
+        ],
+        "unit": "mph"
+      },
+      "n_hitters_plotted": 1203,
+      "axis_correlation": {
+        "lda_projected": 0.9380643812204367,
+        "raw_metric": 0.8310291901148733
+      }
+    }
+  },
+  "method": {
+    "seed": 7,
+    "n_splits": 5,
+    "chance": 0.333,
+    "season_filter": "season <= 2024 (inherited from hitters/contrasts)",
+    "source_screen": "results/embedding_structure/axis_screen.py"
+  }
+}

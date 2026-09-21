@@ -116,9 +116,22 @@ def test_the_budget_is_best_epoch_plus_one_and_only_earlier_cuts_are_replayed(tm
     assert recovered["lr_cut_steps"] == [200]
 
 
-def test_the_committed_schedule_matches_the_five_canonical_runs():
-    schedule = json.loads(Path("results/model_v1/replay_schedule.json").read_text())
-    logs = [Path(f"results/model_v1/logs/embedding_sgd_sgd_lr1_s{seed}.log") for seed in range(5)]
+# (schedule file, run-log arm). The first row is the pre-clean build and is kept as the
+# reproduction pin; the second is the clean build the paper reports. Both schedules are
+# recovered from run logs, so a change to `replay_schedule.recover` breaks whichever build
+# it drifts on rather than only the one that happens to be canonical today.
+COMMITTED_SCHEDULES = [
+    ("results/model_v1/replay_schedule.json", "embedding_sgd_sgd_lr1"),
+    ("results/model_v1/replay_schedule_clean_dim64.json", "clean_clean_dim64"),
+]
+
+
+@pytest.mark.parametrize("schedule_path,arm", COMMITTED_SCHEDULES)
+def test_the_committed_schedule_matches_the_five_canonical_runs(schedule_path, arm):
+    if not Path(schedule_path).exists():
+        pytest.skip(f"{schedule_path} is not in this checkout")
+    schedule = json.loads(Path(schedule_path).read_text())
+    logs = [Path(f"results/model_v1/logs/{arm}_s{seed}.log") for seed in range(5)]
     if not all(log.exists() for log in logs):
         pytest.skip("run logs are not in this checkout")
 
@@ -126,6 +139,7 @@ def test_the_committed_schedule_matches_the_five_canonical_runs():
     assert recovered["step_budget"] == schedule["step_budget"]
     assert recovered["lr_cut_steps"] == schedule["lr_cut_steps"]
     assert all(0 < cut < schedule["step_budget"] for cut in schedule["lr_cut_steps"])
+    assert schedule.get("arm", arm) == arm, "the schedule names a different arm than its logs"
 
 
 # --------------------------------------------------------------------- the replay itself

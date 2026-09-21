@@ -46,9 +46,12 @@ from src.data.eval_targets import (  # the pitcher rule has ONE definition, in t
 
 DEFAULT_OUT_DIR = "results/embedding_structure"
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
-DEFAULT_ARM = "embedding_sgd_sgd_lr1"
-HITTER_STATS_PATH = "results/model_visualization/hitter_stats.csv"
-NAMES_PATH = "data/processed/hitter_names.csv"
+DEFAULT_ARM = "clean_clean_dim64"
+# Must stay in lockstep with DEFAULT_ARM: embedding_index is a row position in the
+# trained table, so pairing one build's stats or names with another build's
+# checkpoints indexes past the end of the embedding table.
+HITTER_STATS_PATH = "results/v_chain_clean/hitter_stats.csv"
+NAMES_PATH = "data/processed/hitter_names_clean.csv"
 EVAL_TARGETS_PA_PATH = "data/processed/eval_targets_pa.parquet"
 
 

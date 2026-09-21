@@ -1,0 +1,15 @@
+{
+  "arm": "clean_dim64_final",
+  "n_pitchers_requested": 200,
+  "n_hitters": 4,
+  "n_exact_reference_draws": 24,
+  "coverage_note": "sampled panel of pitchers and hitters; paired within both",
+  "overall_take_mass_drawn": 0.5207723811375876,
+  "overall_take_mass_exact": 0.5217655577410345,
+  "delta_bb_channel_1_surface": -0.001090014034599865,
+  "delta_bb_channel_2_take_mass": -0.0004679393741047061,
+  "delta_bb_both_channels": -0.001557953408704571,
+  "residual_walk_excess": 0.003476232212515043,
+  "share_of_residual_explained": -0.4481729969291656,
+  "delta_k_channel_2": -0.0005070604227410125
+}

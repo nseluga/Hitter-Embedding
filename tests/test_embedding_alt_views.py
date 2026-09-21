@@ -109,11 +109,13 @@ def test_all_three_pairings_hit_expected_cv_and_render(tmp_path):
     normalized, hitters = _load_normalized_hitters()
     pairings_summary = alt.run_all_pairings(normalized, hitters, tmp_path)
 
+    # Re-derived on the clean build 2026-09-20; the old build's pins were
+    # (0.800, 0.765), (0.782, 0.752), (0.692, 0.733), (0.744, 0.777).
     expected = {
-        "power_contact": (0.800, 0.765),
-        "discipline": (0.782, 0.752),
-        "spin_vs_fastball": (0.692, 0.733),  # unmeasured before this run; pin to observed
-        "spin_vs_fastball_damage": (0.744, 0.777),  # unmeasured before this run; pin to observed
+        "power_contact": (0.791, 0.754),
+        "discipline": (0.746, 0.734),
+        "spin_vs_fastball": (0.698, 0.753),
+        "spin_vs_fastball_damage": (0.743, 0.805),
     }
     for pairing_id, (exp_x, exp_y) in expected.items():
         s = pairings_summary[pairing_id]
@@ -131,11 +133,18 @@ def test_lda_axes_overstate_the_hitter_level_correlation(tmp_path):
     normalized, hitters = _load_normalized_hitters()
     pairings_summary = alt.run_all_pairings(normalized, hitters, tmp_path)
 
+    # Re-derived on the clean build 2026-09-20. Only the LDA-projected column moved
+    # (-0.456 -> -0.438, 0.552 -> 0.531, 0.662 -> 0.640, 0.967 -> 0.938). Every
+    # raw_metric value is UNCHANGED, which is the consistency check: load_hitters
+    # excludes career pitcher-batters from both builds, so the two runs score the same
+    # hitters, and a raw metric is an observed stat that cannot move with the model
+    # while a projection onto learned axes can. The inflation finding asserted below is
+    # what this test exists for, and it survives on every pairing.
     expected = {
-        "power_contact": (-0.456, -0.224),
-        "discipline": (0.552, 0.375),
-        "spin_vs_fastball": (0.662, 0.532),
-        "spin_vs_fastball_damage": (0.967, 0.831),
+        "power_contact": (-0.438, -0.224),
+        "discipline": (0.531, 0.375),
+        "spin_vs_fastball": (0.640, 0.532),
+        "spin_vs_fastball_damage": (0.938, 0.831),
     }
     for pairing_id, (exp_lda, exp_raw) in expected.items():
         c = pairings_summary[pairing_id]["axis_correlation"]
