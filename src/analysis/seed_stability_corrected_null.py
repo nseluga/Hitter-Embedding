@@ -12,9 +12,10 @@ This is a NEW result, not a fix in place: it writes its own JSON and never
 touches `seed_stability_summary.json` or anything else in
 results/model_visualization/.
 
-Run: python -m src.analysis.seed_stability_corrected_null
+Run: python -m src.analysis.seed_stability_corrected_null [--arm ARM --out PATH]
 """
 
+import argparse
 import json
 from pathlib import Path
 
@@ -27,13 +28,13 @@ from src.analysis.model_visualization_embeddings import (
     row_cosine,
 )
 
-CHECKPOINT_DIR = "results/checkpoints"
-ARM = "embedding_sgd_sgd_lr1"
+DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
+DEFAULT_ARM = "clean_clean_dim64"
 SEEDS = (0, 1, 2, 3, 4)
 COLD_START_ROW = 0
 N_BOOT = 1000
 BOOT_SEED = 7
-OUT_PATH = "results/model_visualization/seed_stability_corrected_null.json"
+DEFAULT_OUT_PATH = "results/model_visualization/seed_stability_corrected_null.json"
 
 
 def corrected_null_cosine(source, target, rng):
@@ -43,7 +44,13 @@ def corrected_null_cosine(source, target, rng):
 
 
 def main():
-    embeddings = load_seed_embeddings(CHECKPOINT_DIR, ARM, seeds=SEEDS)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--arm", default=DEFAULT_ARM)
+    parser.add_argument("--checkpoint-dir", default=DEFAULT_CHECKPOINT_DIR)
+    parser.add_argument("--out", default=DEFAULT_OUT_PATH)
+    args = parser.parse_args()
+
+    embeddings = load_seed_embeddings(args.checkpoint_dir, args.arm, seeds=SEEDS)
     seed0_rows = embeddings[SEEDS[0]][COLD_START_ROW + 1:]
     seed0_centered = seed0_rows - seed0_rows.mean(axis=0)
 
@@ -71,7 +78,7 @@ def main():
         n_boot=N_BOOT, seed=BOOT_SEED)
 
     summary = {
-        "arm": ARM,
+        "arm": args.arm,
         "seeds": list(SEEDS),
         "reference_seed": SEEDS[0],
         "per_seed": per_seed,
@@ -91,7 +98,7 @@ def main():
                  "so the null rotation gets the same fitting freedom as the real one."),
     }
 
-    out_path = Path(OUT_PATH)
+    out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(summary, indent=2))
 

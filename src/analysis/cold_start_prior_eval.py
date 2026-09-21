@@ -44,11 +44,11 @@ from src.analysis.cold_start_prior_diagnostic import low_stratum_means
 from src.model import loader, query, query_tables as qt
 
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
-DEFAULT_ARM = "embedding_sgd_sgd_lr1"
+DEFAULT_ARM = "clean_clean_dim64"
 DEFAULT_SEEDS = list(range(5))
 DEFAULT_STATS_CSV = "results/model_visualization/hitter_stats.csv"
 DEFAULT_OUT_DIR = "results/model_visualization"
-DEFAULT_DATA_DIR = "data/processed/phase_d5"
+DEFAULT_DATA_DIR = "data/processed/phase_d5_clean"
 DEFAULT_PITCH_EVENTS = "data/processed/pitch_events_labeled.parquet"
 DEFAULT_EVAL_TARGETS = "data/processed/eval_targets_pa.parquet"
 EVAL_SEASON = 2024

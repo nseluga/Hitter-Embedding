@@ -49,7 +49,7 @@ ANCHOR_SHORT_NAMES = {batter: name.split()[-1] for batter, name in ANCHORS.items
 
 PITCH_PARQUET = "data/processed/pitch_events_labeled.parquet"
 EVAL_TARGETS_PARQUET = "data/processed/eval_targets_pa.parquet"
-MANIFEST_PATH = "data/processed/phase_d5/manifest.json"
+MANIFEST_PATH = "data/processed/phase_d5_clean/manifest.json"
 
 CHASE_ZONES = (11, 12, 13, 14)
 IN_ZONE_ZONES = tuple(range(1, 10))

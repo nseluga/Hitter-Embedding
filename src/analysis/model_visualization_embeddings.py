@@ -2,7 +2,7 @@
 Phase V — embedding visualization: V.11 (seed stability gate), V.1 (stand map),
 V.2 (exposure map), V.6 (cold-start), V.7 (dimension usage).
 
-Reads only `embedding.weight` from the frozen `embedding_sgd_sgd_lr1_s{0..4}` checkpoints
+Reads only `embedding.weight` from the frozen `clean_clean_dim64_s{0..4}` checkpoints
 (spec §0.4: no model, scorer, or loss changes). Seed 0 draws every figure; all
 five seeds feed V.11 only (spec §0.2). Purpose is how the model learned, not how
 it performed (spec §0.1) — nothing here grades against 2025 or a baseline.
@@ -32,9 +32,8 @@ from src.analysis.model_visualization_stats import ANCHORS
 
 DEFAULT_OUT_DIR = "results/model_visualization"
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
-DEFAULT_ARM = "embedding_sgd_sgd_lr1"
+DEFAULT_ARM = "clean_clean_dim64"
 LOG_DIR = "results/model_v1/logs"
-LOG_ARM = DEFAULT_ARM  # logs were written under the arm name from the first run
 NAMES_PATH = "data/processed/hitter_names.csv"
 
 SEEDS = (0, 1, 2, 3, 4)
@@ -67,18 +66,21 @@ def bootstrap_ci(values, statistic, n_boot=N_BOOT, seed=BOOT_SEED):
 
 # --------------------------------------------------------------------- V.11 (a)
 
-def check_provenance(checkpoint_dir, arm, out_dir):
+def check_provenance(checkpoint_dir, arm, out_dir, log_arm=None):
     """
     Parses each seed's "best val loss X at epoch N" line from its training log
     and asserts it matches the checkpoint's saved epoch/val_loss (tolerance
     1e-5). A mismatch means the wrong checkpoint is being read and everything
     downstream is meaningless, so this is a hard assertion, not a soft check.
+    `log_arm` names the log files when they differ from the checkpoint arm;
+    it defaults to `arm`, which is the case for every build.
     """
+    log_arm = log_arm or arm
     pattern = re.compile(r"best val loss ([\d.]+) at epoch (\d+)")
     embeddings = load_seed_embeddings(checkpoint_dir, arm, seeds=SEEDS)
     rows = []
     for seed in SEEDS:
-        log_path = Path(LOG_DIR) / f"{LOG_ARM}_s{seed}.log"
+        log_path = Path(LOG_DIR) / f"{log_arm}_s{seed}.log"
         text = log_path.read_text()
         match = pattern.search(text)
         assert match, f"no 'best val loss' line found in {log_path}"
@@ -395,18 +397,25 @@ def main():
                         help="which seed's checkpoint drives the primary figures (V.1/V.2/V.6/V.7)")
     parser.add_argument("--checkpoint-dir", default=DEFAULT_CHECKPOINT_DIR)
     parser.add_argument("--arm", default=DEFAULT_ARM)
+    parser.add_argument("--names", default=NAMES_PATH,
+                        help="hitter names table; its embedding_index must match the "
+                             "build the checkpoints trained on, not whichever build "
+                             "wrote data/processed/hitter_names.csv last")
+    parser.add_argument("--log-arm", default=None,
+                        help="training-log arm name when it differs from --arm; defaults to --arm")
     args = parser.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
 
     print("V.11(a): parsing training logs, asserting against checkpoints")
-    embeddings, provenance = check_provenance(args.checkpoint_dir, args.arm, args.out_dir)
+    embeddings, provenance = check_provenance(args.checkpoint_dir, args.arm, args.out_dir,
+                                              log_arm=args.log_arm)
     print(provenance.to_string(index=False))
 
     # seed 0 is always V.11's alignment reference regardless of --seed-index,
     # which only selects which seed drives the coordinate-based figures
     primary = embeddings[args.seed_index]
-    hitters = load_hitters(f"{args.out_dir}/hitter_stats.csv", NAMES_PATH, primary.shape[0])
+    hitters = load_hitters(f"{args.out_dir}/hitter_stats.csv", args.names, primary.shape[0])
 
     print("V.11(b): Procrustes alignment and seed stability")
     stability, summary = seed_stability(embeddings, hitters, args.out_dir)

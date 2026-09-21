@@ -130,8 +130,13 @@ def test_obs_platoon_diff_sign_for_lhb():
     assert result.loc[3, "stratum"] == "low"  # min(5, 20) = 5 < 113
 
 
-def test_vocabulary_coverage_is_1762_rows():
+def test_vocabulary_coverage_is_1564_rows():
+    """
+    1564 is the clean build's trained vocabulary; the old build's was 1762. This pin
+    follows the build on purpose -- it is a size check on whichever table the module
+    resolves, not a reproduction guarantee for a frozen result.
+    """
     vocab = mvs.load_vocabulary()
-    assert len(vocab) == 1762
+    assert len(vocab) == 1564
     assert vocab["batter"].is_unique
     assert vocab["embedding_index"].min() >= 1

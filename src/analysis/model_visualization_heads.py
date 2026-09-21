@@ -13,7 +13,7 @@ conditions at inference); spray is a pull-tendency scalar (see `PULL_SCALAR_NOTE
 marginals are mapped onto the PCA embedding coordinates and correlated (raw and
 partialled on log prior PA) against the observable-stat panel in `hitter_stats.csv`.
 
-V.4 reads the committed 2024 ensemble query (`model_v1_predictions_embedding_sgd_sgd_lr1.csv`),
+V.4 reads the committed 2024 ensemble query (`model_v1_predictions_clean_clean_dim64.csv`),
 averages each hitter's predicted wOBA over the sides they were queried on into one
 "level query" number, and checks it against training wOBA level by exposure stratum.
 Nothing here trains, scores a new season, or changes the model, scorer, or loss --
@@ -40,14 +40,12 @@ from src.model import loader
 from src.model.query import load_ensemble, _trunk, spray_kernels
 from src.model.v1 import SPLIT_CLASSES
 
-DEFAULT_DATA_DIR = "data/processed/phase_d5"
-DEFAULT_CHECKPOINT = "results/checkpoints/embedding_sgd_sgd_lr1_s0.pt"
+DEFAULT_DATA_DIR = "data/processed/phase_d5_clean"
+DEFAULT_CHECKPOINT = "results/checkpoints/clean_clean_dim64_s0.pt"
 DEFAULT_OUT_DIR = "results/model_visualization"
-MANIFEST_PATH = "data/processed/phase_d5/manifest.json"
 NAMES_PATH = "data/processed/hitter_names.csv"
-HITTER_STATS_PATH = "results/model_visualization/hitter_stats.csv"
-EMBEDDING_COORDS_PATH = "results/model_visualization/embedding_coords.csv"
-LEVEL_QUERY_PREDICTIONS_PATH = "results/model_v1/model_v1_predictions_embedding_sgd_sgd_lr1.csv"
+DEFAULT_HITTER_STATS_PATH = "results/model_visualization/hitter_stats.csv"
+LEVEL_QUERY_PREDICTIONS_PATH = "results/model_v1/model_v1_predictions_clean_clean_dim64.csv"  # default; --level-query-predictions wins
 
 N_REFERENCE_PITCHES = 2000
 REFERENCE_SEED = 0
@@ -205,20 +203,20 @@ def bootstrap_ci_partial(a, b, confound, n_boot=N_BOOT, seed=BOOT_SEED):
 
 # --------------------------------------------------------------------- V.3 maps + loadings
 
-def get_or_compute_pca_coords(hitters, out_dir):
+def get_or_compute_pca_coords(hitters, out_dir, checkpoint=None):
     """
     Reuses embedding_coords.csv (pc1/pc2/.../batter or embedding_index) if the sibling
-    script has produced it; otherwise falls back to PCA on seed 0's embedding.weight[1:]
-    and says so via the returned `fallback` flag.
+    script has produced it in `out_dir`; otherwise falls back to PCA on `checkpoint`'s
+    embedding.weight[1:] and says so via the returned `fallback` flag.
     """
-    path = Path(EMBEDDING_COORDS_PATH)
+    path = Path(out_dir) / "embedding_coords.csv"
     if path.exists():
         coords = pd.read_csv(path)
         pc_cols = [c for c in coords.columns if c.startswith("pc")]
         assert len(pc_cols) >= 2, f"{path} has no pc columns"
         return coords, sorted(pc_cols, key=lambda c: int(c[2:])), False
 
-    saved = torch.load(DEFAULT_CHECKPOINT, map_location="cpu", weights_only=False)
+    saved = torch.load(checkpoint or DEFAULT_CHECKPOINT, map_location="cpu", weights_only=False)
     embedding = saved["model"]["embedding.weight"].numpy().astype("float64")[1:]
     centered = embedding - embedding.mean(axis=0)
     pca = PCA(n_components=4, random_state=BOOT_SEED)
@@ -342,10 +340,10 @@ def preregistered_cells(merged):
 
 # --------------------------------------------------------------------- V.4
 
-def build_level_query(hitters):
-    predictions = pd.read_csv(LEVEL_QUERY_PREDICTIONS_PATH)
+def build_level_query(hitters, predictions_path=None, names_path=None):
+    predictions = pd.read_csv(predictions_path or LEVEL_QUERY_PREDICTIONS_PATH)
     level_query = predictions.groupby("batter")["pred_woba"].mean().rename("level_query")
-    names = pd.read_csv(NAMES_PATH)[["batter", "embedding_index", "name", "stand"]]
+    names = pd.read_csv(names_path or NAMES_PATH)[["batter", "embedding_index", "name", "stand"]]
     merged = (hitters[["batter", "stratum", "log_prior_pa", "woba_level"]]
               .merge(level_query, on="batter", how="inner")
               .merge(names, on="batter", how="left"))
@@ -404,6 +402,12 @@ def main():
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     parser.add_argument("--checkpoint", default=DEFAULT_CHECKPOINT)
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
+    parser.add_argument("--hitter-stats", default=DEFAULT_HITTER_STATS_PATH)
+    parser.add_argument("--level-query-predictions", default=LEVEL_QUERY_PREDICTIONS_PATH)
+    parser.add_argument("--names", default=NAMES_PATH,
+                        help="hitter names table; its embedding_index must match the "
+                             "build the checkpoint trained on. A mismatched table builds "
+                             "hitter ids past the end of the embedding table.")
     args = parser.parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -419,7 +423,7 @@ def main():
         out_dir / "reference_context_index.csv", index=False)
     reference_context = tensors["context"][torch.from_numpy(reference_idx)].float()
 
-    names = pd.read_csv(NAMES_PATH)
+    names = pd.read_csv(args.names)
     hitters = names[names["embedding_index"] >= 1][["batter", "embedding_index"]].sort_values(
         "embedding_index").reset_index(drop=True)
     hitter_ids = hitters["embedding_index"].values
@@ -434,8 +438,9 @@ def main():
         marginals_df[name] = marginals[name]
     marginals_df.to_csv(out_dir / "head_marginals.csv", index=False)
 
-    hitter_stats = pd.read_csv(HITTER_STATS_PATH)
-    coords, pc_cols, fallback = get_or_compute_pca_coords(hitter_stats, out_dir)
+    hitter_stats = pd.read_csv(args.hitter_stats)
+    coords, pc_cols, fallback = get_or_compute_pca_coords(hitter_stats, out_dir,
+                                                          checkpoint=args.checkpoint)
     print(f"embedding_coords.csv {'was absent, computed PCA fallback' if fallback else 'found'}")
 
     loadings, merged = build_loadings(coords, pc_cols, marginals_df, hitter_stats)
@@ -449,7 +454,7 @@ def main():
     cells = preregistered_cells(merged)
     (out_dir / "head_stat_loadings.json").write_text(json.dumps(cells, indent=2))
 
-    level_query_df = build_level_query(hitter_stats)
+    level_query_df = build_level_query(hitter_stats, args.level_query_predictions, args.names)
     level_query_df.to_csv(out_dir / "level_query.csv", index=False)
     fig_level_map(coords[["batter", "pc1", "pc2"]], level_query_df, hitter_stats,
                  out_dir / "fig_level_map.png")

@@ -30,7 +30,7 @@ import statistics
 from pathlib import Path
 
 DEFAULT_LOG_DIR = Path("results/model_v1/logs")
-DEFAULT_ARM = "embedding_sgd_sgd_lr1"
+DEFAULT_ARM = "clean_clean_dim64"
 DEFAULT_SEEDS = list(range(5))
 
 EPOCH_LINE = re.compile(

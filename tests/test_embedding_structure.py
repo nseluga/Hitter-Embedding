@@ -69,10 +69,20 @@ def test_career_pitcher_batter_ids_count_and_keeps_stars():
     assert JUDGE not in pitcher_ids
     assert OHTANI not in pitcher_ids
 
-    hitter_stats = pd.read_csv(structure.HITTER_STATS_PATH)
-    flagged = hitter_stats[hitter_stats["batter"].isin(pitcher_ids)]
+    # HITTER_STATS_PATH now resolves to the clean build, which excluded these hitters
+    # from training, so none of them survive into it. The old build's table is still on
+    # disk and still carries all 198, and the two together pin the exclusion exactly:
+    # the set dropped from old to clean IS the career pitcher-batter set, neither a
+    # superset nor a subset, and 1762 - 198 = 1564 is the clean vocabulary.
+    clean_stats = pd.read_csv(structure.HITTER_STATS_PATH)
+    assert not clean_stats["batter"].isin(pitcher_ids).any()
+
+    old_stats = pd.read_csv("results/model_visualization/hitter_stats.csv")
+    flagged = old_stats[old_stats["batter"].isin(pitcher_ids)]
     assert len(flagged) == 198
     assert (flagged["stratum"] == "low").all()
+    assert len(old_stats) - len(flagged) == len(clean_stats) == 1564
+    assert set(flagged["batter"]) == set(old_stats["batter"]) - set(clean_stats["batter"])
 
 
 def test_load_hitters_excludes_all_career_pitcher_batters():

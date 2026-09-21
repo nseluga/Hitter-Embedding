@@ -1,0 +1,17 @@
+{
+  "pc1_abs_r": 0.05555799627384396,
+  "pc1_abs_r_ci95": [
+    0.014768206715360152,
+    0.09931266430538964
+  ],
+  "pc1_note": "pc1 sign is arbitrary; passes uses the |r| interval excluding zero",
+  "pc1_passes": true,
+  "norm_r": 0.9471352836056655,
+  "norm_r_ci95": [
+    0.9422955024072511,
+    0.9516871423511036
+  ],
+  "norm_passes": true,
+  "n_boot": 1000,
+  "boot_seed": 7
+}

@@ -1,0 +1,114 @@
+{
+  "step": "Phase M",
+  "spec": "docs/phase-m-spec.md",
+  "eval_season": 2024,
+  "sealed_seasons_never_read": [
+    2025
+  ],
+  "post_selection_descriptive": "post-selection descriptive: computed on 2024 after the pre-registered platoon gate ran and failed (docs/research-manifest.md, 2026-08-20). Not a test of a hypothesis.",
+  "population": {
+    "n_platoon": 545,
+    "n_pooled": 617,
+    "n_intersection": 545,
+    "n_platoon_only": 0,
+    "n_pooled_only": 72,
+    "platoon_is_subset_of_pooled": true,
+    "pooled_rebuilt_coverage": {
+      "eval_season": 2024,
+      "actual_groups": 649,
+      "dropped_below_min_eval_pa": 32,
+      "min_eval_pa": 10,
+      "dropped_no_prediction": 0,
+      "scored_groups": 617,
+      "by_stratum": {
+        "low": {
+          "scored": 161,
+          "dropped": 19,
+          "share_dropped": 0.10555555555555556,
+          "mean_woba_scored": 0.26481036988582085,
+          "mean_woba_dropped": 0.15133268588137008
+        },
+        "medium": {
+          "scored": 108,
+          "dropped": 8,
+          "share_dropped": 0.06896551724137931,
+          "mean_woba_scored": 0.28144098822172253,
+          "mean_woba_dropped": 0.296359375
+        },
+        "high": {
+          "scored": 348,
+          "dropped": 5,
+          "share_dropped": 0.014164305949008499,
+          "mean_woba_scored": 0.3000900158882775,
+          "mean_woba_dropped": 0.1127
+        }
+      }
+    }
+  },
+  "route_rule": {
+    "primary": "B_prime",
+    "always_reported": [
+      "A"
+    ],
+    "provenance_only": [
+      "B"
+    ],
+    "never_primary": [
+      "C"
+    ],
+    "rationale": "Route A's fragility is structural \u2014 a near-total cancellation where a 3% noise-model error swings tau2 by ~100% \u2014 and that was known before any number was read.",
+    "frozen": "docs/phase-m-spec.md \u00a7M.0, decision log 2026-08-30"
+  },
+  "headline": {
+    "primary_route": "B_prime",
+    "platoon_ceiling_b_prime": 0.2964517824970523,
+    "platoon_fraction_b_prime": 0.5957747162445225,
+    "platoon_ceiling_a": 0.16709992545088512,
+    "platoon_fraction_a": 1.0569632279655137,
+    "level_ceiling": 0.7420469557106563,
+    "level_fraction": 0.6406199032345793
+  },
+  "fallback_rules_fired": [],
+  "coverage_labels_coverage": {
+    "nominal": 0.95,
+    "interval": "seed_plus_target_noise (the fair test \u2014 seed spread convolved with the target's own sampling noise)",
+    "measured_coverage_all_groups": 0.8694516971279374,
+    "measured_coverage_m6_intersection": 0.8798165137614679,
+    "committed_coverage_value": 0.869452,
+    "reproduces_committed": true,
+    "label_for_notebook": "every displayed interval carries its MEASURED coverage, not the nominal level \u2014 the plan's own fallback, already fired. No further attempt is made to close the gap."
+  },
+  "route_c_verdict": "uninformative_inside_both_nulls",
+  "precision_clause": {
+    "rule": "a stratum whose 95% bootstrap CI on the ceiling includes zero cannot carry the illustration; it moves to the stratum with the narrowest CI relative to its point estimate",
+    "frozen": "docs/phase-m-spec.md \u00a7M.2, from the 2026-08-20 revisit condition",
+    "ci_includes_zero": {
+      "low": false,
+      "medium": false,
+      "high": false
+    },
+    "relative_ci_width": {
+      "low": 0.12618554077739538,
+      "medium": 0.12130501819239217,
+      "high": 0.10789479719411234
+    },
+    "illustration_stratum": "low",
+    "default_stratum": "low",
+    "default_stratum_usable": true,
+    "moved": false,
+    "triggered": false,
+    "note": "'low' is the stratum the thesis is graded on, so a move away from it is reported as a limitation on the illustration, not as a change of subject."
+  },
+  "artifacts": [
+    "coverage_labels_coverage_labels.csv",
+    "differential_exhibit.csv",
+    "differential_exhibit_denominators.csv",
+    "differential_fraction_of_ceiling.csv",
+    "differential_min_eval_pa_sensitivity.csv",
+    "differential_route_diagnostics.csv",
+    "level_ceiling_level_ceiling.json",
+    "population.csv",
+    "routes.json",
+    "routes_route_c_diagnostic.json"
+  ]
+}

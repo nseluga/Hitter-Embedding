@@ -11,7 +11,7 @@
 \usepackage{hyperref}
 \usepackage[numbers]{natbib}
 
-	itle{Conditional Queries Against a Learned Hitter Process Model}
+\title{Conditional Queries Against a Learned Hitter Process Model}
 \author{Nate Seluga\\ Harvey Mudd College \\ \texttt{nseluga@g.hmc.edu}}
 \date{}
 
@@ -21,12 +21,17 @@
 % SSAC27 abstract: one paragraph, no headers, under 350 words, link last. Outline and
 % licensed numbers: paper/outline.md.
 \begin{abstract}
-Most of what a team wants to know about a hitter is a split: against left-handers, against high velocity, against pitchers who live at the top of the zone. Each one takes hundreds of plate appearances to stabilize, and the decision usually comes before that. The standard answer shrinks the split toward a league or handedness average, which throws away the pitch-level record that produced it. Player embeddings trained on at-bat outcomes or pitch sequences exist, but they are read out for recent form or game-level predictions, not composed into a season split a team would project. We train a hitter model on pitches and query it for the split instead. The model is under one million parameters: a 32-dimension hitter embedding and the pitch context predict swing, then contact, then exit velocity, launch angle, and spray direction as binned distributions. We train on 7.3 million Statcast pitches from 2015 through 2024 covering 1,870 hitters. A query is a weight vector over pitchers. We weight every pitcher by batters faced and compose the per-pitch outputs through the count-state Markov chain, which gives a projected wOBA exactly without simulating plate appearances, and a different split needs only a different weight vector, not a retrained model. Handedness is the first query we validate. On sealed 2025 data, the pre-registered test against gradient-boosted and empirical Bayes baselines did not pass: pooled error was tied and pooled rank order beat both. Measured against the reliability of one season's side-specific wOBA, the model recovers 55\% of the platoon signal and 63\% of the level signal. It beats both baselines only for hitters with 113 to 452 prior plate appearances, and below that 43\% of hitters are unseen in training and the predictions are too spread out rather than misordered. The embedding, trained only on pitch outcomes, separates hitters on power, contact, and discipline at 0.75 to 0.80 held-out accuracy. The same interface answers velocity, fastball location, and pitch-mix queries, but one season is too noisy to score those hitter by hitter, so they are exposed and not yet validated. Code and data: \url{https://github.com/nseluga/hitter-embedding} % TODO: make public before Oct 1
+Most of what a team wants to know about a hitter is a split: against left-handers, against high velocity, against pitchers who live at the top of the zone. Each one takes hundreds of plate appearances to stabilize, and the decision usually comes before that. The standard answer shrinks the split toward a league or handedness average, which throws away the pitch-level record that produced it. Player embeddings trained on at-bat outcomes or pitch sequences exist, but they are read out for recent form or game-level predictions, not composed into a season split a team would project. We train a hitter model on pitches and query it for the split instead. The model is under one million parameters: a 64-dimension hitter embedding and the pitch context predict swing, then contact, then exit velocity, launch angle, and spray direction as binned distributions. We train on 7.2 million Statcast pitches from 2015 through 2024 covering 1,672 hitters. A query is a weight vector over pitchers. We weight every pitcher by batters faced and compose the per-pitch outputs through the count-state Markov chain, which gives a projected wOBA exactly without simulating plate appearances; a different split needs only a different weight vector, not a retrained model. Handedness is the first query we validate. On sealed 2025 data the pre-registered test against gradient-boosted and empirical Bayes baselines did not pass: pooled error was tied and pooled rank order beat both. One exploratory cell of sixteen, hitters with 113 to 452 prior plate appearances, beat both baselines on both gates; below it 43\% of hitters are unseen in training and predictions are too spread out rather than misordered. On 2024, the selection season, the same architecture trained through 2023 reaches 60\% of the ceiling one season's side-specific wOBA reliability allows on platoon rank order and 64\% on level, while its platoon error sits at the noise floor. The embedding, trained only on pitch outcomes, separates hitters on power, contact, and discipline at 0.73 to 0.79 held-out accuracy. The same interface answers velocity, location, and pitch-mix queries, not yet validated. Code and data: \url{https://github.com/nseluga/hitter-embedding} % TODO: make public before Oct 1
 \end{abstract}
 
 % TODO Table 1: 2025 held-out RMSE and weighted rank by stratum for model, gbm_full, eb_bivariate,
-% with paired CIs. Source: results/ claim-1 strata. Figure 1: results/paper_figures/ ceiling vs achieved
-% (platoon B' 0.2965 vs 0.1630; level 0.7420 vs 0.4659).
+% with paired CIs. Source: results/model_evaluation_final_clean/ claim-1 strata.
+% Figure 1: ceiling vs achieved, clean build (results/measurement_ceiling_clean/).
+% Platoon, route B' primary: ceiling 0.29645, achieved 0.17662, fraction 0.5958.
+% Level, intersection population: ceiling 0.74205, achieved 0.47537, fraction 0.6406.
+% Both ceilings are bit-identical to the old build -- they are derived from observed
+% splits and EB variance components, so excluding career pitcher-batters from TRAINING
+% cannot move them. Only the achieved values moved (0.1630 -> 0.1766, 0.4659 -> 0.4754).
 
 
 \section{Introduction}
@@ -44,7 +49,8 @@ Most of what a team wants to know about a hitter is a split: against left-hander
 % what it did and how yours differs.
 
 \section{Data}
-% TODO: Statcast 2015--2024, 7,293,321 pitches, 1,870 hitters. Cleaning rules. Frozen
+% TODO: Statcast 2015--2024, 7,245,923 pitches, 1,672 hitters (career pitcher-batters
+% excluded; 102,030 rows dropped). Source: data/processed/phase_d5_clean_final/manifest.json. Cleaning rules. Frozen
 % walk-forward split: train 2015--2023, validation 2024, test 2025 sealed and scored once.
 % Refit on 2015--2024 before the sealed score. Strata definition: prior side-specific PA
 % vs LHP, low $<113$, medium 113--452, high $\geq 452$. Cold start = 42.7\% of low.
@@ -61,7 +67,7 @@ Most of what a team wants to know about a hitter is a split: against left-hander
 % A figure of the head as a tree is worth more than a paragraph here.
 
 \subsection{Architecture and training}
-% TODO: 32-dim hitter embedding, trunk hidden 256, context hidden 128, low-rank bilinear
+% TODO: 64-dim hitter embedding (clean_dim64), trunk hidden 256, context hidden 128, low-rank bilinear
 % block. AdamW, lr $10^{-3}$, weight decay $10^{-2}$, batch 8192, log-likelihood loss.
 % Five seeds, conditionals averaged before composition. Say what was cut and why
 % (history encoder, pitcher-ID residual).
@@ -83,25 +89,44 @@ Most of what a team wants to know about a hitter is a split: against left-hander
 % for RMSE and weighted rank on 2025, with paired CIs.
 
 \subsection{Measurement ceiling}
-% TODO: Platoon ceiling 0.2965, achieved 0.1630, fraction 0.55. Level ceiling 0.7420,
-% achieved 0.4659, fraction 0.628. Interval coverage 0.868 vs nominal 0.95.
+% Clean build. Platoon ceiling 0.29645, achieved 0.17662, fraction 0.596 (route B' primary;
+% route A reported alongside at fraction 1.057, which is why B' is primary -- route A's
+% near-total cancellation puts the achieved value above its own ceiling).
+% Level ceiling 0.74205, achieved 0.47537, fraction 0.641 on the 545-hitter intersection;
+% 0.74073 / 0.47879 / 0.646 on the committed 617 pooled population.
+% Interval coverage 0.8695 measured vs 0.95 nominal. Source: measurement_ceiling_summary.json.
 
 \subsection{Where the model wins and loses}
 % TODO: Medium stratum beats both baselines on both gates (exploratory, one of 16 cells).
 % Pooled rank edge. Low stratum: no win, calibration slope 0.449 ($z=-4.27$).
 
 \subsection{Platoon direction}
-% TODO: Within-stand sign agreement 0.5651 [0.5232, 0.6062] vs permutation null 0.4987,
-% $p=0.0015$. Do NOT report raw sign agreement 0.6532 as skill (handedness rule alone gives 0.6477).
+% Clean build (results/v_chain_clean/paper_figures/platoon_sign_agreement.json, n=545):
+% within-stand sign agreement 0.5688 [0.5269, 0.6098] vs permutation null 0.4980,
+% $p=0.0010$, excess over null 0.0708. Old build was 0.5651 / 0.4987 / $p=0.0015$ --
+% the conclusion is unchanged, the margin is slightly wider.
+% Do NOT report raw sign agreement as skill (the handedness rule alone clears 0.64).
+% TODO: V.5 projection -- the high-stratum verdict FLIPPED false to true on the clean build
+% (partial r 0.0918 [-0.0023, 0.1853] -> 0.1331 [0.0145, 0.2436]) with n = 330 on BOTH
+% builds, so it moved because the model changed, not the population. Report both values
+% together and note the lower bound clears zero by only 0.0145. See decision log 2026-09-20.
 
 \subsection{What the embedding encodes}
-% TODO: Held-out LDA accuracies on attribute axes: ev\_p90 0.800, contact\_rate 0.765,
-% zone\_swing 0.782, chase 0.752, whiff 0.69/0.73 (chance 0.333). Whiff-vs-damage is a null.
-% No discrete clusters (silhouette 0.064); say so rather than showing archetypes.
+% TODO: Clean-build held-out LDA accuracies on attribute axes (results/v_chain_clean/
+% embedding_structure/axis_screen.json): ev\_p90 0.791, contact\_rate 0.754,
+% zone\_swing 0.746, chase 0.734 (chance 0.333). Every one is BELOW its old-build value
+% (0.800 / 0.765 / 0.782 / 0.752): the 198 rows the clean build drops are career
+% pitcher-batters, whose plate-discipline profiles are extreme and therefore the easiest
+% to separate, so removing them removes the easiest cases, not signal.
+% Whiff-vs-damage is a null. No discrete clusters (silhouette 0.064); say so rather than
+% showing archetypes.
 
 \section{Limitations and open items}
-% TODO: Low-stratum power (about 9,785 batters needed). Medium floor overstatement unchecked.
-% Pitcher contamination (about 0.65\% of training pitches) pending retrain. LDA axis inflation.
+% TODO: Low-stratum power on the clean build: 5,158 batters needed for 80\% power at
+% alpha 0.05 (z_needed = 2.80), down from the old build's 9,785, same 2025 frame.
+% Medium floor overstatement unchecked. LDA axis inflation.
+% Pitcher contamination is RESOLVED, not pending: this build excludes career
+% pitcher-batters from training (102,030 rows, 198 hitters).
 % No learning-curve evidence.
 
 \section{Conclusion}

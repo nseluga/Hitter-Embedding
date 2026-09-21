@@ -118,9 +118,16 @@ MIN_HITTERS_PER_BIN = 5
 # straight from axis_screen (a MARGINAL_COLUMNS hitters column, a
 # build_contrasts() entry, or the local whiff_rate_brk/fb split below) --
 # reused exactly, not re-derived.
+# Re-derived on the clean build 2026-09-20. The old build's pins were
+# (0.800, 0.765) and (0.782, 0.752); every accuracy moved DOWN, because the 198
+# rows the clean build drops are career pitcher-batters whose plate-discipline
+# profiles are extreme and therefore the easiest to separate. Only
+# zone_swing_rate exceeded CV_TOLERANCE (0.782 -> 0.7462); the other three
+# drifted within it. These are measurements of this build, not an independent
+# check on it -- the check they support is drift from here on.
 AXIS_PAIRINGS = [
-    ("power_contact", "ev_p90", "contact_rate", 0.800, 0.765),
-    ("discipline", "zone_swing_rate", "chase_rate", 0.782, 0.752),
+    ("power_contact", "ev_p90", "contact_rate", 0.791, 0.754),
+    ("discipline", "zone_swing_rate", "chase_rate", 0.746, 0.734),
     ("spin_vs_fastball", "whiff_rate_brk", "whiff_rate_fb", None, None),
     ("spin_vs_fastball_damage", "ev_p90_brk", "ev_p90_fb", None, None),
 ]

@@ -231,9 +231,9 @@ def main():
     parser.add_argument("--pitches", default=PITCHES_PATH)
     parser.add_argument("--eval-targets", default=EVAL_TARGETS_PATH)
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
-    parser.add_argument("--arm", default="embedding_sgd_sgd_lr1")
+    parser.add_argument("--arm", default="clean_clean_dim64")
     parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
-    parser.add_argument("--data-dir", default="data/processed/phase_d5")
+    parser.add_argument("--data-dir", default="data/processed/phase_d5_clean")
     parser.add_argument("--checkpoint-dir", default="results/checkpoints")
     parser.add_argument("--hitter-stats", default="results/model_visualization/hitter_stats.csv")
     parser.add_argument("--batters", type=int, nargs="+", default=None,

@@ -113,10 +113,39 @@ def test_batch_size_and_weight_decay_are_not_tunable():
 
 
 def test_selection_pins_the_build_rebuild_trained_on():
+    """
+    Every selection arm must train on the build its own incumbent trained on.
+
+    This used to compare against `provenance.CANONICAL_DATA_DIR`. That constant now names
+    `phase_d5_clean`, the pitcher-free build, because every downstream analysis reads the
+    clean arm. The selection stage must NOT follow it: its ledger already holds completed
+    (stage, config, seed) triples scored on `phase_d5`, and the two builds have different
+    quality-bin edges and different vocabularies, so a later entry would be compared against
+    an earlier one scored on different tensors. The pin is therefore literal, in
+    `sweep.O1_DATA_DIR`, and this test guards that it stays literal.
+    """
     from src.analysis import provenance
+    data_dirs = set()
     for _, extra in sweep.STAGES["selection"]:
         assert "--data-dir" in extra
-        assert extra[extra.index("--data-dir") + 1] == provenance.CANONICAL_DATA_DIR
+        data_dirs.add(extra[extra.index("--data-dir") + 1])
+    assert data_dirs == {sweep.O1_DATA_DIR}, "selection arms must share one build"
+    assert sweep.O1_DATA_DIR != provenance.CANONICAL_DATA_DIR, (
+        "O1_DATA_DIR has been repointed at the canonical build; the selection ledger's "
+        "completed rows were scored on the old one and are no longer comparable")
+
+    ledger = Path("results/model_v1/sweep_log.csv")
+    if not ledger.exists():
+        pytest.skip("the sweep ledger is not in this checkout")
+    with ledger.open() as handle:
+        scored = [row["data_dir"] for row in csv.DictReader(handle)
+                  if row["stage"] == "selection" and row["status"] == "ok"]
+    if not scored:
+        pytest.skip("no completed selection rows in the ledger")
+    assert set(scored) == {sweep.O1_DATA_DIR}, (
+        "completed selection rows were scored on "
+        f"{sorted(set(scored))}, which is not {sweep.O1_DATA_DIR}; a new arm queued now "
+        "would be ranked against losses from a different build")
 
 
 def test_selection_grid_contains_the_untuned_incumbent():

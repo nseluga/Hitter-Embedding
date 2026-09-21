@@ -2,8 +2,8 @@
 Cross-arm agreement: does adding the 2024 season move the learned hitter space?
 
 The paper's representation figures are drawn from the pre-registration arm
-(`embedding_sgd_sgd_lr1`, trained 2015-2023, validated on 2024). The headline
-claim-1 numbers come from the refit arm (`embedding_sgd_sgd_lr1_final`, trained
+(`clean_clean_dim64`, trained 2015-2023, validated on 2024). The headline
+claim-1 numbers come from the refit arm (`clean_dim64_final`, trained
 2015-2024, no validation season). A reader is owed evidence that the figures
 describe the same space the refit occupies.
 
@@ -45,10 +45,10 @@ from src.analysis.model_visualization_embeddings import (
 DEFAULT_OUT_DIR = "results/paper_figures"
 DEFAULT_CHECKPOINT_DIR = "results/checkpoints"
 
-REFERENCE_ARM = "embedding_sgd_sgd_lr1"
-REFERENCE_STATS = "results/model_visualization/hitter_stats.csv"
-COMPARISON_ARM = "embedding_sgd_sgd_lr1_final"
-COMPARISON_STATS = "results/model_visualization_final/hitter_stats.csv"
+REFERENCE_ARM = "clean_clean_dim64"
+REFERENCE_STATS = "results/v_chain_clean/hitter_stats.csv"
+COMPARISON_ARM = "clean_dim64_final"
+COMPARISON_STATS = "results/model_visualization_final_clean/hitter_stats.csv"
 
 SEEDS = (0, 1, 2, 3, 4)
 COLD_START_ROW = 0

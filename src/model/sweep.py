@@ -115,7 +115,9 @@ O1_WARMUP_STEPS = "719"
 # loss over those bins. Inheriting the default would put selection and its own rebuild incumbent in
 # different units while every column still lined up, which is the failure mode the
 # presplit->splithead and splithead->rebuild notes above exist to prevent. Pin it to the build rebuild shipped on.
-O1_DATA_DIR = provenance.CANONICAL_DATA_DIR
+# Literal, not `provenance.CANONICAL_DATA_DIR`: that constant now points at the clean
+# build, and this stage must stay on the build its own incumbent trained on.
+O1_DATA_DIR = "data/processed/phase_d5"
 O1_BASE = ["--split", "--data-dir", O1_DATA_DIR]
 STAGES["selection"] = [
     ("lr3e4", [*O1_BASE, "--lr", "3e-4"]),

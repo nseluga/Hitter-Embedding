@@ -40,19 +40,23 @@ from src.analysis.model_visualization_embeddings import bootstrap_ci
 from src.analysis.model_visualization_stats import ANCHORS
 from src.model import loader, query, query_tables as qt
 
-DEFAULT_DATA_DIR = "data/processed/phase_d5"
+DEFAULT_DATA_DIR = "data/processed/phase_d5_clean"
 PITCH_EVENTS = "data/processed/pitch_events_labeled.parquet"
 EVAL_TARGETS = "data/processed/eval_targets_pa.parquet"
 CHECKPOINT_DIR = "results/checkpoints"
-ARM = "embedding_sgd_sgd_lr1"
-PLATOON_FRAME = "results/model_evaluation/platoon_frame.csv"
-HITTER_STATS = "results/model_visualization/hitter_stats.csv"
-NAMES_PATH = "data/processed/hitter_names.csv"
+# These four must stay in lockstep with ARM. embedding_index is a row position in the
+# trained table and N_DIMS is that table's width, so pairing one build's frame, stats,
+# names or dimension count with another build's checkpoints either indexes past the end
+# of the table or silently reads half of each embedding vector.
+ARM = "clean_clean_dim64"
+PLATOON_FRAME = "results/v_chain_clean/model_evaluation/platoon_frame.csv"
+HITTER_STATS = "results/v_chain_clean/hitter_stats.csv"
+NAMES_PATH = "data/processed/hitter_names_clean.csv"
 EVAL_SEASON = 2024
 
 ANCHOR_IDS = list(ANCHORS)  # Trout, Soto, Pederson, Bohm, Schwarber
 N_OTHER = 35
-N_DIMS = 32
+N_DIMS = 64  # clean_dim64; the old arm was 32 and this constant did not follow ARM
 DEFAULT_N_PITCHERS = 128
 BASE_PASS = "base"
 LINEARITY_PASS = "dim0_2x"

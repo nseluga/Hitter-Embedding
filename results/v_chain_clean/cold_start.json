@@ -1,0 +1,14 @@
+{
+  "weighted": {
+    "row0_distance": 0.05121526771969721,
+    "hitter_dist_mean": 2.312578827031429,
+    "hitter_dist_std": 1.0389639450568013,
+    "z_score": -2.1765563377544352
+  },
+  "unweighted": {
+    "row0_distance": 0.03042278672247856,
+    "hitter_dist_mean": 2.30823759252669,
+    "hitter_dist_std": 1.0463695469621883,
+    "z_score": -2.1768741382211907
+  }
+}
