@@ -1,0 +1,22 @@
+{
+  "high": {
+    "n_hitters": 171,
+    "spearman": 0.685672114623083,
+    "rank_gap_sd": 113.7315401579271
+  },
+  "low": {
+    "n_hitters": 207,
+    "spearman": 0.8042882121938868,
+    "rank_gap_sd": 72.03782573981542
+  },
+  "medium": {
+    "n_hitters": 167,
+    "spearman": 0.7930318364991188,
+    "rank_gap_sd": 100.76723172867479
+  },
+  "pooled": {
+    "n_hitters": 545,
+    "spearman": 0.7678876686573972,
+    "rank_gap_sd": 95.85633781863356
+  }
+}

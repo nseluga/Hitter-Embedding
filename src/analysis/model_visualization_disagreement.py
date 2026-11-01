@@ -10,7 +10,7 @@ estimators disagree," never "who is right." No accuracy, RMSE, or correlation
 against an observed outcome is computed anywhere in this module, and `delta_obs`
 from `platoon_frame.csv` is never read. 2025 is never read: the EB baseline is
 recomputed at `eval_season=2024` only, and every frame this module builds itself
-is asserted to carry no season past 2024.
+is asserted to carry no season past `eval_season`, which `main` fixes at 2024.
 """
 
 import argparse
@@ -48,7 +48,7 @@ def eb_delta_frame(pa_df, eval_season=EVAL_SEASON):
     """
     predictions = baseline_ladder_bivariate_eb.predict(pa_df, eval_season)
     assert set(predictions["p_throws"]) <= {"L", "R"}, "unexpected pitcher hand in EB output"
-    assert (predictions["season"] <= 2024).all(), "EB predictions leaked a post-2024 season"
+    assert (predictions["season"] <= eval_season).all(), f"EB predictions leaked a post-{eval_season} season"
     wide = predictions.pivot(index="batter", columns="p_throws", values="pred_woba")
     # a hitter projected against only one hand has no split to compare
     wide = wide.dropna(subset=["L", "R"])
@@ -150,14 +150,17 @@ def fig_disagreement(disagreement, summary_by_stratum, path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
+    parser.add_argument("--platoon-frame", default="results/model_evaluation/platoon_frame.csv",
+                        help="2024 platoon_frame.csv of the build being visualised")
+    parser.add_argument("--names", default="data/processed/hitter_names.csv")
     args = parser.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
-    platoon_frame = pd.read_csv("results/model_evaluation/platoon_frame.csv")
+    platoon_frame = pd.read_csv(args.platoon_frame)
     pa_df = pd.read_parquet("data/processed/eval_targets_pa.parquet")
     eb_frame = eb_delta_frame(pa_df, eval_season=EVAL_SEASON)
 
-    names_path = "data/processed/hitter_names.csv"
+    names_path = args.names
     if os.path.exists(names_path):
         names = pd.read_csv(names_path)
     else:

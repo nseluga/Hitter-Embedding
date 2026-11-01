@@ -448,7 +448,7 @@ def load_platoon_lr_gaps(root):
     surfaces_summary.csv holds one row per anchor x p_throws x quantity; quantity "q"
     is the anchor's expected wOBA over that hand's context pool. The L and R pools are
     different sets of pitches, so the raw q(L) - q(R) carries a league-wide offset that
-    is identical for every anchor (+0.0035 here) and is a property of the pools, not of
+    is identical for every anchor (+0.0035 old build, +0.0012 clean arm) and is a property of the pools, not of
     any hitter. Subtracting the same gap computed on league_value removes it, which is
     why the adjusted gap and not the raw gap is the hitter's platoon signal.
     """
