@@ -1,0 +1,14 @@
+% =====================================================================================
+\section{Future directions}
+\label{sec:future}
+
+% Source: docs/decision-log.md (2026 medium-band registration; power ~60% of batters needed);
+% measurement_ceiling_summary.json (coverage 0.8695).
+The model turns per-pitch hitter outcomes into a projected wOBA against any chosen set of pitchers, with no retraining for a new split. On 2025 handedness splits it matched gradient boosting and empirical Bayes on error and ordered hitters better than both. The most direct application is a matchup card that ranks a team's options against a given pitcher, with a band around each projection. The same query supports roster questions. A candidate hitter's projections against the pitchers a team expects to face can be set beside those of the hitters already on the roster, a single-split version of the counterfactual roster comparison that \citet{alcorn2018} proposed for player embeddings.
+
+Several extensions would make these uses more reliable. The model's intervals cover the observed value less often than their nominal rate and need recalibration before a card can show a band. The advantage at moderate exposure was found in exploratory analysis and needs a confirmatory test, and a fixed rule for 2026 is already registered. One season holds only about 60\% of the batters needed to detect that margin with 80\% power, so the test may need to pool 2026 with later seasons. The low-exposure margin, positive but far from significant, would need many seasons to confirm. The measurement ceiling should be recomputed on a season not used for model selection. The velocity, location, and single-pitcher queries need held-out targets and baselines built for them before they can inform decisions. Hitters absent from training, who now receive one of four generic projections, need a better starting point, either a prior built from what is known about them or, as \citet{alcorn2018} suggested, minor league data mapped into the same space. Finally, the count is the only game state the model sees, and the score, inning, and runners could be added.
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}
