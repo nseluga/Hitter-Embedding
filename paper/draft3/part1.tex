@@ -8,46 +8,13 @@
 {\fontsize{14}{17}\selectfont \papertrack\par \paperid\par}
 \end{center}
 
-% Nate's abstract (paper/abstract.tex), verbatim in text, order, headings, Table 1, Figure 1 and
-% code link. Only change: 5 heads -> 6 (approved 2026-10-31).
-\section*{Abstract}
-\subsection*{Introduction}
-In baseball, understanding how to use great hitters is often a simple task: play as many of them as you can and play them often. Teams try to gain an edge with the remaining hitters, but less playing time means thinner data in an area that takes hundreds of plate appearances to stabilize. This paper asks whether a model trained on pitches can project how a hitter will do against a type of matchup, like handedness or a specific pitcher, with less data than standard projections need.
+% Nate's abstract (paper/abstract.tex): text verbatim, one paragraph in the Alcorn (2018) format.
+% Changes: 5 heads -> 6; section headings, Table/Figure pointers and code link dropped (the floats
+% moved to 3.2 and 3.3, the link is in 2.2).
+\begin{center}{\fontsize{16}{19}\selectfont\bfseries Abstract}\end{center}
+\vspace{-11pt}
+In baseball, understanding how to use great hitters is often a simple task: play as many of them as you can and play them often. Teams try to gain an edge with the remaining hitters, but less playing time means thinner data in an area that takes hundreds of plate appearances to stabilize. This paper asks whether a model trained on pitches can project how a hitter will do against a type of matchup, like handedness or a specific pitcher, with less data than standard projections need. We train a neural network inspired by (batter$|$pitcher)2vec that learns player embeddings from hitter-controlled pitch outcomes, which decreases the impact of outcome luck. A plate appearance is broken into 6 heads: swing decision, contact, and quality decomposed as exit velocity, launch angle, and spray direction, each conditioned on the pitcher and the game state. The model trains on 6.5 million Statcast pitches from 2015 through 2024 covering 1,672 hitters, each represented as a 64-dimensional embedding. To query it, we reweight which pitchers the projection is drawn over and compose the outputs through the count-state Markov chain into a projected wOBA, so a new split needs a new weight vector, not a retrained model. We test side-specific wOBA against left- and right-handed pitchers on sealed 2025 data against gradient-boosted and empirical Bayes baselines, using RMSE and weighted rank correlation, grouped by prior plate appearances (PA). The model did not pass our pre-registered test. Pooled RMSE was tied (0.0452 against 0.0453 for gradient boosting and 0.0460 for empirical Bayes) and pooled rank correlation was higher (0.47 against 0.42 and 0.40). It beat both baselines on both measures only for hitters with 113 to 451 prior plate appearances, an exploratory result. On 2024, the season used to select the model, it recovers 60\% of the rank-order signal and 64\% of the level signal that one season of data can measure. Without being given definitions of power or contact, the embedding still separates hitters on both, with held-out accuracy of 0.79 and 0.75 against 0.33 by chance, and observed wOBA rises toward high power and high contact. The model is better at ordering hitters within a split than at predicting how many points of wOBA the split is worth. For a team, that makes it most useful for ranking platoon options among hitters with a moderate track record, where the decision is actually in question, not as a replacement for a projection system on raw accuracy.
 
-\subsection*{Methods}
-We train a neural network inspired by (batter$|$pitcher)2vec that learns player embeddings from hitter-controlled pitch outcomes, which decreases the impact of outcome luck. A plate appearance is broken into 6 heads: swing decision, contact, and quality decomposed as exit velocity, launch angle, and spray direction, each conditioned on the pitcher and the game state. The model trains on 6.5 million Statcast pitches from 2015 through 2024 covering 1,672 hitters, each represented as a 64-dimensional embedding. To query it, we reweight which pitchers the projection is drawn over and compose the outputs through the count-state Markov chain into a projected wOBA, so a new split needs a new weight vector, not a retrained model. We test side-specific wOBA against left- and right-handed pitchers on sealed 2025 data against gradient-boosted and empirical Bayes baselines, using RMSE and weighted rank correlation, grouped by prior plate appearances (PA, Table~\ref{tab:test}).
-
-\subsection*{Results}
-The model did not pass our pre-registered test. Pooled RMSE was tied (0.0452 against 0.0453 for gradient boosting and 0.0460 for empirical Bayes) and pooled rank correlation was higher (0.47 against 0.42 and 0.40). It beat both baselines on both measures only for hitters with 113 to 451 prior plate appearances, an exploratory result. On 2024, the season used to select the model, it recovers 60\% of the rank-order signal and 64\% of the level signal that one season of data can measure. Without being given definitions of power or contact, the embedding still separates hitters on both, with held-out accuracy of 0.79 and 0.75 against 0.33 by chance, and observed wOBA rises toward high power and high contact (Figure~\ref{fig:powercontact}).
-
-\begin{table}[!h]
-\centering\small
-\begin{tabular}{lrrrrrrr}
-\toprule
- & & \multicolumn{3}{c}{RMSE (lower better)} & \multicolumn{3}{c}{Rank corr. (higher better)} \\
-\cmidrule(lr){3-5}\cmidrule(lr){6-8}
-Prior PA & Splits & Model & GBM & EB & Model & GBM & EB \\
-\midrule
-Low & 384 & 0.0605 & 0.0609 & 0.0620 & 0.16 & 0.12 & 0.13 \\
-Medium & 280 & 0.0455 & 0.0479 & 0.0492 & 0.42 & 0.28 & 0.22 \\
-High & 493 & 0.0395 & 0.0385 & 0.0387 & 0.50 & 0.49 & 0.48 \\
-All & 1157 & 0.0452 & 0.0453 & 0.0460 & 0.47 & 0.42 & 0.40 \\\bottomrule
-\end{tabular}
-\caption{Sealed 2025 side-specific wOBA. GBM: gradient-boosted; EB: empirical Bayes. Splits are hitter by pitcher hand. Medium is 113 to 451 prior PA.}
-\label{tab:test}
-\end{table}
-
-\begin{figure}[!h]
-\centering
-\includegraphics[width=\linewidth]{fig1_power_contact.png}
-\caption{Hitters placed by the embedding on fitted power and contact directions. Left: observed power tercile. Right: mean observed wOBA per cell.}
-\label{fig:powercontact}
-\end{figure}
-
-\subsection*{Conclusion}
-The model is better at ordering hitters within a split than at predicting how many points of wOBA the split is worth. For a team, that makes it most useful for ranking platoon options among hitters with a moderate track record, where the decision is actually in question, not as a replacement for a projection system on raw accuracy. Code and processed data: \url{https://github.com/nseluga/hitter-embedding}
-
-\clearpage
 % =====================================================================================
 \section{Introduction}
 \label{sec:intro}
