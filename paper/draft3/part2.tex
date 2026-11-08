@@ -4,7 +4,7 @@
 \label{sec:test}
 
 % Source: model_v1_claim1_scores_min_pa_sweep_clean_dim64_final.csv; paired CSV; verdict JSON;
-% results/paper_draft3/seen_only_rescore.csv (population "all" reproduces Table 1).
+% results/paper_draft3/seen_only_rescore.csv (population "all" reproduces Table 1 and the min-PA sweep at floors 10 and 50).
 The 2025 results by prior exposure can be seen in Table~\ref{tab:test} and Figure~\ref{fig:strata}. The low stratum was specified in advance as the test. There the model had lower error and higher rank correlation than both baselines, but every interval spans zero, so it did not pass. Further analysis was exploratory.
 
 \begin{table}[!ht]
@@ -27,23 +27,24 @@ All & 1157 & 0.0452 & 0.0453 & 0.0460 & 0.47 & 0.42 & 0.40 \\\bottomrule
 
 Across all 1,157 units the model's RMSE is 0.0452 against 0.0453 for the boosted baseline and 0.0460 for empirical Bayes, and both difference intervals include zero. Its weighted rank correlation is 0.47 against 0.42 and 0.40, and those intervals, 0.011 to 0.089 and 0.015 to 0.125, exclude zero. In the medium stratum the model beats both baselines on both measures, with all four intervals excluding zero. Its rank correlation is 0.42 against 0.28 for the boosted baseline and 0.22 for empirical Bayes, and its RMSE is about 2 points of wOBA below the boosted baseline and 4 below empirical Bayes. In the high stratum the three methods are even.
 
-Of the low stratum's 384 units, 164 (43\%) belong to hitters absent from the training seasons. Restricted to the other 220 units (153 batters), the model's RMSE is 0.0588 against 0.0617 for the boosted baseline and 0.0630 for empirical Bayes, with differences of $-0.0029$ (interval $-0.0053$ to $-0.0005$) and $-0.0043$ ($-0.0070$ to $-0.0016$). Its rank correlation is 0.23 against 0.17 and 0.11. That interval excludes zero against empirical Bayes (0.002 to 0.258) but not against the boosted baseline ($-0.070$ to 0.188).
+Of the low stratum's 384 units, 164 (43\%) belong to hitters absent from the training seasons. Restricted to the other 220 units (153 batters), the model's RMSE is 0.0588 against 0.0617 for the boosted baseline and 0.0630 for empirical Bayes, with differences of $-0.0029$ (interval $-0.0053$ to $-0.0005$) and $-0.0043$ ($-0.0070$ to $-0.0016$). Its rank correlation is 0.23 against 0.17 and 0.11. That interval excludes zero against empirical Bayes (0.002 to 0.258) but not against the boosted baseline ($-0.070$ to 0.188). At a 50 PA floor the RMSE difference against the boosted baseline is $-0.0041$ ($-0.0072$ to $-0.0012$).
 
 \begin{figure}[!ht]
 \centering
 \includegraphics[width=0.72\linewidth]{fig_claim1_2025_strata.png}
-\caption{\toreview The model's 2025 margin over the boosted baseline on error and rank correlation by stratum, at evaluation floors of 10 and 50 PA. Raising the floor to 25 or 50 PA changes no stratum's outcome.}
+\caption{\toreview The model's 2025 margin over the boosted baseline on rank correlation and error by stratum, at evaluation floors of 10 and 50 PA, with 95\% intervals. A filled marker means the interval excludes zero in the model's favour. ``Low, seen only'' drops hitters absent from the training seasons. Raising the floor from 10 to 50 PA changes no row's outcome.}
 \label{fig:strata}
 \end{figure}
 
 % Source: results/v_chain_clean/paper_figures/fig_calibration_2025 source JSON;
-% measurement_ceiling_summary.json (coverage 0.8695, 1,149 units).
-A PA-weighted regression of each unit's observed 2025 wOBA on its projection gives a slope of 0.98 in the medium stratum, 0.93 in the high, and 0.59 in the low (Figure~\ref{fig:calibration}). Across all strata the slope is 0.81, below one by more than three standard errors. High-stratum projections averaged about 9 points of wOBA above the observed values and low-stratum projections about 7 points below. On 2024, the nominal 95\% intervals covered the observed value for 87\% of 1,149 units. Nearly all of their width comes from the sampling noise of the plate appearances, and the seed spread alone has a mean half-width of about 6 points.
+% measurement_ceiling_summary.json (coverage 0.8695, 1,149 units);
+% results/paper_draft3/seen_only_calibration.csv (seen-only low slope 0.8428, se 0.1769, pred 0.2939 vs obs 0.2896).
+A PA-weighted regression of each unit's observed 2025 wOBA on its projection gives a slope of 0.98 in the medium stratum, 0.93 in the high, and 0.59 in the low (Figure~\ref{fig:calibration}). Across all strata the slope is 0.81, below one by more than three standard errors. High-stratum projections averaged about 9 points of wOBA above the observed values and low-stratum projections about 7 points below. Restricted to hitters seen in training, the low-stratum slope is 0.84 (standard error 0.18) and its projections average about 4 points above the observed values, so most of the low stratum's miscalibration comes from hitters the model had never seen. On 2024, the nominal 95\% intervals covered the observed value for 87\% of 1,149 units. Nearly all of their width comes from the sampling noise of the plate appearances, and the seed spread alone has a mean half-width of about 6 points.
 
 \begin{figure}[!ht]
 \centering
 \includegraphics[width=0.95\linewidth]{fig_calibration_2025.png}
-\caption{\toreview Calibration of 2025 side-specific projections by stratum, as the PA-weighted regression of observed on projected wOBA. The dashed diagonal is perfect calibration.}
+\caption{\toreview Calibration of 2025 side-specific projections by stratum, as the PA-weighted regression of observed on projected wOBA, with the low stratum also shown for hitters seen in training only. The dashed diagonal is perfect calibration.}
 \label{fig:calibration}
 \end{figure}
 
