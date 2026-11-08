@@ -1,0 +1,114 @@
+
+\begin{document}
+\raggedright
+\thispagestyle{fancy}
+\begin{center}
+{\fontsize{18}{22}\selectfont\bfseries \papertitle\par}
+\vspace{11pt}
+{\fontsize{14}{17}\selectfont \papertrack\par \paperid\par}
+\end{center}
+
+% Nate's abstract (paper/abstract.tex): text verbatim, one paragraph in the Alcorn (2018) format.
+% Changes: 5 heads -> 6; section headings, Table/Figure pointers and code link dropped (the floats
+% moved to 3.2 and 3.3, the link is in 2.2).
+\begin{center}{\fontsize{16}{19}\selectfont\bfseries Abstract}\end{center}
+\vspace{-11pt}
+In baseball, understanding how to use great hitters is often a simple task: play as many of them as you can and play them often. Teams try to gain an edge with the remaining hitters, but less playing time means thinner data in an area that takes hundreds of plate appearances to stabilize. This paper asks whether a model trained on pitches can project how a hitter will do against a type of matchup, like handedness or a specific pitcher, with less data than standard projections need. We train a neural network inspired by (batter$|$pitcher)2vec that learns player embeddings from hitter-controlled pitch outcomes, which decreases the impact of outcome luck. A plate appearance is broken into 6 heads: swing decision, contact, and quality decomposed as exit velocity, launch angle, and spray direction, each conditioned on the pitcher and the game state. The model trains on 6.5 million Statcast pitches from 2015 through 2024 covering 1,672 hitters, each represented as a 64-dimensional embedding. To query it, we reweight which pitchers the projection is drawn over and compose the outputs through the count-state Markov chain into a projected wOBA, so a new split needs a new weight vector, not a retrained model. We test side-specific wOBA against left- and right-handed pitchers on sealed 2025 data against gradient-boosted and empirical Bayes baselines, using RMSE and weighted rank correlation, grouped by prior plate appearances (PA). The model did not pass our pre-registered test. Pooled RMSE was tied (0.0452 against 0.0453 for gradient boosting and 0.0460 for empirical Bayes) and pooled rank correlation was higher (0.47 against 0.42 and 0.40). It beat both baselines on both measures only for hitters with 113 to 451 prior plate appearances, an exploratory result. On 2024, the season used to select the model, it recovers 60\% of the rank-order signal and 64\% of the level signal that one season of data can measure. Without being given definitions of power or contact, the embedding still separates hitters on both, with held-out accuracy of 0.79 and 0.75 against 0.33 by chance, and observed wOBA rises toward high power and high contact. The model is better at ordering hitters within a split than at predicting how many points of wOBA the split is worth. For a team, that makes it most useful for ranking platoon options among hitters with a moderate track record, where the decision is actually in question, not as a replacement for a projection system on raw accuracy.
+
+
+% =====================================================================================
+\section{Introduction}
+\label{sec:intro}
+
+% Source: src/analysis/claim1_eval.py STABILIZATION_N_STAR = 226 (variance-components estimate,
+% training seasons, hitters only).
+Most lineup decisions are simple, because a team's best hitters play every day against every kind of pitcher. The decisions that leave room for an edge involve the bench and platoon hitters, and they usually depend on a split, which is how a hitter performs against one kind of pitcher. Examples include choosing which of two bench hitters starts against a left-handed pitcher and which pinch hitter to send up against the reliever warming up. Bench and platoon hitters are also the ones with the least data. In the training seasons, it takes about 226 plate appearances (PA) against left-handed pitchers before half of the variation in hitters' wOBA against them reflects skill rather than noise (Section~\ref{sec:eval}), and a part-time hitter can take several seasons to reach that many.
+
+Much of that noise enters at the end of the plate appearance. Fielders, parks, and where a ball in play happens to land all change a plate appearance's wOBA value without reflecting anything the hitter did. The hitter's own contribution comes earlier and more often. On each pitch the hitter decides whether to swing, a swing either makes contact or misses, and Statcast records the exit velocity, launch angle, and direction of nearly every ball in play. A plate appearance lasts about four pitches and yields one wOBA value, but it yields several of these pitch-level outcomes, and they carry less of the luck that follows contact.
+
+% Source: tango-2009 platoon constants note (The Book p.157).
+The usual way to project a split is to regress the observed split toward the league split for the hitter's batting side. In \citet[p.~157]{tango2007}, a right-handed hitter needs about 2,200 PA against left-handed pitchers before the observed split receives half the weight, and a left-handed hitter needs about 1,000. As a result, the estimate for most hitters stays close to the league-average split, and two part-time hitters from the same side receive nearly the same projection. This paper compares against an empirical Bayes version of that shrinkage \citep{efron1972} and against gradient-boosted trees \citep{chen2016} that add season summaries of each hitter's pitches.
+
+\citet{alcorn2018} showed that a neural network can learn useful representations of players from their matchups alone. The (batter$|$pitcher)2vec model gave each batter and pitcher a nine-dimension embedding, trained to predict the outcome of each at-bat from the identities of the two players in Retrosheet data from 2013 through 2015. The embeddings grouped similar hitters without being told what made them similar, and they predicted outcome distributions for matchups absent from training better than simpler baselines. Alcorn suggested that predicting PITCHf/x measurements instead of discrete outcomes could convey more about players, and the model in this paper follows that suggestion with Statcast. Each hitter keeps a learned embedding, but the network predicts the hitter's response to each pitch from the pitch's measured characteristics, rather than the at-bat result from the pitcher's identity.
+
+This paper introduces a pitch-level hitter embedding model and a query that turns it into a projected wOBA against any weighted set of pitchers, so a new split needs new pitcher weights rather than a retrained model. On 2025 handedness splits, the model did not pass the test we specified in advance for hitters with little history against a hand. It had higher pooled rank correlation than both baselines, beat both on error and rank correlation for hitters with a moderate track record, and learned recognizable traits such as power and contact from pitch outcomes alone.
+
+% =====================================================================================
+\section{Methods}
+\label{sec:methods}
+
+\subsection{Data}
+\label{sec:data}
+
+% Source: data/processed/phase_d5_clean_final/manifest.json; src/config/split_config*.json;
+% decision log 2026-08-01, 2026-09-20.
+Pitch-level Statcast data from the 2015 through 2025 regular seasons were used. Each pitch carries its velocity, movement, release point, spin, plate location, pitch type, the count, and the handedness of both players, and each ball in play carries its exit velocity, launch angle, and a spray angle computed from where it was fielded. Bunts, pitchouts, automatic calls, pitches by position players or to pitchers batting, and pitches missing a core measurement were removed. The final data set consisted of 7,245,923 pitches. No minimum exposure was imposed, so every hitter in the training seasons has an embedding.
+
+Model configurations were compared by training on 2015 through 2023 and scoring on 2024, the selection season. The chosen configuration was then retrained on 2015 through 2024, 6,540,616 pitches covering 1,672 hitters and 2,182 pitchers, and evaluated on 2025. Feature scaling was fit on 2015 through 2023 only, and the baselines saw only seasons before the one being scored.
+
+\subsection{Model}
+\label{sec:model}
+
+% Source: paper/draft3/fig_arch.tex
+\begin{figure}[!ht]
+\centering
+\input{fig_arch}
+\caption{\toreview (a) The hitter's embedding and the pitch context feed a shared trunk, and six heads predict the hitter-controlled outcomes of the pitch. (b) Outcomes against one pitcher are composed through the count into $W_{hj}$, and a weighted average over the chosen pitchers gives the projection.}
+\label{fig:arch}
+\end{figure}
+
+% Source: src/model/v1.py heads; data manifest n_quality_bins 24; decision log 2026-08-08.
+The model architecture can be seen in Figure~\ref{fig:arch}a. Each hitter has a 64-dimension embedding, a learned vector that is the only input identifying the hitter. The same embedding covers all training seasons, and a projection describes the hitter across those seasons together. Each pitch is described by a 46-dimension context vector built from its physical measurements, location, type, the handedness of both players, and the count. The pitcher enters only through the pitches thrown, not through an identifier, which lets the model describe any pitcher whose pitches it has seen. Because the count is the only game state included, predictions reflect the hitter and the pitch rather than the game situation.
+
+The context passes through two layers of 128 units and is then joined with the hitter's embedding in a shared trunk of two layers of 256 units. Six heads read the trunk in the order a plate appearance unfolds. The first three give the probability of a swing, the probability of contact given a swing, and whether contact is a foul, a foul tip, or a ball in play (a two-strike foul tip is a strikeout and a foul is not). The other three give the exit velocity, launch angle, and spray direction of a ball in play, each in 24 bins. Launch angle is predicted given exit velocity, and spray given both, so the three are never treated as independent.
+
+Taken pitches depend mostly on the pitcher and the umpire. Their outcomes therefore come from a table fit on the training seasons, which gives the probability of a ball, a called strike, or a hit batter for each plate location and pairing of batter and pitcher hand.
+
+% Source: src/model/v1.py loss; src/model/train.py masks.
+The network is trained to maximize the summed log-likelihood of each hitter's outcomes,
+\begin{equation}
+\begin{split}
+\mathcal{L} = \sum_{i} \Big[ & \log p(a_i) + m^{c}_i \log p(c_i) + m^{t}_i \log p(t_i \mid c_i) + m^{e}_i \log p(e_i) \\
+& + m^{l}_i \log p(l_i \mid e_i) + m^{s}_i \log p(s_i \mid e_i, l_i) \Big],
+\end{split}
+\label{eq:loss}
+\end{equation}
+where for pitch $i$, $a_i$ is the swing decision, $c_i$ the contact outcome, $t_i$ the contact type (foul, foul tip, or ball in play), and $e_i$, $l_i$, and $s_i$ the exit velocity, launch angle, and spray bins. Every probability is conditioned on the hitter $h$ and the pitch context $x_i$. Each mask $m_i$ is one when the outcome exists and was measured, so contact is scored only on swings, contact type only on contact, and the three quality terms only on measured balls in play.
+
+% Source: results/model_v1/sweep_log.csv (dim64 1.02327 vs dim32 1.02378; lr1e3 1.02584/1.02585 vs
+% lr1e3_warm2k 1.02564/1.02596); decision log 2026-09-02/03 (SGD table, lr 1.0), 2026-09-04
+% (cold-start prior -0.00077 [-0.00119,-0.00020], rank 0); RPS screen (1.19715 vs 1.07582);
+% checkpoint clean_dim64_final_s0.pt (266,317 parameters).
+The network has 266,317 parameters. Weights outside the embedding table are trained with AdamW \citep{loshchilov2019} at a learning rate of $10^{-3}$, batches of 8,192 pitches, weight decay of $10^{-2}$, and dropout of 0.1 in the trunk. The embedding table is trained with plain stochastic gradient descent at a learning rate of 1.0, because an adaptive optimizer would give a rarely seen hitter steps as large as a regular's, while plain gradient descent moves each embedding in proportion to the hitter's data. The 64-dimension embedding was chosen over 32 because it gave the lower 2024 log loss.\footnote{Three other choices were checked on 2024. Training the quality heads on a ranked probability score instead of log likelihood fit clearly worse. A 2,000-step learning-rate warmup changed log loss by less than 0.0001. Giving hitters absent from training the average embedding of low-exposure hitters from their side, rather than an untrained vector, lowered their RMSE by 0.0008 and left rank correlation unchanged, and it is used for all results.} Five copies are trained from different seeds as a deep ensemble \citep{lakshminarayanan2017}, and each head's predicted distribution is averaged across the five. The model was implemented in PyTorch, and each copy trains on a CPU in about 25 minutes. The code is available at \url{https://github.com/nseluga/hitter-embedding}.
+
+\subsection{Querying the model}
+\label{sec:query}
+
+% Source: src/model/query.py docstring; src/model/query_tables.py; decision log 2026-08-08.
+The network describes a single pitch, while a lineup decision concerns many plate appearances against many pitchers. A query takes a hitter, a set of pitchers, and a weight for each pitcher, and returns the hitter's projected wOBA per plate appearance against those pitchers. It connects the single pitch to the decision in three steps (Figure~\ref{fig:arch}b).
+
+The first step fixes one pitcher. For pitcher $j$ and each count, the network is run for hitter $h$ on a sample of real pitches that $j$ threw in that count to hitters from $h$'s side, and the outputs are averaged. This gives, for each count, the probability that the pitch ends as a ball, a strike, a foul, a hit batter, or a ball in play. A ball in play is valued at the league's average wOBA for its exit velocity, launch angle, and spray bins, weighted by the hitter's predicted probability of each combination, so its value sets aside the fielder and park effects described in Section~\ref{sec:intro}. Unmeasured balls in play, about 7\%, take the league's average value.
+
+The second step plays out the plate appearance. Each pitch moves the count to a new state or ends the plate appearance, so the expected wOBA from any count is a sum over the possible pitch outcomes. Each term is the probability of that outcome times the expected wOBA of the count or result it leads to. The count moves as a Markov chain over 12 states from 0-0 to 3-2, and the expected wOBA from count $(b,s)$ satisfies
+\begin{equation}
+W(b,s) = p_B\, W(b+1,s) + p_S\, W(b,s+1) + p_F\, W(b,\min(s+1,2)) + p_H\, w_{\text{HBP}} + v(b,s),
+\label{eq:chain}
+\end{equation}
+where $p_B$, $p_S$, $p_F$, and $p_H$ are the probabilities of a ball, a strike, a foul, and a hit batter in that count, $v(b,s)$ is the expected value from a ball in play, a fourth ball is worth a walk's wOBA weight, and a third strike is worth zero. A two-strike foul leaves the count unchanged, and that loop is solved directly. Working back from the terminal states gives $W_{hj} = W(0,0)$, the projected wOBA of hitter $h$ in one plate appearance against pitcher $j$, with no simulation.
+
+The third step chooses the pitchers. The projection is the hitter's expected wOBA if every plate appearance came against the chosen set of pitchers $S$, each in proportion to the batters that pitcher faced in the training seasons, $\text{BF}_j$,
+\begin{equation}
+\widehat{\text{wOBA}}_S(h) = \sum_{j} w^S_j \, W_{hj}, \qquad w^S_j \propto \text{BF}_j \, \mathbf{1}[j \in S].
+\label{eq:query}
+\end{equation}
+A platoon split takes $S$ as all left-handed or all right-handed pitchers. Any set of pitchers the model has seen can be queried without retraining, and the weights need not be batters faced (Section~\ref{sec:otherqueries}). Each projection also carries a nominal 95\% interval built from the spread of the five seeds and the sampling noise of the plate appearances being projected.
+
+\subsection{Evaluation}
+\label{sec:eval}
+
+% Source: src/analysis/claim1_eval.py:95-108 (n* 226, CI [198, 265], cuts (113, 452), floor 10 PA);
+% baseline_ladder_bivariate_eb.py (3 trailing seasons); paired CSV (2,000 batter-clustered draws).
+The handedness query is scored on units, where a unit is one hitter's wOBA against one pitcher hand in 2025 with at least 10 PA. Results are reported for all units and by prior exposure, the hitter's PA against that hand in all earlier seasons since 2015. Reliability of wOBA against left-handed pitchers after $n$ PA is $n/(n+n^*)$, which reaches one half at $n^* = 226$ PA in the training seasons (95\% interval 198 to 265). Units fall into three strata, low (fewer than 113 prior PA), medium (113 to 451), and high (452 or more), with cuts at half and twice $n^*$ by convention.
+
+The empirical Bayes baseline takes a hitter's wOBA against each hand over the previous three seasons and shrinks the two sides jointly toward the league average for the hitter's batting side, with the correlation between sides estimated from the data. The boosted baseline is fit on one row per hitter, season, and pitcher hand, using the same trailing outcomes plus the hitter's pitch summaries by pitcher hand and pitch group. Each method is scored by root mean squared error (RMSE) and by Spearman rank correlation, both weighted by each unit's 2025 PA. Differences between the model and a baseline carry 95\% intervals from 2,000 bootstrap draws that resample batters.
+

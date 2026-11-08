@@ -99,10 +99,15 @@ def test_anchor_observed_split_is_converted_to_fixed_hands():
 
 
 def test_anchor_direction_count_is_not_the_retracted_five_of_five():
-    """Regression: the 5/5 count was the sign-convention defect, not a result."""
+    """
+    Regression: the 5/5 count was the sign-convention defect, not a result. Old 32-dim
+    build: 2/5 converted. Clean arm (re-derived by hand 2026-10-31): 4/5 converted, Soto
+    the miss; the unconverted defect gives 3/5 on this build, so the pin still catches it.
+    Schwarber's model gap is about -0.0002, so the 4th agreement is effectively a tie.
+    """
     import numpy as np
     gaps = pf.load_platoon_lr_gaps(pf.repo_root())
     if gaps is None:
         pytest.skip("per-anchor L/R expected-wOBA columns absent")
     correct = int((np.sign(gaps["model_gap"]) == np.sign(gaps["obs_platoon_lr"])).sum())
-    assert correct == 2, f"expected 2/5 under the reconciled convention, got {correct}/5"
+    assert correct == 4, f"expected 4/5 on the clean arm under the reconciled convention, got {correct}/5"

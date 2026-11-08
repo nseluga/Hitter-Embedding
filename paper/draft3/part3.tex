@@ -1,0 +1,131 @@
+% =====================================================================================
+\section{Discussion}
+\label{sec:discussion}\label{sec:ordering}
+
+% Source: Section 3 numbers; seen_only_rescore.csv.
+The model is better at saying which of two hitters will do better against a hand than at saying by how many points. Empirical Bayes sits just as close to the error floor for the split (Section~\ref{sec:ceiling}), so one season of outcomes cannot show much skill at sizing a split for any method, and the model's nominal 95\% intervals covered only 87\% of outcomes. Many lineup decisions depend only on order. Choosing which of two bench hitters starts against a left-handed pitcher is a ranking question, and a few points of error in both projections do not change the call if the two are in the right order.
+
+The model's advantage varies with exposure. With heavy exposure, several seasons of outcomes already measure a hitter well, which leaves little for any method to add. With moderate exposure, a hitter has seen enough pitches from a hand for the embedding to describe how the hitter handles them, while the outcomes of those plate appearances are still too few to stabilize, and this is where the clearest gain appears. With little exposure the picture depends on whether the model has seen the hitter at all. Hitters absent from training all share one projection per batting side and pitcher hand, and once they are set aside the model's error is clearly lower than both baselines'. Most of the low-stratum tie therefore comes from hitters the model never saw, not from hitters it saw briefly, although this split of the stratum was made after the results were known. Each projection is also made against the training seasons' pitchers of a hand, weighted by batters faced, not against the pitchers the hitter actually met in 2025, so part of every error reflects the schedule rather than the hitter. For a team, the model is most useful for ranking platoon options among hitters with some track record.
+
+\subsection{What the model learned}
+\label{sec:embedding}
+
+% Source: results/v_chain_clean/embedding_structure/embedding_structure.json; embedding_alt_views.json
+% (LDA 5-fold, n 1,493, power 0.791, contact 0.754, zone swing 0.746, chase 0.734);
+% seed_stability_corrected_null.json (0.837 vs 0.123). Selection model (trained through 2023).
+The loss scores single pitches and never sees a hitter-level statistic, so any such summary in the embedding was assembled by the model. The analyses here use the selection model, trained through 2023, with each hitter's embedding averaged over the five seeds and scaled to unit length.\footnote{The five seeds give similar vectors for the same hitter, with a median cosine similarity of 0.83 after rotating each onto the first, against 0.12 when hitters are shuffled before the rotation is fit. Embeddings are averaged after this alignment. They are scaled to unit length because an embedding's length grows with the hitter's exposure (correlation 0.93 with log prior PA), and after scaling the main direction of variation is nearly unrelated to playing time (0.09).} A linear classifier on the embedding recovers a hitter's power third (90th-percentile exit velocity) for 79\% of 1,493 hitters and contact third (contact rate on swings) for 75\%, against 33\% by chance, and in-zone swing rate (75\%) and chase rate (73\%) nearly as well. Placed on the fitted power and contact directions, hitters' observed wOBA rises toward high power and high contact (Figure~\ref{fig:powercontact}).
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.95\linewidth]{fig1_power_contact.png}
+\caption{Hitters placed by the embedding on fitted power and contact directions, colored by observed power tercile (left) and by mean observed wOBA per cell (right).}
+\label{fig:powercontact}
+\end{figure}
+
+% Source: make_figs3.py fig_miss_damage (asserts match to embedding_alt_views.json).
+The embedding separates some skills by pitch type and not others (Figure~\ref{fig:missdamage}). Directions fit to whiff rate on breaking balls and on fastballs correlate at 0.64 across hitters, and many hitters rank much worse against one pitch family than the other, as their observed whiff rates do (0.53). Directions fit to power on the two families correlate at 0.94, against 0.83 observed, so the model treats power as close to a single skill and whiffing as partly specific to the pitch, which is how the data behave.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.8\linewidth]{fig_miss_damage.png}
+\caption{\toreview Hitters placed on embedding directions fit to breaking-ball and fastball whiff rate (left, 1,335 hitters) and power (right, 1,203 hitters), in standard deviations. The dashed line is equal standing on both pitch families.}
+\label{fig:missdamage}
+\end{figure}
+
+% Source: results/v_chain_clean/fig_head_partial_heatmap source.
+Each head also follows the standard statistic for its own part of the plate appearance (Figure~\ref{fig:headpartial}). Averaged over a fixed set of 2,000 training-season pitches and with log prior PA removed, the swing head's output tracks a hitter's swing rate (0.67), the contact head whiff rate ($-0.56$), the exit velocity head bat speed (0.61, for 570 hitters with bat tracking), and the launch angle and spray heads average launch angle (0.49) and pull rate (0.34).
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.78\linewidth]{fig_head_partial.png}
+\caption{\toreview Correlation between each head's hitter-specific output and observed hitter statistics in the training seasons, after removing log prior PA.}
+\label{fig:headpartial}
+\end{figure}
+
+% Source: v_chain_clean/paper_figures/platoon_sign_agreement.json (310/545, null 0.498); platoon/platoon_projection.json
+% (cosine 0.142 [0.081, 0.201], partial r 0.074 / 0.144 / 0.133).
+The platoon split is held more weakly. After removing each batting side's average split, the model's projected 2024 split has the same sign as the observed split for 310 of 545 hitters (57\%), against 50\% when hitters are shuffled. The direction in the embedding along which the projected split grows has a cosine of only 0.14 (interval 0.08 to 0.20) with a direction fit to the empirical Bayes split. A hitter's position along it correlates with the observed training-season split at 0.07 in the low stratum, 0.14 in the medium, and 0.13 in the high, each with an interval above zero. The split is a faint direction in the embedding, and it is faintest for the hitters with the least history.
+
+\subsection{Nearest neighbors}
+\label{sec:neighbors}
+
+% Source: results/paper_draft3/neighbours_seed_mean_high.csv (seed-mean embedding, high stratum;
+% 7/40 overlap); embedding_structure/neighbour_purity.csv (0.57 vs 0.33); silhouette max 0.054.
+Nearest neighbors in the embedding show what the model treats as similar. Among high-exposure hitters, Joc Pederson's closest neighbor is Kyle Schwarber, followed by Paul Goldschmidt, Rafael Devers, Joey Gallo, Kendrys Morales, Josh Donaldson, Mark Trumbo, and Pete Alonso, power hitters from both sides of the plate. Schwarber's closest is Pederson. Juan Soto's list includes Max Muncy, Shin-Soo Choo, José Bautista, and Andrew McCutchen, and Alec Bohm's includes Bo Bichette, Ryan Mountcastle, Tommy Edman, and Ian Desmond, with none of the sluggers on Pederson's list. Mike Trout's neighbors are Ronald Acuña, Eugenio Suárez, Pete Alonso, Austin Jackson, Jake Lamb, Brandon Belt, Anthony Rendon, and Denard Span. Ranked instead by ten observed statistics covering plate discipline, contact quality, and wOBA, Trout's nearest are Yordan Álvarez, Goldschmidt, Soto, Mookie Betts, Joey Votto, Rhys Hoskins, Acuña, and Will Smith, and only Acuña is on both lists. Across these five hitters the two kinds of list share 7 of 40 names, so the embedding's similarity is not a restatement of season statistics.
+
+A hitter's ten nearest neighbors share the hitter's power third 57\% of the time, against 33\% with shuffled labels, but the silhouette score is at most 0.054 for any number of clusters from two to ten. The space holds neighborhoods of similar hitters rather than a set of distinct hitter types.
+
+\subsection{Case studies}
+\label{sec:anchors}\label{sec:disagree}
+
+% Source: results/case_studies_2025/case_studies_2025.{csv,json}; v_chain_clean/disagreement_summary.json,
+% disagreement_top.csv (2024 projections, seed 0 of the selection model).
+Table~\ref{tab:cases} gives the projected 2025 splits for five well-known hitters. Pederson and Schwarber, left-handed hitters with reputations as platoon bats, project worse against left-handed pitchers. Bohm, a right-handed hitter, projects better against them, and Trout projects close to flat. Soto, an everyday player, projects 0.041 worse against left-handed pitchers, and Soto's observed 2025 split ran the same way. Empirical Bayes tells the same story for all five and was slightly closer in 2025 for each, by 0.002 to 0.014, but no observed split is more than 1.96 standard errors from the midpoint of the two projections. Pederson shows how wide that noise is. With 19 PA against left-handed pitchers, Pederson's observed split of $+0.172$ has a standard error of 0.121, wide enough to include either projection and zero.
+
+\begin{table}[!ht]
+\centering\small
+\begin{tabular}{llrrrr}
+\toprule
+Hitter & Bats & Model & EB & Observed (SE) & $z$ \\
+\midrule
+Joc Pederson & L & $-0.047$ & $-0.039$ & $+0.172$ (0.121) & 1.77 \\
+Kyle Schwarber & L & $-0.042$ & $-0.028$ & $+0.025$ (0.039) & 1.52 \\
+Juan Soto & L & $-0.041$ & $-0.044$ & $-0.074$ (0.041) & 0.78 \\
+Mike Trout & R & $+0.009$ & $+0.007$ & $-0.062$ (0.056) & 1.25 \\
+Alec Bohm & R & $+0.022$ & $+0.033$ & $+0.042$ (0.052) & 0.28 \\
+\midrule
+Aaron Judge & R & $+0.020$ & $+0.003$ & $+0.038$ (0.049) & 0.54 \\
+José Altuve & R & $+0.021$ & $+0.026$ & $+0.013$ (0.051) & 0.22 \\
+Marcell Ozuna & R & $+0.020$ & $+0.002$ & $-0.006$ (0.050) & 0.33 \\
+\bottomrule
+\end{tabular}
+\caption{2025 platoon split (wOBA against left-handed minus right-handed pitchers) for five well-known hitters (top) and three on whom the model and empirical Bayes disagreed most in 2024 (bottom). $z$ is the observed split's distance from the midpoint of the two projections in standard errors.}
+\label{tab:cases}
+\end{table}
+
+The two methods disagree most where pitch-level information pulls a projection away from a hitter's outcome history. Their 2024 projected splits have a rank correlation of 0.77 overall, and 0.69 for high-exposure hitters, where empirical Bayes shrinks least. Ranked within batting side, Robbie Grossman has the largest split among right-handed hitters by empirical Bayes and only the 324th by the model. Marcell Ozuna is the reverse, 6th by the model and 316th by empirical Bayes, and the model also ranks Aaron Judge and José Altuve much higher. In 2025 the observed splits of Judge and Altuve fell closer to the model's projection and Ozuna's closer to empirical Bayes, each within about half a standard error of the midpoint. The evidence on split accuracy is the aggregate comparison in Section~\ref{sec:results}.
+
+\subsection{Other queries}
+\label{sec:otherqueries}
+
+% Source: results/v_chain_clean/surfaces_location.csv (selection model clean_clean_dim64, seed 0);
+% make_figs3.py fig_surfaces.
+Because the network scores single pitches, any set of pitches or pitchers defines a query, and only the handedness query was graded here. One alternative is a set of pitch locations. Figure~\ref{fig:surfaces} shows each case-study hitter's expected wOBA on a ball in play by location, relative to the average of 100 hitters on the same pitches. Schwarber and Soto do their best damage on pitches in the upper middle of the zone, up to about 170 points above average, and Soto falls below average on low pitches. Trout's best results come on low pitches over the middle, about 200 to 220 points above average. Bohm's surface is nearly flat, about 30 to 40 points above average everywhere, with no cell above about 70. Each surface changes little between pitcher hands.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=\linewidth]{fig_surfaces.png}
+\caption{\toreview Expected wOBA on a ball in play by pitch location, hitter minus the average of 100 hitters, against left-handed (top) and right-handed (bottom) pitchers, from the catcher's view. The dotted box is the strike zone.}
+\label{fig:surfaces}
+\end{figure}
+
+% Source: src/analysis/paper_single_game_staff.py -> results/paper_draft3/single_game_staff{.csv,.json,
+% _weights.csv}. Final model, five-seed ensemble; generic projections match the cached final run.
+A query can also target one game. For the Phillies' game against the Braves on August 30, 2025, with Chris Sale starting, the opposing staff was weighted as Sale's average of 25.1 batters faced per start in the training seasons plus Atlanta's average of 14.9 relief batters faced per game. The relief share was split among the 16 relievers who had pitched for Atlanta in the previous 30 days, in proportion to their 2025 relief batters faced. A rule dropping relievers who had pitched on both previous days or thrown 25 or more pitches the day before removed none. One reliever the model cannot query, carrying 0.2\% of the weight, was left out. Table~\ref{tab:staff} ranks the 13 Phillies who started a game within four days of this one. Against this staff every hitter projects 7 to 35 points below their generic projection against left-handed pitchers, with Brandon Marsh dropping most, but the order barely moves and only three adjacent pairs swap. The model's top nine are eight of the nine Phillies who started that day, with Max Kepler in place of Edmundo Sosa. The query ignores defense, positions, and rest, so the ranking is one input to a lineup rather than a lineup.
+
+\begin{table}[!ht]
+\centering\small
+\begin{tabular}{lcrrrr}
+\toprule
+ & & \multicolumn{2}{c}{Projected wOBA} & \multicolumn{2}{c}{Rank} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+Hitter & Started & vs staff & vs LHP & vs staff & vs LHP \\
+\midrule
+Alec Bohm & \checkmark & 0.332 & 0.357 & 1 & 1 \\
+Trea Turner & \checkmark & 0.327 & 0.341 & 2 & 3 \\
+Bryce Harper & \checkmark & 0.324 & 0.341 & 3 & 2 \\
+J. T. Realmuto & \checkmark & 0.322 & 0.339 & 4 & 4 \\
+Nick Castellanos & \checkmark & 0.307 & 0.334 & 5 & 5 \\
+Kyle Schwarber & \checkmark & 0.302 & 0.327 & 6 & 6 \\
+Max Kepler & & 0.299 & 0.320 & 7 & 7 \\
+Harrison Bader & \checkmark & 0.292 & 0.306 & 8 & 8 \\
+Weston Wilson & \checkmark & 0.283 & 0.304 & 9 & 9 \\
+Edmundo Sosa & \checkmark & 0.279 & 0.291 & 10 & 11 \\
+Bryson Stott & & 0.273 & 0.293 & 11 & 10 \\
+Rafael Marchán & & 0.271 & 0.278 & 12 & 13 \\
+Brandon Marsh & & 0.251 & 0.286 & 13 & 12 \\
+\bottomrule
+\end{tabular}
+\caption{\toreview Phillies hitters projected against the Braves' staff for August 30, 2025 (Sale starting, bullpen weighted by recent use) and against all left-handed pitchers. Started marks the actual lineup.}
+\label{tab:staff}
+\end{table}

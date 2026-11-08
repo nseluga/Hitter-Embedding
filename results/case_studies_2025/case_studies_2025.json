@@ -1,0 +1,54 @@
+{
+  "woba_sd_per_pa": 0.5126664232931442,
+  "anchors_missing_from_2025_frame": [],
+  "anchors": {
+    "n": 5,
+    "model_closer": 0,
+    "eb_closer": 5,
+    "within_noise": 5,
+    "model_sign_right": 2,
+    "eb_sign_right": 2,
+    "wmae_model": 0.053659953758427914,
+    "wmae_eb": 0.04564882935615086
+  },
+  "disagreement_top": {
+    "n": 16,
+    "model_closer": 9,
+    "eb_closer": 7,
+    "within_noise": 16,
+    "model_sign_right": 12,
+    "eb_sign_right": 12,
+    "wmae_model": 0.03671254929678117,
+    "wmae_eb": 0.03603301403627214
+  },
+  "all_hitters": {
+    "n": 539,
+    "model_closer": 296,
+    "eb_closer": 243,
+    "within_noise": 519,
+    "model_sign_right": 338,
+    "eb_sign_right": 337,
+    "wmae_model": 0.04479005640167439,
+    "wmae_eb": 0.04617949122774095
+  },
+  "disagreement_top_found_in_2025": 16,
+  "disagreement_top_absent_in_2025": [
+    {
+      "name": "Robbie Grossman",
+      "rank_gap_2024": 323
+    },
+    {
+      "name": "J. D. Davis",
+      "rank_gap_2024": -255
+    },
+    {
+      "name": "Tom\u00e1s Nido",
+      "rank_gap_2024": 231
+    },
+    {
+      "name": "Miguel San\u00f3",
+      "rank_gap_2024": -229
+    }
+  ],
+  "note": "anchor sign counts here are 2025 forecasts vs the 2025 split; the 4/5 in test_paper_figures is V.9 surfaces vs the training-window history"
+}

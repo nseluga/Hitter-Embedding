@@ -1,0 +1,454 @@
+% SSAC27 research paper draft. Structure follows paper/paper-outline.md (v3).
+% Compile with pdfLaTeX. Comments starting with TODO mark what is still to be written or rendered.
+% Every number is from the clean build (career pitcher-batters excluded). Sources are cited in
+% comments beside each number.
+
+\documentclass[11pt,letterpaper]{article}
+% Layout follows the SSAC "Paper Template" (Google Docs): 1in sides, 1.1in top, 1.2in bottom,
+% Cambria 11pt single spaced with 11pt after each paragraph, 42 Analytics logo bottom left.
+\usepackage[left=1in,right=1in,top=1.1in,bottom=1.2in,footskip=0.3in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{caladea}      % metric-compatible free clone of Cambria
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[numbers]{natbib}
+\setlength{\bibsep}{3pt}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{eso-pic}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=black,citecolor=black,urlcolor=blue}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{11pt}
+\titleformat{\section}{\fontsize{16}{19}\selectfont\bfseries}{\thesection.}{0.4em}{}
+\titleformat{\subsection}{\fontsize{12}{14}\selectfont\bfseries}{\thesubsection.}{0.4em}{}
+\titleformat{\subsubsection}{\fontsize{12}{14}\selectfont\bfseries}{\thesubsubsection.}{0.4em}{}
+\titleformat{\paragraph}[runin]{\normalsize\bfseries}{}{0pt}{}
+\titlespacing*{\section}{0pt}{6pt}{0pt}
+\titlespacing*{\subsection}{0pt}{0pt}{-8pt}
+\titlespacing*{\subsubsection}{0pt}{0pt}{-8pt}
+\titlespacing*{\paragraph}{0pt}{0pt}{0.6em}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\cfoot{\thepage}
+\AddToShipoutPictureBG{\AtPageLowerLeft{\hspace*{0.9in}\raisebox{0.38in}{\includegraphics[width=1.95in]{42analytics-logo.png}}}}
+
+\newcommand{\papertitle}{Conditional Queries Against a Learned Hitter Process Model}
+\newcommand{\papertrack}{Baseball}  % TODO: confirm track
+\newcommand{\paperid}{Paper ID}     % TODO: SSAC paper ID
+
+\begin{document}
+\raggedright
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{11pt}
+\thispagestyle{fancy}
+\begin{center}
+{\fontsize{18}{22}\selectfont\bfseries \papertitle\par}
+\vspace{11pt}
+{\fontsize{14}{17}\selectfont \papertrack\par \paperid\par}
+\end{center}
+
+% Abstract redrafted from the finished sections (clean build). The submitted SSAC27 abstract is
+% kept, commented, at the end of this block.
+\section*{Abstract}
+A hitter's platoon split takes hundreds of plate appearances to measure, and teams decide platoons before that. We train a model of each hitter's pitch-level process on 6.5 million Statcast pitches from 2015 through 2024. A 64-dimension hitter embedding and the pitch context predict swing, contact, and binned exit velocity, launch angle, and spray direction. A split is a query. We weight pitchers by batters faced and compose the per-pitch predictions through an exact solve of the count-state Markov chain, so a different split needs a different weight vector and no retraining. On held-out 2025 data the pre-registered test against gradient-boosted and empirical Bayes baselines did not pass. Scored on each hitter's wOBA against each hand, pooled error was tied, pooled rank order beat both, and one exploratory band of hitters with 113 to 451 prior plate appearances against that hand beat both on error and rank. On 2024, the selection season, the same architecture trained through 2023 reaches 60\% of the platoon rank ceiling one season's noise allows and 64\% of the ceiling for wOBA pooled over both hands, and every method's platoon error sits close to the noise floor. The embedding encodes power, contact, and plate discipline, summaries of what its own output heads predict, at 73\% to 79\% cross-validated accuracy against 33\% by chance.
+% Code: \url{https://github.com/nseluga/hitter-embedding}  % removed for blind review; restore after acceptance
+% Submitted SSAC27 abstract:
+% Most of what a team wants to know about a hitter is a split: against left-handers, against high velocity, against pitchers who live at the top of the zone. Each one takes hundreds of plate appearances to stabilize, and the decision usually comes before that. The standard answer shrinks the split toward a league or handedness average, which throws away the pitch-level record that produced it. Player embeddings trained on at-bat outcomes or pitch sequences exist, but they are read out for recent form or game-level predictions, not composed into a season split a team would project. We train a hitter model on pitches and query it for the split instead. The model is under one million parameters: a 64-dimension hitter embedding and the pitch context predict swing, then contact, then exit velocity, launch angle, and spray direction as binned distributions. We train on 7.2 million Statcast pitches from 2015 through 2024 covering 1,672 hitters. A query is a weight vector over pitchers. We weight every pitcher by batters faced and compose the per-pitch outputs through the count-state Markov chain, which gives a projected wOBA exactly without simulating plate appearances; a different split needs only a different weight vector, not a retrained model. Handedness is the first query we validate. On sealed 2025 data the pre-registered test against gradient-boosted and empirical Bayes baselines did not pass: pooled error was tied and pooled rank order beat both. One exploratory cell of sixteen, hitters with 113 to 452 prior plate appearances, beat both baselines on both gates; below it 43\% of hitters are unseen in training and predictions are too spread out rather than misordered. On 2024, the selection season, the same architecture trained through 2023 reaches 60\% of the ceiling one season's side-specific wOBA reliability allows on platoon rank order and 64\% on level, while its platoon error sits at the noise floor. The embedding, trained only on pitch outcomes, separates hitters on power, contact, and discipline at 0.73 to 0.79 held-out accuracy. The same interface answers velocity, location, and pitch-mix queries, not yet validated. Code and data: \url{https://github.com/nseluga/hitter-embedding} % TODO: make public before Oct 1
+
+
+\section{Introduction}
+\label{sec:intro}
+
+% Source: results/model_evaluation_final_clean claim-1 verdict and scores; measurement_ceiling_clean
+% summary (route B' 0.596, level 0.641); outline v3 section 1.
+A hitter's platoon split is slow to measure, and a team sets its lineup with whatever split it has. We learn each hitter's pitch-level process instead of his plate-appearance outcomes and query the learned model for his wOBA against each pitcher hand. The test we registered in advance, on 2025 data that no model trained on, did not pass. Scored on each hitter's wOBA against each hand, the model tied the strongest baseline on error and ordered hitters better than both baselines pooled across strata, and in one exploratory group of hitters, those with at least 113 and fewer than 452 prior plate appearances against the hand in question, it beat both baselines on both criteria. On the split itself, the gap between a hitter's two sides, the model's error was lower than that of a split set by handedness alone, and its ordering could not be told apart from it. We also measure how much of a platoon split one season of data can reveal to any method, and the answer is not much. On 2024, the season we used for selection, an oracle that knew every hitter's true split would reach a correlation of about 0.30 with the observed split, and the model reaches 60\% of that.
+
+The standard treatment of a platoon split regresses it toward the league split for the hitter's handedness. \citet{tango2007} put the regression point at about 2,200 plate appearances against left-handed pitching for a right-handed hitter and about 1,000 for a left-handed hitter, the exposure at which a hitter's own split earns half the weight, and \citet{klaassen2010} applies the same constants. Few hitters ever reach that many plate appearances against left-handed pitching, so for most hitters the estimate stays close to the league split. Work on reliability makes the same point for hitting statistics in general \citep{pemstein2016}, and \citet{carleton2017} found that strikeout rate stabilizes more slowly than the familiar figures when a hitter's record is split into sequential blocks of time rather than by dividing plate appearances from the same games.
+
+A scout watching a hitter against left-handed pitching does not have to wait for a wOBA. They can see whether he lays off a slider breaking away, whether he catches up to velocity on the inner half, and what the ball does when he connects. That evidence arrives on every pitch, while a plate appearance outcome summarizes several pitches and adds the luck of where a ball in play lands. A model that learns from pitches should see more of a hitter in the same season than a model that learns from outcomes.
+
+\citet{alcorn2018} learned hitter and pitcher embeddings from at-bat outcomes and suggested that predicting PITCHf/x measurements instead of discrete outcomes ``could be fruitful as PITCHf/x data would likely convey more information about a player's physical characteristics.'' We take a step in that direction with Statcast. Rather than the pitch measurements themselves, our network predicts what the hitter does with each pitch. A network with a 64-dimension embedding per hitter predicts, for any pitch, whether the hitter swings, whether he makes contact, whether contact is fair, and the joint distribution of exit velocity, launch angle, and spray direction. A query is a weighted set of pitchers, and composing the per-pitch predictions through the count gives a projected wOBA against that set (Equation~\ref{eq:query}). A platoon split is the query whose weights pick out one pitcher hand, and any other split is a different weight vector on the same model.
+
+The paper makes three contributions. The first is the model and the exact composition from pitch to plate appearance to split. The second is a pre-registered test on a held-out season against a ladder of baselines that includes bivariate empirical Bayes shrinkage and gradient-boosted trees. The third is a measurement ceiling that says how much of the platoon question one season can answer for any method. Section~\ref{sec:related} places the work among player embeddings, batted-ball models, and platoon shrinkage. Section~\ref{sec:methods} describes the data, the model, the composition, and the evaluation. Section~\ref{sec:results} reports the test, the ceiling, and what the embedding learned, and Section~\ref{sec:discussion} discusses use, other queries, and limitations.
+
+\section{Related work}
+\label{sec:related}
+
+% Source: ~/os/knowledge/library/baseball-research/ notes and /tmp/ssacx full texts.
+\paragraph{Player embeddings.} \citet{alcorn2018} trained a word2vec-style network on Retrosheet at-bats from 2013 through 2015, with a nine-dimension embedding per batter and per pitcher and a softmax over at-bat outcomes, and showed that the embeddings predict outcome distributions for matchups never seen in training. Its target is the outcome, so the embedding learns from the luck in each result as well as the skill. \citet{heaton2022} learned player form embeddings with a transformer over pitch-level game-state changes from 2015 through 2019, and \citet{heaton2023} extended the approach to predict single-game pitcher strikeouts and whether a batter gets a hit, and compared its accuracy with sportsbook projections. \citet{transformer2025} used a 400-pitch history to predict the outcome and fielder location of the next pitch, and found its continuous predictions, launch angle and exit velocity among them, not accurate enough to be useful and dropped them from the outputs. \citet{melville2023} trained a recurrent pitch-outcome model with a batter embedding, checked it with calibration plots, and used it to solve for equilibrium pitch sequences. Each of these reads its model out for a matchup, a game, or a pitch, and \citet{transformer2025} also sum per-pitch predictions into season totals for two case-study hitters. None composes pitch-level predictions into a season split or tests them against the published shrinkage estimators for one.
+
+\paragraph{Batted-ball distributions and plate appearance composition.} \citet{melville2024} fit batter-specific distributions of spray angle, launch angle given spray, and exit velocity given launch angle, assuming exit velocity independent of spray once launch angle is known, and used them to position fielders against a specific hitter. We model the same three quantities in the reverse order, exit velocity first, and condition each on all the ones before it. \citet{powers2025} model a plate appearance as a Markov reward process over ball and strike counts to price a swing approach in runs, which is the same structure as our composition, and they show that the relationship between swing-tracking measurements and outcomes is confounded by the batter's pitch recognition. Our network takes no bat-tracking input.
+
+\paragraph{Platoon shrinkage and reliability.} The regression constants of \citet{tango2007}, restated by \citet{klaassen2010}, are the published estimator, and the reliability work of \citet{carleton2017} and \citet{pemstein2016} sets how much any single season can be trusted. Our empirical Bayes baseline (Section~\ref{sec:eval}) is the same shrinkage with the correlation between a hitter's two sides estimated from the data, and our measurement ceiling (Section~\ref{sec:ceiling}) applies the reliability idea to the platoon split itself.
+
+% =====================================================================================
+\section{Methods}
+\label{sec:methods}
+
+We build the model in two stages. A network learns, for each hitter and each pitch, the probability of every outcome the hitter controls, from whether he swings down to where a ball in play lands. A composition step then turns those per-pitch probabilities into the number a team uses, a projected wOBA against a chosen set of pitchers. Section~\ref{sec:data} describes the data, Sections~\ref{sec:factor} through \ref{sec:arch} the network, Section~\ref{sec:compose} the composition, and Section~\ref{sec:eval} the baselines and the test we registered before scoring the final season.
+
+\subsection{Data}
+\label{sec:data}
+
+% Source: data/processed/phase_d5_clean_final/manifest.json; src/data cleaning rules;
+% decision log 2026-08-01 (effective_speed), 2026-09-20 (clean build).
+We use pitch-level Statcast data from the 2015 through 2025 regular seasons. Each pitch carries its release and movement measurements, its location as it crosses the plate, the count, the handedness of both players, and the batter's response, and a ball in play also carries its exit velocity, launch angle, and landing coordinates. We drop pitches thrown by position players, pitchouts, automatic balls and strikes, and bunts, along with any pitch that is missing a core measurement or records a physically impossible one. Batted-ball quality is labeled only on balls in play.
+
+We also remove pitchers who come to the plate. We treat a player as a career pitcher-batter if he faced at least 50 batters as a pitcher in some season and never reached 200 plate appearances as a hitter in any season, a rule that keeps two-way players such as Shohei Ohtani in the hitter pool. We also drop, season by season, anyone who faced at least 50 batters and had fewer than 50 plate appearances that season. Together the two rules remove 102,030 pitches across 2015 through 2025. After cleaning, the table holds 7,245,923 pitches from 2015 through 2025 and covers 1,672 hitters. The 6,540,616 pitches from 2015 through 2024 train the final model.
+
+Each pitch is described to the network by a 46-dimension context vector. Its core is release speed, horizontal and vertical plate location, and horizontal and vertical movement. Spin rate, spin axis, extension, and the three release-point coordinates each enter with a missing-value flag, spin axis enters as its sine and cosine, and pitch type, pitcher hand, batter hand, balls, and strikes enter as one-hot indicators. Continuous inputs are standardized with statistics fit on the 2015 through 2023 seasons only. We dropped effective speed because the pitch measurements we keep, extension among them, recover it with $R^2 = 0.993$. The batter and pitcher identifiers, the Statcast zone, bat-tracking measurements, and the batted-ball type are not inputs. The model therefore knows a pitcher only through the measured physics and location of his pitches, and it carries no game state beyond the count.
+
+% Source: src/config/split_config.json, split_config_final_run.json; decision log 2026-08-01.
+We fixed a walk-forward split before training any model. Every model-selection decision trains on 2015 through 2023 and is judged on 2024. The selected configuration is then refit from scratch on 2015 through 2024 and scored on 2025, a season no model trained on. We scored 2025 twice. The first pass used a build whose training table still held a small share of pitcher plate appearances. We removed them, retrained, and scored 2025 again, and every 2025 number in Section~\ref{sec:results} comes from that second pass. We label each 2024 number as post-selection.
+
+% Source: src/analysis/claim1_eval.py (STABILIZATION_N_STAR, STRATUM_BOUNDARIES);
+% decision log 2026-09-08 (50-PA floor, cold-start breakout);
+% results/model_evaluation_final_clean/model_v1_claim1_paired_min_pa_sweep_clean_dim64_final.csv
+% (n_hitters, n_batters); ..._verdict_... .json (cold_start_share 0.42708 = 164/384).
+The unit we score is a hitter's wOBA against one pitcher hand in one season. We stratify these units by prior exposure, the hitter's plate appearances against that hand in all seasons before the one being scored, counted in the wOBA denominator. Side-specific wOBA against left-handed pitchers stabilizes at $n^* = 226$ plate appearances by a variance-components estimate on the training seasons, and we place the stratum cuts at $n^*/2 = 113$ and $2n^* = 452$. The low stratum, below 113, is where an observed split is mostly noise, and it is the stratum our registered test treats as decisive. In 2025, 42.7\% of low-stratum units belong to hitters with no plate appearances before that season, so the model has never trained on them. We score a unit only if it has at least 10 plate appearances in the scored season, counted the same way. That floor uses playing time a team cannot know in advance, and it drops 158 of 1,315 units in 2025. Section~\ref{sec:test} shows the verdict is the same at a floor of 50. Table~\ref{tab:data} gives the counts.
+
+\begin{table}[t]
+\centering
+\caption{Training data and the 2025 scoring frame. A scored unit is one hitter against one pitcher hand, with at least 10 plate appearances in 2025. Strata are cut on plate appearances against that hand before 2025.}
+\label{tab:data}
+\begin{tabular}{lrr}
+\toprule
+\multicolumn{3}{l}{\textit{Training table, 2015 through 2024}} \\
+Pitches & \multicolumn{2}{r}{6,540,616} \\
+Hitters & \multicolumn{2}{r}{1,672} \\
+Pitches removed as pitcher plate appearances, 2015 to 2025 & \multicolumn{2}{r}{102,030} \\
+Context dimensions & \multicolumn{2}{r}{46} \\
+\midrule
+\textit{2025 scoring frame} & Units & Batters \\
+Low (fewer than 113 prior PA) & 384 & 246 \\
+Medium (113 to 451) & 280 & 236 \\
+High (452 or more) & 493 & 321 \\
+All & 1,157 & 618 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Factorizing a pitch}
+\label{sec:factor}
+
+% Source: src/model/v1.py docstring; src/model/query_tables.py docstring; decision log
+% 2026-08-08 (three-class contact split, raw plate coordinates, surfaces keyed on hand).
+For hitter $h$ facing a pitch with context $x$, the network gives the distribution of what the hitter does as a product of conditionals,
+\begin{equation}
+p(y \mid h, x) = p(\text{swing} \mid h, x)\; p(\text{contact} \mid \text{swing}, h, x)\; p(k \mid \text{contact}, h, x)\; p(q \mid \text{in play}, h, x),
+\label{eq:factor}
+\end{equation}
+where $k \in \{\text{foul}, \text{foul tip}, \text{in play}\}$ is the contact class and $q$ is the quality of a ball in play. We split contact three ways because a foul and a foul tip only differ with two strikes, where a foul tip ends the plate appearance as a strikeout and a foul leaves the count unchanged. Folding tips into fouls would misstate two-strike survival, and the training seasons hold 59,963 foul tips.
+
+The network does not predict what happens when the hitter takes a pitch. We read that from an empirical surface $p(\text{ball}, \text{called strike}, \text{hit by pitch} \mid \text{take}, \text{plate location})$, fit on the training seasons on a 0.1-foot grid with one surface for each pairing of batter hand and pitcher hand. The surface does not depend on the count. We fit it on raw plate coordinates rather than on Statcast's per-batter strike-zone top and bottom, since those are themselves derived from past umpire calls. Each cell of the surface, like each of the other count tables we use, is shrunk toward its coarser pool with weight $n/(n+\alpha)$, where $\alpha$ is the variance-components ratio of noise to signal.
+
+\subsection{Batted-ball quality}
+\label{sec:quality}
+
+% Source: src/model/v1.py (head_la on [trunk; ev onehot], head_spray on [trunk; ev; la]);
+% manifest n_quality_bins 24; spray definition in src/data labeling.
+A ball in play is described by its exit velocity $e$, launch angle $l$, and spray angle $s$, each cut into 24 equal-mass bins on the training data. Spray angle is $\arctan\!\big((h_x - 125.42)/(198.27 - h_y)\big)$ on the Statcast hit coordinates, with the sign flipped for right-handed batters so that a positive angle always means the pull side, and we null spray angles on balls fielded near the plate, where the coordinates are unreliable. We model the joint distribution by the full chain rule,
+\begin{equation}
+p(q \mid \text{in play}, h, x) = p(e \mid h, x)\; p(l \mid e, h, x)\; p(s \mid e, l, h, x),
+\label{eq:quality}
+\end{equation}
+so no conditional independence between the three quantities is assumed. \citet{melville2024} factor the same three quantities as $p(\text{spray})\,p(\text{launch} \mid \text{spray})\,p(\text{exit speed} \mid \text{launch})$, which treats exit speed as independent of spray angle once launch angle is known. A ball in play then has $24^3 = 13{,}824$ possible quality cells. We convert each cell to an expected wOBA value $V(e,l,s)$ through a table of out, single, double, triple, and home run probabilities estimated on training-season balls in play and smoothed the same way as the take surface. The table stores probabilities rather than wOBA points, so a projection for a given season is scored with that season's FanGraphs linear weights.
+% Source: /tmp/ssacx/melville-2024-fielder-positioning.txt lines 100-115 (s indep of h given v).
+
+\subsection{Architecture and training}
+\label{sec:arch}
+
+% Source: results/checkpoints/clean_dim64_final_s0.pt args (embedding_dim 64, batch 8192,
+% lr 1e-3, embedding_optimizer sgd, embedding_lr 1.0, bilinear False, split True, spray True,
+% step_budget 18538, lr_cut_steps); parameter count 266,317 from the same checkpoint;
+% src/model/v1.py layer widths.
+Figure~\ref{fig:arch} shows the network. Each hitter has a row in a 64-dimension embedding table, and a reserved row for hitters absent from training is fixed at zero and never trained. A context tower maps the 46 context inputs through two layers of width 128. The trunk concatenates the hitter's embedding with the context tower's output and passes the result through two layers of width 256, with ReLU activations throughout and dropout of 0.1 after the trunk. Linear heads read the trunk for swing, contact, and contact class, and the three quality heads follow Equation~\ref{eq:quality}. The exit-velocity head reads the trunk alone, the launch-angle head reads the trunk and a one-hot exit-velocity bin, and the spray head reads the trunk and one-hot bins for both. During training those one-hot inputs are the observed bins. The whole network has 266,317 parameters. Nothing about a hitter enters except his embedding row, and the model has no encoder over his recent pitch history.
+
+We train by maximizing the summed log-likelihood of the observed outcomes,
+\begin{equation}
+\mathcal{L} = \sum_{i} \Big[ \log p(a_i) + m^{c}_i \log p(c_i) + m^{k}_i \log p(k_i) + m^{e}_i \log p(e_i) + m^{l}_i \log p(l_i \mid e_i) + m^{s}_i \log p(s_i \mid e_i, l_i) \Big],
+\label{eq:loss}
+\end{equation}
+where $a_i$ is the swing decision on pitch $i$, every probability is also conditioned on $h_i$ and $x_i$, and each mask $m_i$ is one when that factor is observed. The masks nest the way the factorization does, so contact is scored on swings, contact class on contact, exit velocity on balls in play that Statcast measured, launch angle where exit velocity and launch angle are both measured, and spray where all three are.
+
+The trunk and heads train with AdamW \citep{loshchilov2019} at learning rate $10^{-3}$, weight decay $10^{-2}$, and batch size 8,192. The embedding table trains separately with plain SGD at learning rate 1.0 and a coupled L2 penalty at the same $10^{-2}$ constant. We moved the table off AdamW because AdamW scales each row's step by that row's own gradient history, so a rarely seen hitter takes near-full-size steps whenever he appears and the decay loses to those steps \citep{stollenwerk2025}. Under plain SGD the step is proportional to the gradient, and rows for rarely seen hitters move less. The layer widths, activation, and dropout rate were fixed before any run rather than swept.
+
+% Source: review-pack-refit.md section 1; results/model_v1/sweep_log.csv stage clean;
+% results/model_v1/replay_schedule_clean_dim64.json; decision log 2026-09-04.
+We screened six configurations on one seed, a base configuration, two embedding weight-decay values, a decay scaled by exposure, dropout on the hitter embedding, and a 64-dimension embedding, and carried three to five seeds. We chose among those three by mean held-out log loss on 2024. The selected 64-dimension configuration scored 1.02327, against 1.02357 and 1.02378 for the other two on the same data. During selection the learning rate is cut when the 2024 loss plateaus and training stops early. The refit has no held-out season to watch, so it trains for a fixed 18,538 steps, the median best step across the five selection seeds, and replays the learning-rate cuts at steps 7,130, 9,982, 12,359, 14,973, and 16,478. We matched steps rather than epochs because the table's decay is applied per step, so equal steps keep its total shrinkage equal, while equal epochs on the larger refit data would have added about 12\% more. We know of no published rule for this choice and report it as a judgment call. Before 2025 was opened, one seed trained with the replayed schedule on the selection split had to land within one standard deviation of the mean of the five selection runs on 2024, and it did. We train five seeds and use them as an ensemble \citep{lakshminarayanan2017}.
+% NOTE: the achieved replay-gate value is unrecoverable on the clean build (review pack
+% section 4; decision log 2026-09-20). Do not print a number for it.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering\vspace{3em}TODO: architecture schematic (new drawing)\vspace{3em}}}
+\caption{The network. A hitter's embedding row and the pitch context feed a shared trunk. Heads predict swing, contact, and contact class, then exit velocity, launch angle given exit velocity, and spray given both. The take outcome comes from an empirical location surface outside the network.}
+\label{fig:arch}
+\end{figure}
+
+\subsection{Composing a split}
+\label{sec:compose}
+
+% Source: src/model/query.py docstring; src/model/query_tables.py; decision log 2026-08-08
+% (exact solve, exact enumeration, pitcher population weighted by batters faced, ensemble
+% averages conditionals); DEFAULT_N_PITCHES = 6; DEFAULT_N_PITCHERS = 0 (whole pool).
+A split is a question about many plate appearances against a population of pitchers, while the network answers questions about single pitches. We connect the two in three steps.
+
+The first step fixes a pitcher. For pitcher $j$ and each count $(b,s)$, we draw six real pitches he threw to batters of the hitter's handedness in that count during the training seasons. When he threw too few, we widen the draw to any ball count at the same strike count and then to every count, drawing with replacement. Resampling whole rows keeps each pitch's velocity, movement, location, and type consistent with one another, and it carries his pitch mix by count. Averaging the network's outputs over those six pitches gives the probability that the next pitch in count $(b,s)$ ends as a ball $\bar p_B$, a strike $\bar p_S$, a foul $\bar p_F$, a hit batter $\bar p_H$, or a ball in play, together with the expected value of a ball in play,
+\begin{equation}
+\bar v(b,s) = \frac{1}{6}\sum_{r=1}^{6} p(\text{swing}) \, p(\text{contact}) \, p(\text{in play}) \sum_{e,l,s'} p(e)\,p(l \mid e)\,p(s' \mid e,l)\, V(e,l,s'),
+\label{eq:bip}
+\end{equation}
+where every probability on the right is for hitter $h$ and pitch $r$. The sum runs over all 13,824 quality cells exactly. Equation~\ref{eq:bip} covers balls in play that Statcast measured. The small share it did not measure is valued at the league value of such a ball and mixed in by that share. The quality heads are linear in their one-hot inputs, so the joint factors into matrix products and the enumeration costs about as much as one forward pass.
+
+The second step solves the plate appearance. The pitch drawn in a count does not depend on the pitches before it, so the count is a Markov chain over 12 states, and the expected wOBA from count $(b,s)$ satisfies
+\begin{equation}
+W(b,s) = \bar p_B\, W(b+1,s) + \bar p_S\, W(b,s+1) + \bar p_F\, W(b,\min(s+1,2)) + \bar p_H\, w_{\text{HBP}} + \bar v(b,s),
+\label{eq:chain}
+\end{equation}
+with $W(4,s) = w_{\text{BB}}$ and $W(b,3) = 0$. A strike here is a called strike, a swing and miss, or a foul tip. With two strikes a foul returns the plate appearance to the same state, and solving for $W(b,2)$ closes that loop exactly,
+\begin{equation}
+W(b,2) = \frac{A(b)}{1 - \bar p_F(b,2)},
+\label{eq:foul}
+\end{equation}
+where $A(b)$ collects every other term of Equation~\ref{eq:chain}. Backward induction from the terminal states then gives the projected wOBA of a plate appearance against pitcher $j$, $W_{hj} = W(0,0)$, with no simulation and no cap on long plate appearances.
+
+The third step chooses the pitchers. A query $S$ is a weight vector over pitchers, and the projection is
+\begin{equation}
+\widehat{\text{wOBA}}_S(h) = \sum_{j} w^S_j \, W_{hj}, \qquad w^S_j \propto \text{BF}_j \, \mathbf{1}[j \in S],
+\label{eq:query}
+\end{equation}
+where $\text{BF}_j$ is pitcher $j$'s batters faced in the training seasons. For a platoon split, $S$ is every left-handed or every right-handed pitcher among the 2,182 who pitched in those seasons. A different split, such as pitchers with high velocity or pitchers who work the top of the zone, needs only a different $w^S$ and no retraining. We hold one pitcher for a whole plate appearance and average over pitchers only after solving the chain. Averaging pitches across pitchers first would describe a composite pitcher no hitter faces, and because $W$ is nonlinear in the transition probabilities the two averages differ.
+
+% Source: decision log 2026-08-08 (ensemble averages conditionals) and 2026-09-04 (cold-start
+% prior default; eb_bivariate matched debut prior).
+The five seeds are combined before composition, as in a deep ensemble \citep{lakshminarayanan2017}. We average each head's conditional probabilities across seeds and compose the averages. Averaging five separate wOBA projections instead would average a nonlinear function of the probabilities. For a hitter who debuts in the scored season, the zero row would encode no information at all, so at query time we replace it with the mean embedding of trained low-stratum hitters who bat from the same side, excluding pitchers. We take that mean in each seed and average it across seeds, and the same vector is used in all five. The empirical Bayes baseline below gets a matched prior for debuts, so neither side of the comparison gains from this choice.
+
+\subsection{Model checks}
+\label{sec:checks}
+
+% Source: results/model_evaluation_final_clean/swing_calibration_swing_summary.json;
+% matched_population_matched_population.csv and model_evaluation_report.json;
+% decision log 2026-09-08 (fidelity is an observation, not a gate).
+Before using the composed values we check that they reproduce what happened. On 2025, the final model predicts a swing on 48.5\% of pitches against an observed 47.6\%, a relative gap of 1.9\%, and the largest gap in any single count is 14.7\%. Composed over plate appearances, the model's league walk rate is 8.47\%, which is 4.3\% above the rate observed in the training seasons for the same hitters and 3.2\% above the rate observed in 2025. Its strikeout rate of 22.6\% is 2.1\% below the training-season rate and 1.9\% above the 2025 rate. The two observed windows themselves differ by up to 4\%, so we report these gaps as observations rather than scoring them against a fixed tolerance. Figure~\ref{fig:headcal} shows calibration for the individual heads.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering\vspace{3em}TODO: head calibration\\ render from \texttt{results/process\_calibration\_final\_clean/heads\_head\_calibration.csv} (\texttt{fig\_reliability\_curve.png} is the wOBA reliability curve, not this)\vspace{3em}}}
+\caption{Calibration of the swing, contact, and batted-ball heads on held-out 2025 pitches.}
+\label{fig:headcal}
+\end{figure}
+
+% TODO: Figure 3 is a new render. Pick the hitter by a stated rule (outline v3 names Alec
+% Bohm as the pre-registered righty-platoon anchor; decision log 2026-09-02 notes the spec's
+% anchor premise did not hold for Duvall, so confirm Bohm's status before captioning).
+Figure~\ref{fig:hitter} shows the fitted batted-ball distributions for one hitter against left-handed and right-handed pitching, the per-hitter view a scout would compare with what they see.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering\vspace{3em}TODO: one hitter's fitted exit velocity, launch angle, and spray distributions vs LHP and RHP (new render, clean build)\vspace{3em}}}
+\caption{Fitted batted-ball distributions for one hitter, by pitcher hand.}
+\label{fig:hitter}
+\end{figure}
+
+\subsection{Baselines and evaluation design}
+\label{sec:eval}
+
+% Source: decision log 2026-07-29 (ladder table, denominator unit), 2026-07-28 (C.3 design),
+% 2026-07-30 (ordering gate), 2026-08-01 (weighted rank), 2026-08-08 (C.2 discharges rule 1);
+% src/analysis/baseline_ladder_bivariate_eb.py docstring; TRAILING_SEASONS = 3.
+We compare against a ladder of baselines in which each rung differs from the one below it in one respect, so that any margin can be attributed. The lowest rung predicts the league's side-specific average. The next two use the hitter's own side-specific wOBA over the previous three seasons, first unshrunk and then blended toward the league average by a step function of plate appearances.
+
+The incumbent is a bivariate empirical Bayes estimator. For hitter $h$ with observed wOBA $x_L$ against left-handed pitching over $n_L$ plate appearances and $x_R$ against right-handed pitching over $n_R$, both from the previous three seasons, it predicts
+\begin{equation}
+\hat\theta_h = \mu + \Sigma\,(\Sigma + D_h)^{-1}(x_h - \mu), \qquad D_h = \operatorname{diag}\!\big(\sigma^2_L/n_L,\; \sigma^2_R/n_R\big),
+\label{eq:eb}
+\end{equation}
+where $\mu$ and the $2\times2$ talent covariance $\Sigma$ are estimated separately for left-handed, right-handed, and switch hitters (the covariance between sides only on hitters with at least 50 plate appearances against each hand), and $\sigma^2$ is the within-plate-appearance variance for each batter type and pitcher hand. This shrinks the two sides jointly, which is the same model as regressing the split toward the league split as in \citet{tango2007}, written in rotated coordinates. The difference is that the correlation between a hitter's two sides is estimated from the data rather than fixed by a published constant, and a hitter's plate appearances against one hand inform his projection against the other in proportion to that correlation \citep{efron1972}. The estimator needs only the first two moments, so it is read as the best linear unbiased predictor and not as a normal posterior.
+
+The top rung is gradient-boosted trees \citep{chen2016} fit on one row per hitter, season, and pitcher hand. One version sees only the trailing outcome features the empirical Bayes estimator sees, and a second, which we report as the boosted baseline, adds the hitter's own trailing process rates by pitch context. The first isolates functional form with information held fixed, and the second adds information with the model class held fixed. Its settings were fixed in advance and its stopping round chosen on the last training season, which for the 2025 comparison is 2024.
+
+% Source: claim1_eval.py docstring; decision log 2026-07-29 (bootstrap unit is the batter),
+% 2026-07-30 (beat both or claim nothing), 2026-08-01 (weighted rank), 2026-09-08 (50-PA
+% floor, medium band registered as 2026 hypothesis); paired CSV n_draws 2000.
+We registered the test before the 2025 refit was trained. It has two criteria. The first is root mean squared error weighted by each unit's wOBA denominator $d_u$ in the scored season,
+\begin{equation}
+\text{RMSE} = \Big( \sum_u d_u (\hat y_u - y_u)^2 \Big/ \sum_u d_u \Big)^{1/2},
+\label{eq:rmse}
+\end{equation}
+which measures level. The second is a Spearman rank correlation between prediction and outcome, weighted by the same denominator, which measures order. A unit with 50 plate appearances has a much noisier observed wOBA than one with 500, and weighting keeps the noisiest units from dominating either criterion. The model passes on error if it beats the boosted baseline and on order if it beats both the boosted and the empirical Bayes baselines, and the claim holds only if it passes both in the low stratum. Each comparison is a paired difference with a 95\% bootstrap interval over 2,000 draws that resamples batters, so a hitter's two sides stay together, and a comparison counts only if its interval excludes zero in the model's favour. Four frames (the three strata and the pooled set), two opponents, and two criteria make 16 cells, and we report a pass in any cell outside the registered test as exploratory.
+
+% Source: decision log 2026-08-30 (route rule), 2026-08-31 (two denominators), 2026-09-01
+% (differential noise floor; MC Spearman ceiling 300 draws seed 7), 2026-09-20 (abstract
+% quotes analytic denominator).
+The observed wOBA we score against is itself a small sample, so no method can reach a perfect score, and we measure how far from perfect the best possible method would be. A hitter's observed split, his wOBA against left-handed pitching minus his wOBA against right-handed pitching, is his true split plus sampling noise whose variance we know from his plate appearances on each side. The variance of true splits across hitters, $\tau^2$, comes from the empirical Bayes fit on the three seasons before 2024, restricted to the hitters being scored. An oracle that knew every true split exactly would reach a correlation with the observed split equal to the square root of its reliability, the share of observed variance that is true signal, and that square root is the rank ceiling we report. On error, the floor is the root mean sampling variance of the observed split, which no predictor can go below. We build the same ceiling for the level of a hitter's wOBA pooled over both hands, with $\tau^2$ there estimated as the variance of observed wOBA across hitters minus the mean sampling variance, and we report each method's achieved value as a fraction of its ceiling. These ceilings are computed on 2024, the selection season.
+
+
+% =====================================================================================
+\section{Results}
+\label{sec:results}
+
+Results come in three kinds, and we label each one. The test on 2025 is confirmatory in design. No model trained on 2025, but the season was scored twice, first with an earlier build and then after we removed pitcher plate appearances from training (Section~\ref{sec:data}). Every 2025 number here is from the second pass. The ceiling analysis runs on 2024, the season used for selection, after the platoon test there had already been read, so it is post-selection and descriptive. Anything else that clears zero outside the registered cells is exploratory.
+
+\subsection{The pre-registered test did not pass}
+\label{sec:test}
+
+% Source: results/model_evaluation_final_clean/model_v1_claim1_scores_min_pa_sweep_clean_dim64_final.csv
+% (pa_weighted_rmse, rank_corr_weighted); ..._claim1_paired_..._final.csv (paired diffs, 2000
+% batter-clustered draws); ..._claim1_verdict_..._final.json (gate booleans).
+Table~\ref{tab:test} gives the 2025 result. The registered claim needed the model to pass both criteria in the low stratum, and it passed neither. Its low-stratum error is $0.00035$ below the boosted baseline's with an interval running from $-0.00252$ to $+0.00181$, and its rank correlation there is $0.037$ above the boosted baseline's and $0.031$ above the empirical Bayes baseline's, with both intervals spanning zero. The claim as registered is therefore not supported.
+
+Pooled over all 1,157 units, the model ties the boosted baseline on error ($0.04524$ against $0.04530$) and orders hitters better than both baselines, with a weighted rank correlation of $0.470$ against $0.421$ for the boosted baseline and $0.402$ for empirical Bayes. Both pooled rank differences have intervals above zero. The high stratum is a tie on both criteria. The one frame where the model passes everything is the medium stratum, where it beats the boosted baseline on error by $0.0023$ and beats both baselines on order by $0.14$ and $0.20$. That frame lies outside the registered test, so we report it as exploratory and have registered it as a hypothesis for the 2026 season. At a floor of 50 plate appearances, which leaves 858 units, the same cells pass and fail.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Sealed 2025 test. Weighted RMSE (lower is better) and weighted Spearman rank correlation (higher is better) for the model, the boosted baseline (GBM), and bivariate empirical Bayes (EB). $\Delta$ is model minus baseline with a 95\% batter-clustered bootstrap interval over 2,000 draws. Units are hitter, season, and pitcher hand with at least 10 plate appearances in 2025. Bold intervals exclude zero in the model's favour.}
+\label{tab:test}
+\begin{tabular}{l r ccc cc}
+\toprule
+ & & \multicolumn{3}{c}{RMSE} & \multicolumn{2}{c}{$\Delta$RMSE ($\times 10^{3}$)} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-7}
+Stratum & Units & Model & GBM & EB & vs GBM & vs EB \\
+\midrule
+Low    & 384  & 0.0605 & 0.0609 & 0.0620 & $-0.35$ [$-2.52$, $1.81$] & $-1.42$ [$-4.72$, $1.98$] \\
+Medium & 280  & 0.0455 & 0.0479 & 0.0492 & $\mathbf{-2.34}$ [$-4.47$, $-0.20$] & $\mathbf{-3.66}$ [$-6.23$, $-1.14$] \\
+High   & 493  & 0.0395 & 0.0385 & 0.0387 & $0.99$ [$-0.46$, $2.43$] & $0.77$ [$-0.78$, $2.29$] \\
+All    & 1157 & 0.0452 & 0.0453 & 0.0460 & $-0.07$ [$-1.06$, $0.97$] & $-0.73$ [$-2.06$, $0.60$] \\
+\midrule
+ & & \multicolumn{3}{c}{Rank correlation} & \multicolumn{2}{c}{$\Delta$rank} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-7}
+Stratum & Units & Model & GBM & EB & vs GBM & vs EB \\
+\midrule
+Low    & 384  & 0.160 & 0.124 & 0.129 & $0.037$ [$-0.080$, $0.155$] & $0.031$ [$-0.085$, $0.152$] \\
+Medium & 280  & 0.423 & 0.280 & 0.223 & $\mathbf{0.144}$ [$0.013$, $0.267$] & $\mathbf{0.201}$ [$0.062$, $0.334$] \\
+High   & 493  & 0.501 & 0.491 & 0.482 & $0.009$ [$-0.048$, $0.067$] & $0.019$ [$-0.045$, $0.081$] \\
+All    & 1157 & 0.470 & 0.421 & 0.402 & $\mathbf{0.050}$ [$0.011$, $0.089$] & $\mathbf{0.068}$ [$0.015$, $0.125$] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Where the model wins and where it loses}
+\label{sec:winslosses}
+
+% Source: results/model_evaluation_final_clean/calibration.csv (slope, slope_se, slope_z_vs_one);
+% ..._trained_spread_..._final.csv (cold-start share, distinct values); ..._power_restatement_
+% ..._final.csv (batters_needed); verdict JSON debiased_rmse_difference.
+The low stratum fails for two reasons that are visible in the data. The first is cold start. Of the 384 low-stratum units, 164 (42.7\%) belong to hitters the model never saw in training, and those units share only four distinct predicted values, so the model can barely order them. The second is dispersion. Regressing each unit's observed 2025 wOBA on the model's prediction gives a slope of $0.590$ (standard error $0.151$) in the low stratum, against $0.984$ in medium and $0.932$ in high. A slope below one means the predictions are spread wider than the outcomes support. The low-stratum predictions still rise with the outcomes, so the larger problem there is dispersion. Figure~\ref{fig:cal2025} shows the three strata.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering\vspace{3em}TODO: \texttt{results/v\_chain\_clean/paper\_figures/fig\_calibration\_2025.png}\vspace{3em}}}
+\caption{Calibration on sealed 2025 by stratum. Observed wOBA against predicted wOBA, with the fitted slope. Low-stratum predictions are over-dispersed (slope 0.59) and medium and high are close to one.}
+\label{fig:cal2025}
+\end{figure}
+
+The test was also short of power in the stratum it was decided on. The low stratum holds 246 distinct batters, and the observed rank margin over the boosted baseline would need about 5,158 batters to be detected with 80\% power, roughly twenty times what one season provides. The same calculation needs 377 batters in medium, about 1.6 times the 236 we have, and about 25,000 in high, where the margin is close to zero.
+
+The medium result is the strongest finding in the paper, and it should be read with two cautions. It was not the stratum we registered. Medium passes all four of its cells and the pooled frame passes both of its ordering cells, so six of the sixteen cells favour the model, none of them in the registered low stratum. The second caution is that 2025 had already been read once when the band was noticed. The earlier build showed the same pattern on its pass, and the band was registered as a hypothesis for 2026 after that read. The model's level bias also differs by stratum. It under-predicts low-stratum units by $0.007$ on average and over-predicts high-stratum units by $0.009$, which contributes to its error deficit in high, while in medium the bias is $0.0006$.
+
+\subsection{How much of a split one season can reveal}
+\label{sec:ceiling}
+
+% Source: results/measurement_ceiling_clean/differential_fraction_of_ceiling.csv (route B', A);
+% differential_exhibit.csv (MC ceiling, RMSE vs floor, by stratum); level_ceiling_level_ceiling.json;
+% measurement_ceiling_summary.json (coverage 0.8695). All post-selection, 2024, n = 545.
+Table~\ref{tab:test} scores the level of each side. The platoon split is the difference between the two sides, and it is much harder to measure. We measure how hard on 2024, using the selection model trained through 2023, among the 545 hitters with at least 10 plate appearances against each hand. The variance of true platoon splits is small relative to sampling noise, so an oracle that knew every hitter's true split would reach a correlation of only $0.296$ with the observed split. That analytic bound is for a linear correlation, and a Monte Carlo version built for rank correlation gives $0.309$. After removing each batting side's mean, the model's rank correlation with the observed split is $0.177$, which is $60\%$ of the analytic ceiling and $57\%$ of the Monte Carlo one. The bootstrap interval on the second fraction runs from $25\%$ to $87\%$, and it holds the ceiling fixed, so it understates the total uncertainty. The empirical Bayes baseline reaches $0.146$ ($49\%$ of the analytic ceiling) and the boosted baseline $0.141$ ($48\%$). The alternative estimate of $\tau^2$ that we always report alongside gives a ceiling of $0.167$, below what the model achieves, which shows how fragile any single ceiling estimate is at this sample size.
+
+On error, the noise floor for the platoon split is $0.0639$. The model's error is $0.0633$, the empirical Bayes baseline's $0.0642$, and the boosted baseline's $0.0651$, all within 2\% of the floor, so on the size of a hitter's split one season cannot place any of them far from an oracle. The differences are small but not all noise. Paired over hitters, the model's error relative to the floor is lower than the boosted baseline's with an interval that excludes zero, and lower than the empirical Bayes baseline's with an interval that narrowly includes zero. None of the paired rank contrasts excludes zero. On 2025, against a split set by handedness alone, the model's error on the split is lower pooled and in the medium stratum, and its rank order again cannot be told apart.
+
+These strata are cut on the smaller of a hitter's two prior exposures and hold 207, 167, and 171 hitters. In the medium stratum the model's error relative to the floor beats both baselines with intervals that exclude zero, and its rank correlation is $0.181$ against $0.036$ for empirical Bayes and $0.062$ for the boosted baseline, though those rank contrasts span zero. In the low stratum the rank order reverses, with the model at $0.156$ against $0.197$ and $0.236$, again with intervals that span zero.
+
+For the level of a hitter's wOBA pooled over both hands, with $\tau^2$ estimated by the method of moments rather than from the empirical Bayes fit, the ceiling is $0.742$ and the model reaches $0.475$, or $64\%$. We computed this level ceiling for the model only. Figure~\ref{fig:ceiling} puts ceilings and achieved values on one scale. Prediction intervals from the spread of the five seeds alone are far too narrow. Widened by each group's own sampling noise, nominal 95\% intervals cover the observed value for 87\% of 1,149 hitter and pitcher-hand groups in 2024, so they are still too narrow.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering\vspace{3em}TODO (new render): ceiling vs achieved, platoon rank, platoon error, and level rank, every method\\ from \texttt{results/measurement\_ceiling\_clean/}\vspace{3em}}}
+\caption{How much of the measurable signal each method reaches on 2024 (post-selection). Bars are the ceiling an oracle could reach given one season's sampling noise, and points are each method's achieved value. The level panel shows the model only.}
+\label{fig:ceiling}
+\end{figure}
+
+\subsection{What the embedding learned}
+\label{sec:embedding}
+
+% Source: results/v_chain_clean/embedding_structure/{embedding_structure.json, axis_screen.json,
+% embedding_alt_views.json, neighbour_purity.csv}; seed_stability_summary.json;
+% paper_figures/platoon_sign_agreement.json; platoon/platoon_projection.json. Selection model
+% (trained through 2023), 2024 frame.
+The embedding is trained only to predict pitch outcomes, so any structure in it that matches how scouts describe hitters is learned rather than imposed. We read it on the selection model trained through 2023. Before reading it we normalize each hitter's vector to unit length, because the raw length tracks how much a hitter has played ($r = 0.93$ with log prior plate appearances), and after normalization the first principal component's correlation with exposure falls to $0.09$. Five seeds learn similar vectors for the same hitter, with a median cosine of $0.83$ against $0.12$ when hitters are shuffled before the seeds are aligned.
+
+\paragraph{Attributes.} We split 1,493 hitters into terciles on four scouting attributes measured from their own pitches and ask a linear discriminant on the normalized embedding to recover the tercile under five-fold cross-validation. It recovers power, measured as 90th-percentile exit velocity, for $79\%$ of hitters, contact rate for $75\%$, in-zone swing rate for $75\%$, and chase rate for $73\%$, against $33\%$ by chance. The attributes are measured on the same pitches the model trained on, so this shows what the embedding encodes rather than out-of-sample prediction. Figure~\ref{fig:attr} shows the embedding projected on the power and contact directions.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering\vspace{3em}TODO: \texttt{results/v\_chain\_clean/embedding\_structure/fig\_attribute\_maps.png}\vspace{3em}}}
+\caption{The embedding projected on its power and contact directions, coloured by each hitter's tercile.}
+\label{fig:attr}
+\end{figure}
+
+\paragraph{Neighbours.} A hitter's ten nearest neighbours in the embedding share his power tercile $57\%$ of the time, against $33\%$ when tercile labels are permuted ($p = 0.001$, 1,000 permutations), and among high-exposure hitters $59\%$ against $40\%$. The embedding does not form clusters, though. The silhouette score is at most $0.054$ for any number of clusters from two to ten, so we describe neighbourhoods and make no claim about hitter types. Figure~\ref{fig:neigh} shows neighbourhoods for high-exposure hitters.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering\vspace{3em}TODO: high-exposure nearest neighbours (regenerate on clean build; \texttt{fig\_neighbours\_high.png} is old-build)\vspace{3em}}}
+\caption{Nearest neighbours among high-exposure hitters.}
+\label{fig:neigh}
+\end{figure}
+
+\paragraph{Platoon direction.} Most of a platoon split's sign comes from handedness alone. Predicting that every hitter does better against the opposite hand gets the 2024 sign right for $64.8\%$ of the 545 hitters, and the model's raw agreement of $65.5\%$ is barely above that. We therefore centre the model's predicted split within each batter hand and ask whether it gets the direction of each hitter's deviation from his handedness group right. It does for $56.9\%$ of 545 hitters (interval $52.7\%$ to $61.0\%$), against $49.8\%$ when predictions are permuted within hand ($p = 0.001$). Projecting each embedding on the direction that most changes the model's platoon gap correlates with hitters' observed splits over the training seasons at a partial $r$ of $0.133$ among 330 high-exposure hitters, with exposure held fixed and an interval from $0.014$ to $0.244$. Those splits come from the seasons the model trained on, so this is in-sample, and the earlier build gave $0.092$ with an interval from $-0.002$ to $0.185$. The model carries hitter-specific platoon information, and the amount is small, which is consistent with the ceiling in Section~\ref{sec:ceiling}.
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Using the model}
+\label{sec:use}
+
+% Source: Table 2 (medium stratum, sealed 2025); Section 4.3 (error at noise floor, coverage 0.8695).
+The results point to one narrow use. Ranking hitters by projected wOBA against a given hand, the model beat both baselines pooled across strata, and in an exploratory band of hitters with 113 to 451 prior plate appearances against that hand it beat both on error and on order. If the 2026 test we registered for that band confirms it, a team choosing among a few such hitters for a start against a left-hander could use the model's order. The size of any one hitter's split deserves less weight. On the split itself the model's error was lower than a handedness-only split on 2025 and, for the selection model on 2024, lower than the boosted baseline, but every method sat close to the noise floor and none ordered splits measurably better than another. Any interval shown to a decision maker should carry its measured coverage, 87\% for a nominal 95\%.
+
+Figure~\ref{fig:case} shows the kind of decision we mean. We pick the hitters by a stated rule, the medium-band hitters whose model and empirical Bayes rankings of projected wOBA against left-handed pitching differ most, so the example is not chosen for how well it turned out. We do not convert these differences into runs. The test in Section~\ref{sec:test} did not pass, so a runs figure would describe a gain we have not shown.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering\vspace{3em}TODO (new render, clean build): medium-band hitters with the largest gap between model and EB rank of projected wOBA vs LHP, projected and observed 2025\\ (\texttt{model\_visualization\_disagreement.py} is old-build, 2024, pooled, split-based; \texttt{disagreement\_top.csv} exists only on the old build)\vspace{3em}}}
+\caption{Platoon ranking in the medium band. Hitters are chosen as those where the model and empirical Bayes orders disagree most.}
+\label{fig:case}
+\end{figure}
+
+\subsection{Other queries through the same interface}
+\label{sec:otherqueries}
+
+% Source: decision log 2026-09-10/11 (matchup explorer, PR #4); src/analysis/matchup_explorer_data.py.
+% results/pitcher_type_query/ is old-build (data_dir phase_d5); cite no numbers from it.
+Handedness is one weight vector among many. Equation~\ref{eq:query} accepts any set of pitchers, so the same trained model answers how a hitter does against high velocity, against pitchers who work the top of the zone with fastballs and the bottom with breaking balls, or against a given pitch mix. We built an explorer that exposes these queries over pitcher traits computed from 2015 through 2023 pitches only. It runs on an earlier development model, trained through 2023 before we removed pitcher plate appearances, not on the model scored here. None of them is validated. Each would need its own target and its own ceiling before a number from it could be read as a claim, and the platoon ceiling suggests the measurable signal for narrower pitcher groups will be smaller still. We treat the explorer as a source of hypotheses. A candidate finding from it would be fixed in advance and scored once on held-out data, the way the platoon test was.
+% TODO: add the explorer URL once the repository is public.
+
+\subsection{Limitations and future directions}
+\label{sec:limits}
+
+% Source: ~/os/knowledge/library/baseball-research/Layer1_Architecture_Plan_v2.md section 2.3
+% (history encoder and pitcher-ID residual cut 2026-08-08); decision log 2026-08-18 (count chain
+% independence); decision log Phase M entry (post_selection_descriptive, eval_season 2024).
+The largest concession is the missing history encoder. A hitter enters the model only through his embedding row and his batting side. The row is learned from all of his training pitches at once, so a hitter with little history keeps a row near zero, and a debut hitter gets the average row of low-exposure hitters on his side. We had planned an encoder that pools a hitter's recent pitches and blends them with the embedding as a second-version upgrade, and we cut it, along with the phase that would have built it, to finish an evaluated first version. It was the design meant for small samples, the regime where our predictions are too dispersed. It cannot help a debut hitter, who has no recent pitches to pool, so cold start would need another source of information. It is the first thing we would add.
+
+Pitchers enter only through the characteristics of each pitch. A learned residual for each pitcher would capture what those characteristics miss, and we cut it at the same time. The count chain assumes that pitches are independent given the count, so the model does not represent sequencing within a plate appearance, such as a pitcher setting up a breaking ball with fastballs up. \citet{melville2023} handle sequence with a recurrent network, and a sequence-aware composition would need the chain in Section~\ref{sec:compose} to condition on more than the count.
+
+The evaluation has limits of its own. The ceiling fractions in Section~\ref{sec:ceiling} are computed on 2024, the season used to select the configuration, so they are descriptive. Running the same analysis on 2025 would make them held out. The ceiling itself is fragile at this sample size, since the alternative estimate falls below the model's achieved value. The prediction intervals cover 87\% rather than 95\%. Finally, which hitters face left-handers, and how often, is partly a manager's choice. A hitter who is benched against left-handers contributes few plate appearances to that side, and neither the model nor the baselines account for why those plate appearances are missing.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We trained a hitter model on 6.5 million Statcast pitches and composed its per-pitch predictions into a projected wOBA against each pitcher hand through the count chain. A pre-registered test on held-out 2025 data did not pass. Scored on each hitter's wOBA against each hand, error was tied with the strongest baseline, rank order beat both baselines when pooled, and one exploratory band of hitters beat both on both measures. On 2024 the same architecture trained through 2023 reached 60\% of the platoon rank ceiling and 64\% of the ceiling for wOBA pooled over both hands, and every method's platoon error sat close to the noise floor. The embedding encodes power, contact, and plate discipline, summaries of what its own heads predict. With one season of plate appearances, the size of a hitter's platoon split is mostly noise for every method we tested. What a pitch-level model adds that we could measure is in ordering hitters against a given hand, and that is where we would use it if the 2026 test we registered confirms it.
+
+\clearpage
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}
