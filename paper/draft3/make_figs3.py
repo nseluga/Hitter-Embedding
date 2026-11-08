@@ -88,14 +88,50 @@ def fig_reliability():
     save(fig, "fig_reliability.png")
 
 
+STRATUM_LABELS = {"low": "Low", "low_seen": "Low, seen only", "medium": "Medium", "high": "High", "all": "All"}
+
+
+# ------------------------------------------------------------------ 2a. margin over boosted baseline by stratum
+def fig_strata():
+    """Model minus boosted baseline by stratum at 10 and 50 PA floors, with the seen-only low row.
+    Filled marker = 95% interval excludes zero in the model's favour."""
+    d = pd.read_csv(RES / "paper_draft3/seen_only_rescore.csv")
+    d = d[d.opponent == "gbm_full"]
+    rows = [("all", "low"), ("seen_only", "low"), ("all", "medium"), ("all", "high")]
+    labels = ["Low", "Low, seen only", "Medium", "High"]
+    floors = {10: (SEQ_BLUES[2], -0.13), 50: (SEQ_BLUES[1], 0.13)}
+    fig, (a, b) = plt.subplots(1, 2, figsize=(6.5, 2.4), sharey=True)
+    for ax, m, good, title in ((a, "rank", lambda lo, hi: lo > 0, "Rank correlation, model minus boosted"),
+                               (b, "rmse", lambda lo, hi: hi < 0, "RMSE, model minus boosted")):
+        tidy(ax, grid="x")
+        ax.axvline(0, color=INK, lw=0.8)
+        for floor, (col, dy) in floors.items():
+            for i, (pop, st) in enumerate(rows):
+                r = d[(d.population == pop) & (d.stratum == st) & (d.min_eval_pa == floor)].iloc[0]
+                x, lo, hi = r[f"{m}_difference"], r[f"ci_low_{m}"], r[f"ci_high_{m}"]
+                ax.plot([lo, hi], [i + dy] * 2, color=col, lw=1.2)
+                ax.plot([x], [i + dy], "o", ms=4, color=col, mfc=col if good(lo, hi) else "white",
+                        label=f"Evaluation floor {floor} PA" if i == 0 else None)
+        ax.set_title(title, fontsize=8)
+    a.set_yticks(range(len(rows)), labels)
+    a.invert_yaxis()
+    a.set_xlabel("Difference (positive favours model)")
+    b.set_xlabel("Difference (negative favours model)")
+    fig.legend(*a.get_legend_handles_labels(), loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.07))
+    fig.tight_layout()
+    save(fig, "fig_claim1_2025_strata.png")
+
+
 # ------------------------------------------------------------------ 2. calibration 2025
 def fig_calibration_2025():
     cal = pd.read_csv(RES / "model_evaluation_final_clean/calibration.csv").set_index("stratum")
+    seen = pd.read_csv(RES / "paper_draft3/seen_only_calibration.csv")
+    cal.loc["low_seen"] = seen[(seen.population == "seen_only") & (seen.stratum == "low")].iloc[0]
     bins = pd.read_csv(RES / "model_evaluation_final_clean/calibration_reliability.csv")
     span = (bins["mean_pred"].min(), bins["mean_pred"].max())
     lim = (0.22, 0.42)
-    fig, axes = plt.subplots(1, 4, figsize=(6.5, 1.95), sharex=True, sharey=True)
-    for ax, stratum in zip(axes, ["low", "medium", "high", "all"]):
+    fig, axes = plt.subplots(1, 5, figsize=(6.5, 1.75), sharex=True, sharey=True)
+    for ax, stratum in zip(axes, ["low", "low_seen", "medium", "high", "all"]):
         r = cal.loc[stratum]
         tidy(ax, grid="both")
         ax.plot(lim, lim, color=FAINT, lw=0.9, ls="--", label="Perfect calibration")
@@ -105,10 +141,10 @@ def fig_calibration_2025():
         ax.plot(xs, r["intercept"] + r["slope"] * xs, color=MODEL, lw=1.6, label="Fitted line")
         if stratum == "all":
             ax.plot(bins["mean_pred"], bins["mean_obs"], "o", ms=2.8, color=INK, label="Binned hitters")
-        ax.text(0.04, 0.96, f"{stratum.capitalize()} (n = {int(r['n_hitters'])})", transform=ax.transAxes,
-                va="top", fontsize=7.5)
+        ax.text(0.04, 0.96, f"{STRATUM_LABELS[stratum]}\n(n = {int(r['n_hitters'])})", transform=ax.transAxes,
+                va="top", fontsize=7)
         ax.text(0.96, 0.04, f"slope {r['slope']:.2f}\n± {r['slope_se']:.2f} SE", transform=ax.transAxes,
-                va="bottom", ha="right", fontsize=7.5, color=MODEL)
+                va="bottom", ha="right", fontsize=7, color=MODEL)
         ax.set_xlim(lim)
         ax.set_ylim(lim)
         ax.set_xticks([0.25, 0.30, 0.35, 0.40])
@@ -425,7 +461,7 @@ def fig_ceiling():
     save(fig, "fig_ceiling.png")
 
 
-FIGS = {"ceiling": fig_ceiling, "reliability": fig_reliability, "calibration": fig_calibration_2025, "head_partial": fig_head_partial,
+FIGS = {"strata": fig_strata, "ceiling": fig_ceiling, "reliability": fig_reliability, "calibration": fig_calibration_2025, "head_partial": fig_head_partial,
         "disagreement": fig_disagreement, "surfaces": fig_surfaces, "velocity": fig_velocity,
         "miss_damage": fig_miss_damage, "level_query": fig_level_query}
 
