@@ -396,7 +396,36 @@ def fig_level_query():
     save(fig, "fig_level_query.png")
 
 
-FIGS = {"reliability": fig_reliability, "calibration": fig_calibration_2025, "head_partial": fig_head_partial,
+def fig_ceiling():
+    """Draft-2 ceiling figure with the 2024-only alternative ceiling (0.167) removed."""
+    ex = pd.read_csv(RES / "measurement_ceiling_clean/differential_exhibit.csv")
+    ex = ex[ex["exhibit_column"] == "pooled"].set_index("model")
+    lev = json.load(open(RES / "measurement_ceiling_clean/level_ceiling_level_ceiling.json"))["intersection"]
+    fig, (a, b) = plt.subplots(1, 2, figsize=(6.5, 2.6), gridspec_kw={"width_ratios": [1, 2.2]})
+    a.bar([0], [lev["achieved_rank_corr_weighted"]], width=0.5, color=MODEL)
+    a.axhline(lev["ceiling_rank_corr"], color=INK, lw=1.2, ls="--")
+    a.text(0.3, lev["ceiling_rank_corr"] + 0.02, f"ceiling {lev['ceiling_rank_corr']:.2f}", ha="right")
+    a.text(0, lev["achieved_rank_corr_weighted"] + 0.02, f"{lev['achieved_rank_corr_weighted']:.2f}", ha="center")
+    a.set_xticks([0], ["Model"]); a.set_xlim(-0.6, 0.6); a.set_ylim(0, 0.85)
+    a.set_ylabel("Rank correlation with 2024 outcome"); a.set_title("Level of wOBA", fontsize=8)
+    rows = [("model_v1_model", "Model", MODEL), ("eb_bivariate", "Empirical Bayes", EB), ("gbm_full", "Boosted", GBM)]
+    for i, (k, lab, col) in enumerate(rows):
+        r = ex.loc[k]
+        b.bar(i, r["rank_corr_within_stand"], width=0.5, color=col)
+        b.errorbar(i, r["rank_corr_within_stand"], yerr=[[r["rank_corr_within_stand"] - r["rank_corr_ci_low"]],
+                   [r["rank_corr_ci_high"] - r["rank_corr_within_stand"]]], color=INK, capsize=3, lw=1)
+    main_c = ex.loc["model_v1_model", "rank_ceiling_analytic_pearson"]
+    b.axhline(main_c, color=INK, lw=1.2, ls="--")
+    b.text(2.45, main_c + 0.01, f"ceiling {main_c:.2f}", ha="right")
+    b.set_xticks(range(3), [r[1] for r in rows]); b.set_ylim(0, 0.85)
+    b.set_title("Platoon split (L minus R), side average removed", fontsize=8)
+    for ax in (a, b):
+        tidy(ax)
+    fig.tight_layout()
+    save(fig, "fig_ceiling.png")
+
+
+FIGS = {"ceiling": fig_ceiling, "reliability": fig_reliability, "calibration": fig_calibration_2025, "head_partial": fig_head_partial,
         "disagreement": fig_disagreement, "surfaces": fig_surfaces, "velocity": fig_velocity,
         "miss_damage": fig_miss_damage, "level_query": fig_level_query}
 

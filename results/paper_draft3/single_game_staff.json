@@ -1,0 +1,13 @@
+{
+  "starter_bf_per_start": 25.082125603864736,
+  "starter_training_starts": 207,
+  "relief_bf_per_game": 14.88888888888889,
+  "rest_rule_removed": [],
+  "n_relievers": 16,
+  "game_pk": 776532,
+  "weight_dropped_share": 0.0018032123156709798,
+  "dropped_pitchers": [
+    "Bruj\u00e1n, Vidal"
+  ],
+  "max_generic_gap_vs_cached": 5.134170866227805e-12
+}

@@ -1,30 +1,11 @@
 % =====================================================================================
 \section{Results}
 \label{sec:results}
-
-\subsection{How much signal one season holds}
-\label{sec:ceiling}
-
-% Source: results/measurement_ceiling_clean/differential_fraction_of_ceiling.csv (0.2965, 0.167);
-% differential_exhibit.csv (0.1766, EB 0.1458, GBM 0.1413; RMSE 0.0633 vs floor 0.0639);
-% level_ceiling_level_ceiling.json (0.742, 0.475); routes.json (fraction CI 0.264-0.910).
-One season of outcomes limits how well any projection can score, so the size of that limit is measured before the projections are compared. Comparing the spread of hitters' observed values with the spread that sampling noise alone would produce gives the share of the spread that is real. This share is the same quantity as the reliability in Section~\ref{sec:eval}, and it sets the highest rank correlation any method could reach against those outcomes. The ceilings were computed on 2024, the selection season, for the 545 hitters with at least 10 PA against each hand. For a hitter's level, wOBA pooled over both hands, the ceiling is 0.742, and the model reaches 0.475, or 64\% of it (Figure~\ref{fig:ceiling}).
-
-The platoon split is much harder to measure. True splits vary little across hitters compared with the noise in one season's observed split, so even a perfect projection would reach a rank correlation of only about 0.30 with it. After removing each batting side's average split, the model reaches 0.177, 60\% of that ceiling, compared with 49\% for empirical Bayes and 48\% for the boosted baseline. The model's share is imprecise (interval 26\% to 91\%, wide enough to hold both baselines' shares), and that interval holds the ceiling fixed, so the true uncertainty is larger. The share also depends on how the variance of true splits is estimated. That variance can instead be taken from 2024 alone, although small errors in the noise model can move this estimate by about its own size. With it, the ceiling falls to 0.167, below the model's 0.177. The share is a rough guide, not a measurement. The model's RMSE for the split is 0.0633, close to the 0.0639 floor that sampling noise sets, and empirical Bayes is about as close. One season of a hitter's observed split says little about whether any projection of that split was right.
-
-% Source: paper/draft2/make_figs.py ceiling().
-\begin{figure}[!ht]
-\centering
-\includegraphics[width=0.85\linewidth]{fig_ceiling.png}
-\caption{\toreview Rank correlation with 2024 outcomes against the ceiling one season allows, 545 hitters with at least 10 PA against each hand. Left, the level of wOBA pooled over both hands. Right, the platoon split after removing each batting side's average split, with 95\% intervals from resampling hitters. The dashed ceiling takes the variance of true splits from earlier seasons (0.296), and the dotted one from 2024 alone (0.167).}
-\label{fig:ceiling}
-\end{figure}
-
-\subsection{Handedness splits on 2025}
 \label{sec:test}
 
-% Source: model_v1_claim1_scores_min_pa_sweep_clean_dim64_final.csv; paired CSV; verdict JSON.
-The 2025 test scores each side's wOBA separately, a target that falls between the level and the split, with more real variation across hitters than the split and fewer PA behind each value than the level. The results by stratum and pooled can be seen in Table~\ref{tab:test}. Across all 1,157 units the model ties both baselines on error. Its RMSE is 0.0452 against 0.0453 for the boosted baseline and 0.0460 for empirical Bayes, and both difference intervals include zero. It orders hitters better than both, with a weighted rank correlation of 0.47 against 0.42 for the boosted baseline and 0.40 for empirical Bayes. The intervals on those two differences, 0.011 to 0.089 and 0.015 to 0.125, both exclude zero. Like every comparison outside the low stratum, these pooled comparisons are exploratory.
+% Source: model_v1_claim1_scores_min_pa_sweep_clean_dim64_final.csv; paired CSV; verdict JSON;
+% results/paper_draft3/seen_only_rescore.csv (population "all" reproduces Table 1).
+The 2025 results by prior exposure can be seen in Table~\ref{tab:test} and Figure~\ref{fig:strata}. The low stratum was specified in advance as the test. There the model had lower error and higher rank correlation than both baselines, but every interval spans zero, so it did not pass. Further analysis was exploratory.
 
 \begin{table}[!ht]
 \centering\small
@@ -32,130 +13,55 @@ The 2025 test scores each side's wOBA separately, a target that falls between th
 \toprule
  & & \multicolumn{3}{c}{RMSE (lower better)} & \multicolumn{3}{c}{Rank corr. (higher better)} \\
 \cmidrule(lr){3-5}\cmidrule(lr){6-8}
-Prior PA & Splits & Model & GBM & EB & Model & GBM & EB \\
+Prior PA & Units & Model & GBM & EB & Model & GBM & EB \\
 \midrule
 Low & 384 & 0.0605 & 0.0609 & 0.0620 & 0.16 & 0.12 & 0.13 \\
+\quad seen only & 220 & 0.0588 & 0.0617 & 0.0630 & 0.23 & 0.17 & 0.11 \\
 Medium & 280 & 0.0455 & 0.0479 & 0.0492 & 0.42 & 0.28 & 0.22 \\
 High & 493 & 0.0395 & 0.0385 & 0.0387 & 0.50 & 0.49 & 0.48 \\
 All & 1157 & 0.0452 & 0.0453 & 0.0460 & 0.47 & 0.42 & 0.40 \\\bottomrule
 \end{tabular}
-\caption{Sealed 2025 side-specific wOBA. GBM: gradient-boosted; EB: empirical Bayes. Splits are hitter by pitcher hand. Medium is 113 to 451 prior PA.}
+\caption{2025 side-specific wOBA by prior PA against the hand. GBM is the gradient-boosted baseline and EB empirical Bayes, and ``seen only'' drops hitters absent from the training seasons.}
 \label{tab:test}
 \end{table}
 
-The margin depends on prior exposure (Figure~\ref{fig:strata}). In the low stratum, the pre-registered test, the model's error is lower and its rank correlation higher than both baselines, but every interval spans zero, so the test was not passed. Of the stratum's 384 units, 164 (43\%) belong to hitters absent from the training data, and these share the generic projections of Section~\ref{sec:query}. The model cannot order these hitters among themselves, which leaves 220 of the 384 units where a hitter's own pitches inform the projection. The stratum holds 246 batters, and detecting the observed rank margin over the boosted baseline with 80\% power would take about 5,200.
+Across all 1,157 units the model's RMSE is 0.0452 against 0.0453 for the boosted baseline and 0.0460 for empirical Bayes, and both difference intervals include zero. Its weighted rank correlation is 0.47 against 0.42 and 0.40, and those intervals, 0.011 to 0.089 and 0.015 to 0.125, exclude zero. In the medium stratum the model beats both baselines on both measures, with all four intervals excluding zero. Its rank correlation is 0.42 against 0.28 for the boosted baseline and 0.22 for empirical Bayes, and its RMSE is about 2 points of wOBA below the boosted baseline and 4 below empirical Bayes. In the high stratum the three methods are even.
 
-The clearest signal is in the medium stratum, hitters with 113 to 451 prior PA against a hand. This comparison is exploratory. It is one of sixteen in Table~\ref{tab:test} (four rows, two baselines, two measures) and the only row where all four intervals exclude zero. There the model beats both baselines on both measures. Its rank correlation is 0.42 against 0.28 for the boosted baseline and 0.22 for empirical Bayes. Its RMSE is about 2 points of wOBA below the boosted baseline and 4 below empirical Bayes, against a typical error near 45 points. For these hitters the model's advantage lies mostly in ordering them. Among high-exposure hitters the three methods are even.
+Of the low stratum's 384 units, 164 (43\%) belong to hitters absent from the training seasons. Restricted to the other 220 units (153 batters), the model's RMSE is 0.0588 against 0.0617 for the boosted baseline and 0.0630 for empirical Bayes, with differences of $-0.0029$ (interval $-0.0053$ to $-0.0005$) and $-0.0043$ ($-0.0070$ to $-0.0016$). Its rank correlation is 0.23 against 0.17 and 0.11. That interval excludes zero against empirical Bayes (0.002 to 0.258) but not against the boosted baseline ($-0.070$ to 0.188).
 
 \begin{figure}[!ht]
 \centering
 \includegraphics[width=0.72\linewidth]{fig_claim1_2025_strata.png}
-\caption{\toreview The model's 2025 margin over the boosted baseline on error and on rank correlation, by prior-exposure stratum, at evaluation floors of 10 and 50 PA. Raising the floor from 10 to 25 or 50 PA changes no stratum's outcome, though at 50 PA the model's low-stratum RMSE is nominally above the boosted baseline's.}
+\caption{\toreview The model's 2025 margin over the boosted baseline on error and rank correlation by stratum, at evaluation floors of 10 and 50 PA. Raising the floor to 25 or 50 PA changes no stratum's outcome.}
 \label{fig:strata}
 \end{figure}
 
-% Source: results/v_chain_clean/paper_figures/fig_calibration_2025 source JSON.
-Calibration is poorest in the low stratum (Figure~\ref{fig:calibration}). A PA-weighted regression of each unit's observed 2025 wOBA on its projection gives a slope near one in the medium (0.98) and high (0.93) strata. There the projections are spread about as widely as the outcomes they predict. In the low stratum the slope is 0.59, so projections for little-seen hitters are spread more widely than their outcomes support. On average, a 10-point gap between two low-stratum projections corresponded to about 6 points of observed gap. Across all strata the slope is 0.81, below one by more than three standard errors. The projections are also off in level. High-stratum projections averaged about 9 points of wOBA above the observed values and low-stratum projections about 7 points below.
+% Source: results/v_chain_clean/paper_figures/fig_calibration_2025 source JSON;
+% measurement_ceiling_summary.json (coverage 0.8695, 1,149 units).
+A PA-weighted regression of each unit's observed 2025 wOBA on its projection gives a slope of 0.98 in the medium stratum, 0.93 in the high, and 0.59 in the low (Figure~\ref{fig:calibration}). Across all strata the slope is 0.81, below one by more than three standard errors. High-stratum projections averaged about 9 points of wOBA above the observed values and low-stratum projections about 7 points below. On 2024, the nominal 95\% intervals covered the observed value for 87\% of 1,149 units. Nearly all of their width comes from the sampling noise of the plate appearances, and the seed spread alone has a mean half-width of about 6 points.
 
 \begin{figure}[!ht]
 \centering
 \includegraphics[width=0.95\linewidth]{fig_calibration_2025.png}
-\caption{\toreview Calibration of 2025 side-specific projections by stratum. Each line is the PA-weighted regression of observed on projected wOBA. Points on the pooled panel are ten bins with equal PA. The dashed diagonal is perfect calibration.}
+\caption{\toreview Calibration of 2025 side-specific projections by stratum, as the PA-weighted regression of observed on projected wOBA. The dashed diagonal is perfect calibration.}
 \label{fig:calibration}
 \end{figure}
 
-The model's prediction intervals are also too narrow. The intervals are built from the spread across the five seeds and each unit's sampling noise. Nearly all of the width comes from sampling noise. The seed spread alone gives a mean half-width of about 6 points of wOBA and covers 8\% of units, against about 105 points once sampling noise is added. On 2024, the nominal 95\% intervals covered the observed value for 87\% of 1,149 units. A band shown as 95\% would therefore miss about one unit in eight rather than one in twenty.
+% Source: results/case_studies_2025/case_studies_2025.json (539, 296/243, wmae 0.0448 / 0.0462);
+% all_hitters_bootstrap.json (diff 0.0014 [0.0002, 0.0026], share [0.506, 0.592]).
+Graded against each hitter's observed 2025 platoon split, the model's projected split was closer than the empirical Bayes projection for 296 of the 539 hitters with at least 10 PA against each hand (55\%, interval 51\% to 59\%). Weighted by the harmonic mean of each hitter's PA against the two hands, its mean absolute error was 0.0448 against 0.0462, a difference of 0.0014 (interval 0.0002 to 0.0026).
 
-% Source: results/case_studies_2025/case_studies_2025.json (539, 296/243, wmae_model 0.0448 / wmae_eb 0.0462,
-% within noise 519); all_hitters_bootstrap.json (diff 0.0014 [0.0002, 0.0026], share [0.506, 0.592]).
-Because a platoon decision depends on the gap between a hitter's two sides, the model's projected split and the empirical Bayes split were also graded against each hitter's observed 2025 split. Across the 539 hitters with at least 10 PA against each hand in 2025, the model's projection was closer for 296 (55\%, interval 51\% to 59\%) and the empirical Bayes projection for 243. Weighted by the harmonic mean of each hitter's PA against the two hands, the model's mean absolute error is 0.0448 against 0.0462 for empirical Bayes. The difference, 0.0014 (interval 0.0002 to 0.0026), is about 1.4 points of wOBA. Both mean errors, near 45 points, are about as large as the largest projected split in Table~\ref{tab:cases}, which is consistent with the noise in one season's observed split described in Section~\ref{sec:ceiling}. The two projections got the direction of the observed split right about equally often, for 338 and 337 of the 539 hitters. For 519 of the 539 hitters, sampling noise in the observed split is large enough to reverse which projection is closer, so the comparison is informative only in aggregate.
+\subsection{How much signal one season holds}
+\label{sec:ceiling}
 
-Overall, the model did not pass the one pre-registered test. In exploratory comparisons it ties both baselines on error and orders hitters better than both, most clearly for hitters with a moderate track record. Its projected platoon splits are also slightly closer to the observed splits than those of empirical Bayes, though only in aggregate. For little-seen hitters its projections are spread too widely, and its prediction intervals are too narrow.
-
-\subsection{Case studies and disagreements}
-\label{sec:anchors}\label{sec:disagree}
-
-% Source: docs/phase-v-spec.md V.8 (anchors and expectations written before results);
-% results/case_studies_2025/case_studies_2025.{csv,json}.
-The case studies are five well-known hitters, each with an expected platoon direction fixed before any projection was examined.\footnote{Alec Bohm replaced a pre-registered right-handed hitter whose training data showed no platoon split.} Joc Pederson and Kyle Schwarber are left-handed hitters with reputations as platoon hitters and should project worse against left-handed pitchers. Alec Bohm, a right-handed hitter, should project better against them. Mike Trout and Juan Soto play every day and should project close to flat. All five are high-exposure hitters, so they show how the model describes hitters it knows well. Each projected 2025 split can be seen in Table~\ref{tab:cases} beside the empirical Bayes projection and the observed split.
-
-\begin{table}[!ht]
-\centering\small
-\begin{tabular}{llrrrr}
-\toprule
-Hitter & Bats & Model & EB & Observed (SE) & $z$ \\
-\midrule
-Joc Pederson & L & $-0.047$ & $-0.039$ & $+0.172$ (0.121) & 1.77 \\
-Kyle Schwarber & L & $-0.042$ & $-0.028$ & $+0.025$ (0.039) & 1.52 \\
-Juan Soto & L & $-0.041$ & $-0.044$ & $-0.074$ (0.041) & 0.78 \\
-Mike Trout & R & $+0.009$ & $+0.007$ & $-0.062$ (0.056) & 1.25 \\
-Alec Bohm & R & $+0.022$ & $+0.033$ & $+0.042$ (0.052) & 0.28 \\
-\midrule
-Aaron Judge & R & $+0.020$ & $+0.003$ & $+0.038$ (0.049) & 0.54 \\
-José Altuve & R & $+0.021$ & $+0.026$ & $+0.013$ (0.051) & 0.22 \\
-Marcell Ozuna & R & $+0.020$ & $+0.002$ & $-0.006$ (0.050) & 0.33 \\
-\bottomrule
-\end{tabular}
-\caption{2025 platoon split (wOBA against left-handed pitchers minus wOBA against right-handed pitchers) for the five case-study hitters (top) and three high-exposure hitters among the twenty on whom the model and empirical Bayes disagreed most in 2024 (bottom). SE is the standard error of the observed split, and $z$ is the distance of the observed split from the midpoint of the two projections in standard errors.}
-\label{tab:cases}
-\end{table}
-
-The projections match four of the five expectations. Pederson and Schwarber project worse against left-handed pitchers, Bohm better, and Trout close to flat. Soto, expected to be flat, projects 0.041 worse against left-handed pitchers, and Soto's observed 2025 split of $-0.074$ runs the same way. Empirical Bayes matches the same four expectations and also projects Soto worse against left-handed pitchers ($-0.044$), so the case studies do not separate the two methods on direction. Empirical Bayes was closer for all five in 2025, by 0.002 to 0.014. Every $z$ in Table~\ref{tab:cases} is below 1.96, however, which means noise alone could reverse which projection is closer. Pederson shows the size of that noise. With 19 PA against left-handed pitchers in 2025, Pederson's observed split of $+0.172$ has a standard error of 0.121, wide enough to hold either projection and the opposite sign.
-
-% Source: results/v_chain_clean/disagreement_summary.json, disagreement_top.csv;
-% case_studies_2025.csv (disagreement rows, stratum by 2025 prior PA).
-% Disagreement rank scatter (fig_disagreement.png) dropped from the text.
-Hitters on whom the model and empirical Bayes disagree show where pitch-level information moves a projection away from a hitter's outcome history. The 2024 projections compared here come from the first seed of the selection model, trained through 2023. Across 545 hitters in 2024, the two methods' projected splits have a Spearman correlation of 0.77. The correlation is 0.80 and 0.79 in the low and medium strata and 0.69 in the high stratum. Lower agreement in the high stratum is consistent with empirical Bayes shrinking least for hitters with long outcome histories, while the model's projection still rests on how the hitter handles each pitch.
-
-With hitters ranked within batting side, the largest disagreement is Robbie Grossman, first among right-handed hitters by empirical Bayes and 324th by the model. Marcell Ozuna is the reverse, 6th by the model and 316th by empirical Bayes, and Aaron Judge and José Altuve also rank much higher by the model. Ozuna, Judge, and Altuve are graded against 2025 in Figure~\ref{fig:cases}, along with six medium-stratum hitters from the twenty largest disagreements. Most of these observed splits have a standard error between 0.04 and 0.06, and a few have one near 0.1. These errors are at least the size of the gaps being graded, so the cases show how the two methods differ rather than which is right. The evidence on split accuracy remains the 539-hitter comparison in Section~\ref{sec:test}.
-
-% Source: paper/draft2/make_figs.py cases().
-\begin{figure}[!ht]
-\centering
-\includegraphics[width=0.78\linewidth]{fig_cases.png}
-\caption{\toreview 2025 platoon splits for the five case-study hitters (top), the three high-exposure disagreements in Table~\ref{tab:cases} (middle), and the six medium-stratum hitters among the twenty largest 2024 disagreements (bottom). Each observed split has a 1.96 standard error bar beside the model and empirical Bayes projections.}
-\label{fig:cases}
-\end{figure}
-
-\subsection{What the embedding learned}
-\label{sec:embedding}
-
-% Source: results/v_chain_clean/embedding_structure/embedding_structure.json (norm r 0.934, PC1 r
-% 0.090, silhouette max 0.054, neighbour purity); embedding_alt_views.json (LDA 5-fold, n 1,493,
-% power 0.791, contact 0.754, zone swing 0.746, chase 0.734); seed_stability_corrected_null.json
-% (0.837 vs 0.123). Selection model (trained through 2023).
-The loss scores single pitches and never sees a hitter-level statistic such as a contact rate or a 90th-percentile exit velocity, so any such summary present in the embedding was assembled by the model. The analyses in this section and those that follow use the selection model, trained through 2023. The head outputs, the response surfaces, and the named nearest neighbors come from its first seed alone. For the classifiers here and the neighborhood summaries in Section~\ref{sec:neighbors}, each hitter's embedding is averaged over the five seeds and scaled to unit length.\footnote{The five seeds give similar vectors for the same hitter, with a median cosine similarity of 0.83 after rotating each onto the first, against 0.12 when hitters are shuffled before the rotation is fit. Embeddings are averaged after this alignment. They are scaled to unit length because an embedding's length grows with the hitter's exposure (correlation 0.93 with log prior PA), and after scaling the main direction of variation is nearly unrelated to playing time (0.09).} Hitters were split into thirds on attributes measured from their own pitches, and a linear classifier on the embedding was fit to recover each hitter's third under five-fold cross-validation. Across 1,493 hitters it recovers the power third (90th-percentile exit velocity) for 79\% of hitters and the contact third (contact rate on swings) for 75\%, against 33\% by chance. In-zone swing rate (75\%) and chase rate (73\%) are recovered nearly as well. Each hitter can be placed on the fitted power and contact directions (Figure~\ref{fig:powercontact}), and mean observed wOBA rises toward high power and high contact. Positions on the two fitted directions correlate at $-0.44$, against $-0.22$ for the observed statistics, so the figure overstates how much power and contact trade off across hitters. This indicates that the embedding organizes hitters by power and contact, although the model was never given either statistic.
+% Source: results/measurement_ceiling_clean/differential_fraction_of_ceiling.csv (0.2965);
+% differential_exhibit.csv (0.1766, EB 0.1458, GBM 0.1413; RMSE 0.0633 vs floor 0.0639);
+% level_ceiling_level_ceiling.json (0.742, 0.475); routes.json (fraction CI 0.264-0.910).
+One season of outcomes limits how well any projection can score. The share of the spread in hitters' observed values that is not sampling noise is the reliability of Section~\ref{sec:eval}, and it sets the highest rank correlation any method could reach. On 2024, the selection season, for the 545 hitters with at least 10 PA against each hand, that ceiling is 0.742 for a hitter's level, and the model reaches 0.475, or 64\% of it (Figure~\ref{fig:ceiling}). For the platoon split, after removing each batting side's average split, the ceiling is about 0.30. The model reaches 0.177, or 60\% (interval 26\% to 91\%), against 49\% for empirical Bayes and 48\% for the boosted baseline. The model's RMSE for the split is 0.0633, close to the 0.0639 floor that sampling noise sets, and empirical Bayes is about as close.
 
 \begin{figure}[!ht]
 \centering
-\includegraphics[width=0.95\linewidth]{fig1_power_contact.png}
-\caption{Hitters placed by the embedding on fitted power and contact directions. Left: observed power tercile. Right: mean observed wOBA per cell.}
-\label{fig:powercontact}
+\includegraphics[width=0.85\linewidth]{fig_ceiling.png}
+\caption{\toreview Rank correlation with 2024 outcomes against the ceiling one season allows (dashed), for the level of wOBA (left) and the platoon split after removing each batting side's average (right). Bars are 545 hitters with at least 10 PA against each hand, with 95\% intervals from resampling hitters.}
+\label{fig:ceiling}
 \end{figure}
-
-% Source: make_figs3.py fig_miss_damage (asserts match to v_chain_clean/embedding_structure/
-% embedding_alt_views.json); decision log (spin vs fastball pairings).
-The embedding separates some skills by pitch type and not others. For each of two skills, two directions were fit in the embedding, one for breaking balls and one for fastballs (Figure~\ref{fig:missdamage}). For whiff rate the two directions correlate at 0.64 across hitters, and many hitters sit well off the diagonal. Relative to other hitters, they rank much worse against one pitch family than against the other. Their observed whiff rates on the two families correlate at 0.53. For power, measured by 90th-percentile exit velocity, the two directions correlate at 0.94 and the observed values at 0.83. Both correlations in the embedding run about 0.11 higher than the observed ones, partly because the two directions share the embedding's main direction of variation. The embedding follows the data on both skills. Whiff rate differs by pitch family in the observed values and in the embedding, and power is close to a single skill in both.
-
-\begin{figure}[!ht]
-\centering
-\includegraphics[width=0.8\linewidth]{fig_miss_damage.png}
-\caption{\toreview Each hitter placed on embedding directions fit to breaking-ball and fastball whiff rate (left, 1,335 hitters) and to breaking-ball and fastball power, 90th-percentile exit velocity (right, 1,203 hitters), in standard deviations. The dashed line is equal standing on both pitch families.}
-\label{fig:missdamage}
-\end{figure}
-
-% Source: results/v_chain_clean/fig_head_partial_heatmap source (to confirm in figs3_report.md).
-Each head draws on the embedding for a different part of the plate appearance. A head's hitter-specific output is its average prediction for the hitter over a fixed set of 2,000 training-season pitches. Figure~\ref{fig:headpartial} correlates this output with the hitter's observed training-season statistics after removing log prior PA. The swing head tracks swing rate (0.67), the contact head tracks whiff rate ($-0.56$), the exit velocity head tracks bat speed (0.61, for the 570 hitters with bat tracking), and the launch angle and spray heads track average launch angle (0.49) and pull rate (0.34). In each case the head's output follows the standard statistic for its own part of the plate appearance.
-
-\begin{figure}[!ht]
-\centering
-\includegraphics[width=0.78\linewidth]{fig_head_partial.png}
-\caption{\toreview Correlation between each head's hitter-specific output and observed hitter statistics, training seasons, after removing log prior PA.}
-\label{fig:headpartial}
-\end{figure}
-
-% Source: embedding_structure/neighbour_purity.csv; paper_figures/platoon_sign_agreement.json
-% (310/545, null 0.498); platoon/platoon_projection.json (cosine 0.142 [0.081, 0.201], partial r
-% 0.074 / 0.144 / 0.133). Platoon-direction bar figure (fig_platoon_direction.png) dropped from the text.
-The embedding also holds the platoon split, but more weakly than power or contact. No head's output tracks a hitter's observed platoon split closely (Figure~\ref{fig:headpartial}). Every correlation is 0.05 or below in size, and only the exit velocity head's interval excludes zero. After removing each batting side's average split, the model's projected 2024 split has the same sign as the observed split for 310 of 545 hitters (57\%), against 50\% when hitters are shuffled. Perturbing each embedding dimension gives the direction along which the projected left-minus-right gap grows. This direction has a cosine of 0.14 (interval 0.08 to 0.20) with a separate direction fit to decode the empirical Bayes split, so the two are related but far from the same. A hitter's position along the model's direction correlates with the observed split in the training seasons, after removing log prior PA, at 0.07 in the low stratum, 0.14 in the medium, and 0.13 in the high, each with an interval above zero. The split is a faint direction in the embedding, and it is faintest in the low stratum, where the pre-registered 2025 test was not passed.
-
