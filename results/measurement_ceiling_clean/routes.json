@@ -1,7 +1,9 @@
 {
   "step": "M.0",
   "post_selection_descriptive": "post-selection descriptive: computed on 2024 after the pre-registered platoon gate ran and failed (docs/research-manifest.md, 2026-08-20). Not a test of a hypothesis.",
-  "fallback_rules_fired": [],
+  "fallback_rules_fired": [
+    "4 \u2014 committed Route B failed to reproduce; current code's value adopted"
+  ],
   "route_rule": {
     "primary": "B_prime",
     "always_reported": [
@@ -17,46 +19,46 @@
     "frozen": "docs/phase-m-spec.md \u00a7M.0, decision log 2026-08-30"
   },
   "population": {
-    "n_hitters": 545,
+    "n_hitters": 473,
     "basis": "M.6 intersection"
   },
-  "observed_within_stand_var": 0.004195629093186848,
+  "observed_within_stand_var": 0.003948937798255225,
   "variance_decomposition": {
-    "total": 0.00470881178875325,
-    "between_stand": 0.0005131826955664018,
-    "within_stand": 0.004195629093186848
+    "total": 0.0044660369937886205,
+    "between_stand": 0.0005170991955333953,
+    "within_stand": 0.003948937798255225
   },
-  "mean_sampling_var_weighted": 0.004078477121970155,
-  "mean_sampling_var_unweighted": 0.007822805975054518,
+  "mean_sampling_var_weighted": 0.0037790679367972744,
+  "mean_sampling_var_unweighted": 0.006680401137228867,
   "routes": {
     "A": {
-      "tau2": 0.00011715197121669324,
-      "mean_sampling_var": 0.004078477121970155,
-      "reliability": 0.027922385085691365,
-      "ceiling_rank_corr": 0.16709992545088512,
+      "tau2": 0.000169869861457951,
+      "mean_sampling_var": 0.0037790679367972744,
+      "reliability": 0.043016595888900874,
+      "ceiling_rank_corr": 0.20740442591444588,
       "degenerate": false,
       "sampling_scale": 1.0,
-      "observed_within_stand_var": 0.004195629093186848,
-      "achieved_rank_corr": 0.1766184765973642,
-      "fraction_of_ceiling": 1.0569632279655137
+      "observed_within_stand_var": 0.003948937798255225,
+      "achieved_rank_corr": 0.17876950475270922,
+      "fraction_of_ceiling": 0.8619367883038883
     },
     "B": {
-      "tau2": 0.0005903354341684647,
-      "mean_sampling_var": 0.004078477121970155,
-      "reliability": 0.12644230777530005,
-      "ceiling_rank_corr": 0.35558727167222964,
+      "tau2": 0.0005899038609685004,
+      "mean_sampling_var": 0.0037790679367972744,
+      "reliability": 0.13502121054435925,
+      "ceiling_rank_corr": 0.36745232417874196,
       "degenerate": false,
-      "achieved_rank_corr": 0.1766184765973642,
-      "fraction_of_ceiling": 0.49669515943800757
+      "achieved_rank_corr": 0.17876950475270922,
+      "fraction_of_ceiling": 0.4865107470806181
     },
     "B_prime": {
-      "tau2": 0.0003929668596653433,
-      "mean_sampling_var": 0.004078477121970155,
-      "reliability": 0.0878836593456796,
-      "ceiling_rank_corr": 0.2964517824970523,
+      "tau2": 0.00039217327122086234,
+      "mean_sampling_var": 0.0037790679367972744,
+      "reliability": 0.09401836327925853,
+      "ceiling_rank_corr": 0.3066241400791179,
       "degenerate": false,
-      "achieved_rank_corr": 0.1766184765973642,
-      "fraction_of_ceiling": 0.5957747162445225
+      "achieved_rank_corr": 0.17876950475270922,
+      "fraction_of_ceiling": 0.5830248874292203
     }
   },
   "fragility_band": {
@@ -66,38 +68,38 @@
       1.03
     ],
     "tau2": [
-      0.00011715197121669324,
-      0.00023950628487579787,
-      -5.202342442411391e-06
+      0.000169869861457951,
+      0.0002832418995618695,
+      5.6497823354032493e-05
     ],
     "ceiling_rank_corr": [
-      0.16709992545088512,
-      0.2389240748294751,
-      NaN
+      0.20740442591444588,
+      0.26781728475256017,
+      0.11961226427740523
     ],
     "ceiling_range_finite_only": [
-      0.16709992545088512,
-      0.2389240748294751
+      0.11961226427740523,
+      0.26781728475256017
     ],
-    "any_degenerate": true
+    "any_degenerate": false
   },
   "monte_carlo_rank_ceiling": {
-    "tau2": 0.0003929668596653433,
-    "mean_sampling_var": 0.004078477121970155,
-    "reliability": 0.0878836593456796,
-    "ceiling_rank_corr": 0.2964517824970523,
+    "tau2": 0.00039217327122086234,
+    "mean_sampling_var": 0.0037790679367972744,
+    "reliability": 0.09401836327925853,
+    "ceiling_rank_corr": 0.3066241400791179,
     "degenerate": false,
-    "mc_pearson_mean": 0.2978032632236223,
-    "mc_pearson_sd": 0.03772612126141024,
-    "mc_spearman_mean": 0.3093063192544132,
-    "mc_spearman_sd": 0.041991688341098496,
+    "mc_pearson_mean": 0.3078529268154848,
+    "mc_pearson_sd": 0.04453155960712823,
+    "mc_spearman_mean": 0.31415080679051793,
+    "mc_spearman_sd": 0.04740802048890625,
     "n_draws": 300
   },
   "b_to_b_prime_diagnostic": {
-    "tau2_B": 0.0005903354341684647,
-    "tau2_B_prime": 0.0003929668596653433,
-    "relative_drop": 0.33433292850043983,
-    "share_of_B_to_A_gap_closed": 0.41710792949507175,
+    "tau2_B": 0.0005899038609685004,
+    "tau2_B_prime": 0.00039217327122086234,
+    "relative_drop": 0.33519121136621355,
+    "share_of_B_to_A_gap_closed": 0.47074901074209813,
     "reading": "a large drop toward A means selection into the 2024 eval population explains the gap; no material drop means the remaining A/B' gap is window or estimator",
     "verdict": "selection explains part of the gap; the remainder is window or estimator",
     "conditioning_label": "Route B' restricts PAST seasons to hitters who reached the 2024 eval population, which conditions on survival to 2024. That is the correct population for a claim about 2024 eval hitters, and it is not a general-population tau2."
@@ -115,31 +117,31 @@
     }
   },
   "stabilization": {
-    "per_pa_noise_var_vs_LHP": 0.25584280703562073,
-    "per_pa_noise_var_both_sides": 0.5177039663138799,
+    "per_pa_noise_var_vs_LHP": 0.2558885313556023,
+    "per_pa_noise_var_both_sides": 0.5177266699006718,
     "by_route": {
       "A": {
-        "tau2": 0.00011715197121669324,
-        "pa_star_weak_side": 2183.854051950985,
-        "pa_star_both_sides": 4419.080284669689
+        "tau2": 0.000169869861457951,
+        "pa_star_weak_side": 1506.379820171597,
+        "pa_star_both_sides": 3047.784141678529
       },
       "B": {
-        "tau2": 0.0005903354341684647,
-        "pa_star_weak_side": 433.3854826044722,
-        "pa_star_both_sides": 876.9657661548098
+        "tau2": 0.0005899038609685004,
+        "pa_star_weak_side": 433.78005855985776,
+        "pa_star_both_sides": 877.6458405453924
       },
       "B_prime": {
-        "tau2": 0.0003929668596653433,
-        "pa_star_weak_side": 651.0544101696016,
-        "pa_star_both_sides": 1317.4239852051765
+        "tau2": 0.00039217327122086234,
+        "pa_star_weak_side": 652.4884537872857,
+        "pa_star_both_sides": 1320.147771134308
       }
     },
     "observed_exposure": {
-      "median_denom_L": 86.0,
-      "median_denom_R": 223.0,
+      "median_denom_L": 96.0,
+      "median_denom_R": 260.0,
       "median_denom_L_by_stand": {
-        "L": 67.0,
-        "R": 94.0
+        "L": 79.5,
+        "R": 102.0
       }
     },
     "handoff_figures_checked": {
@@ -148,7 +150,7 @@
       "convention": "pa_star_weak_side"
     }
   },
-  "achieved_rank_corr_platoon": 0.1766184765973642,
+  "achieved_rank_corr_platoon": 0.17876950475270922,
   "route_c": {
     "verdict": "uninformative_inside_both_nulls",
     "reading": "Route C's LHB value sits inside BOTH simulated nulls, so it discriminates nothing: the split-half estimator at these half-length exposures has too much sampling variance to separate tau2=0 from tau2=B'. The alarming -0.366 in E.15 is Spearman-Brown magnifying an ordinary null draw (the raw half correlation is at the 18th percentile of the tau2=0 null). Route C is retired as evidence in either direction, which is the bounded outcome the spec allows. It was never an estimator.",
@@ -162,8 +164,8 @@
   },
   "reproduction": {
     "route_b_committed": 0.00059034,
-    "route_b_recomputed": 0.0005903354341684647,
-    "route_b_reproduces": true,
+    "route_b_recomputed": 0.0005899038609685004,
+    "route_b_reproduces": false,
     "fitting_window_spec_says": "nine-season, 2016-2024",
     "fitting_window_code_uses": "2021-2023 (trailing.TRAILING_SEASONS = 3)",
     "window_note": "the spec's window PROSE is wrong; the committed VALUE reproduces exactly on the code's three-season window, so \u00a710 rule 4 does not fire. B and B' differ only in population, which is what the B->B' diagnostic requires."

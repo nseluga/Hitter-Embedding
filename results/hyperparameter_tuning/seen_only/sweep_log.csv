@@ -1,0 +1,19 @@
+stage,config,seed,status,seconds,best_val_loss,reference,best_epoch,lr,warmup_steps,data_dir,finished_at,reference_all_pitches
+clean,clean_base,0,ok,2546.5,1.02391,1.02299,22,0.001,0,data/processed/phase_d5_clean,2026-09-13 01:49,1.02391
+clean,clean_wd3e-3,0,ok,1742.8,1.02404,1.02302,15,0.001,0,data/processed/phase_d5_clean,2026-09-13 02:18,1.02404
+clean,clean_wd3e-2,0,ok,2580.4,1.02401,1.02316,29,0.001,0,data/processed/phase_d5_clean,2026-09-13 03:01,1.02401
+clean,clean_wd_exposure,0,ok,1263.6,1.02518,1.02434,15,0.001,0,data/processed/phase_d5_clean,2026-09-13 03:22,1.02518
+clean,clean_dropout,0,ok,1781.4,1.02371,1.02293,25,0.001,0,data/processed/phase_d5_clean,2026-09-13 03:51,1.02371
+clean,clean_dim64,0,ok,1444.3,1.02346,1.02250,19,0.001,0,data/processed/phase_d5_clean,2026-09-13 04:16,1.02346
+clean,clean_base,1,ok,5295.5,1.02367,1.02276,22,0.001,0,data/processed/phase_d5_clean,2026-09-14 00:28,1.02367
+clean,clean_base,2,ok,2852.8,1.02368,1.02277,23,0.001,0,data/processed/phase_d5_clean,2026-09-14 01:15,1.02368
+clean,clean_base,3,ok,2269.0,1.02365,1.02271,24,0.001,0,data/processed/phase_d5_clean,2026-09-14 01:53,1.02365
+clean,clean_base,4,ok,1480.5,1.02400,1.02311,18,0.001,0,data/processed/phase_d5_clean,2026-09-14 02:18,1.02400
+clean,clean_dropout,1,ok,2264.3,1.02361,1.02280,29,0.001,0,data/processed/phase_d5_clean,2026-09-14 02:56,1.02361
+clean,clean_dropout,2,ok,1673.4,1.02360,1.02282,24,0.001,0,data/processed/phase_d5_clean,2026-09-14 03:24,1.02360
+clean,clean_dropout,3,ok,1973.0,1.02344,1.02266,29,0.001,0,data/processed/phase_d5_clean,2026-09-14 03:56,1.02344
+clean,clean_dropout,4,ok,1877.4,1.02351,1.02274,26,0.001,0,data/processed/phase_d5_clean,2026-09-14 04:28,1.02351
+clean,clean_dim64,1,ok,1451.8,1.02316,1.02222,22,0.001,0,data/processed/phase_d5_clean,2026-09-14 04:52,1.02316
+clean,clean_dim64,2,ok,1611.7,1.02315,1.02220,25,0.001,0,data/processed/phase_d5_clean,2026-09-14 05:19,1.02315
+clean,clean_dim64,3,ok,1513.9,1.02325,1.02227,26,0.001,0,data/processed/phase_d5_clean,2026-09-14 05:44,1.02325
+clean,clean_dim64,4,ok,1668.8,1.02332,1.02235,26,0.001,0,data/processed/phase_d5_clean,2026-09-14 06:12,1.02332

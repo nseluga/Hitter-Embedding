@@ -238,17 +238,23 @@ def test_end_to_end_strata_assignment_and_perfect_score():
     assert by_stratum.loc["all", "pa_weighted_rmse"] == pytest.approx(0.0)
 
 
-def test_hitter_with_no_prior_exposure_lands_in_low_not_dropped():
+def test_unseen_hitter_is_dropped_and_new_hand_lands_in_low():
     pa_df = pa_table([
         (1, 2023, "L", 100, 0.300),
         (1, 2024, "L", 100, 0.300),
-        (9, 2024, "L", 100, 0.300),   # debutant: zero prior PA vs L
+        (5, 2023, "R", 100, 0.300),
+        (5, 2024, "L", 100, 0.300),   # seen, but zero prior PA vs L
+        (9, 2024, "L", 100, 0.300),   # debutant: no PA in any earlier season
     ])
     predictions = pd.DataFrame({
-        "batter": [1, 9], "season": 2024, "p_throws": "L", "pred_woba": [0.300, 0.300],
+        "batter": [1, 5, 9], "season": 2024, "p_throws": "L", "pred_woba": 0.300,
     })
     frame, coverage = ce.build_eval_frame(pa_df, predictions, eval_season=2024)
-    assert coverage["scored_groups"] == 2
+    assert sorted(frame["batter"]) == [1, 5] and coverage["unseen_groups"] == 1
+    assert frame.set_index("batter").loc[5, "stratum"] == "low"
+    # the cold-start scripts opt back in
+    frame, coverage = ce.build_eval_frame(pa_df, predictions, eval_season=2024, seen_only=False)
+    assert coverage["scored_groups"] == 3
     assert frame.set_index("batter").loc[9, "stratum"] == "low"
     assert frame.set_index("batter").loc[9, "prior_pa"] == 0.0
 

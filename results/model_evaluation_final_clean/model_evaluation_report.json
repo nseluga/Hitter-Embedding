@@ -188,17 +188,19 @@
     "coverage": {
       "eval_season": 2025,
       "actual_groups": 1315,
-      "dropped_below_min_eval_pa": 158,
+      "unseen_groups": 205,
+      "seen_only": true,
+      "dropped_below_min_eval_pa": 117,
       "min_eval_pa": 10,
       "dropped_no_prediction": 0,
-      "scored_groups": 1157,
+      "scored_groups": 993,
       "by_stratum": {
         "low": {
-          "scored": 384,
-          "dropped": 102,
-          "share_dropped": 0.20987654320987653,
-          "mean_woba_scored": 0.27079952108000876,
-          "mean_woba_dropped": 0.196726279956427
+          "scored": 220,
+          "dropped": 61,
+          "share_dropped": 0.21708185053380782,
+          "mean_woba_scored": 0.2677350759707934,
+          "mean_woba_dropped": 0.20041440281030445
         },
         "medium": {
           "scored": 280,
@@ -219,14 +221,14 @@
     "by_stratum": [
       {
         "stratum": "low",
-        "n_hitters": 384,
-        "pa": 32561.0,
-        "mean_pred": 0.28729179645330927,
-        "mean_obs": 0.2943218881483984,
-        "intercept": 0.12489918176593615,
-        "slope": 0.5897234396318618,
-        "slope_se": 0.15059721056702535,
-        "slope_z_vs_one": -2.724330409729196
+        "n_hitters": 220,
+        "pa": 17639.0,
+        "mean_pred": 0.29393985547758616,
+        "mean_obs": 0.2895977663132831,
+        "intercept": 0.04185600939446091,
+        "slope": 0.8428314578718753,
+        "slope_se": 0.1768894936625711,
+        "slope_z_vs_one": -0.8885125898315619
       },
       {
         "stratum": "medium",
@@ -252,14 +254,14 @@
       },
       {
         "stratum": "all",
-        "n_hitters": 1157,
-        "pa": 180968.0,
-        "mean_pred": 0.3179766273929472,
-        "mean_obs": 0.3133900081782414,
-        "intercept": 0.05713809843732236,
-        "slope": 0.8058828469309142,
-        "slope_se": 0.051454116871968304,
-        "slope_z_vs_one": -3.7726262711320375
+        "n_hitters": 993,
+        "pa": 166046.0,
+        "mean_pred": 0.32144039141261943,
+        "mean_obs": 0.31460175493537934,
+        "intercept": 0.02705706769712071,
+        "slope": 0.8945505758458027,
+        "slope_se": 0.055139327085529564,
+        "slope_z_vs_one": -1.9124176831289414
       }
     ]
   },
@@ -270,39 +272,39 @@
     },
     "decomposition": {
       "delta_obs": {
-        "variance": 0.00428904053918444,
-        "between_stand": 0.0005847264314485438,
-        "within_stand": 0.0037043141077358964,
-        "share_between_stand": 0.13633035782863676
+        "variance": 0.004137422094165566,
+        "between_stand": 0.0006005031123622149,
+        "within_stand": 0.0035369189818033513,
+        "share_between_stand": 0.14513943675435517
       },
       "delta_pred": {
-        "variance": 0.0006640851414066359,
-        "between_stand": 0.0005205079632668076,
-        "within_stand": 0.00014357717813982828,
-        "share_between_stand": 0.7837970326580272
+        "variance": 0.0006696512684640503,
+        "between_stand": 0.0005181280840298832,
+        "within_stand": 0.00015152318443416714,
+        "share_between_stand": 0.773728220090273
       },
       "delta_route_a": {
-        "variance": 0.0004167415591661322,
-        "between_stand": 0.00041674155916613217,
-        "within_stand": 5.421010862427522e-20,
-        "share_between_stand": 0.9999999999999999
+        "variance": 0.0004163221408809311,
+        "between_stand": 0.00041632214088093095,
+        "within_stand": 1.6263032587282567e-19,
+        "share_between_stand": 0.9999999999999996
       },
-      "post_hoc_within_stand_rank_corr": 0.26324350243769995,
+      "post_hoc_within_stand_rank_corr": 0.27222630321343755,
       "post_hoc_note": "added after the pre-registered E.5 table was read; descriptive, not evidence for the adoption rule"
     },
-    "n_hitters": 539,
+    "n_hitters": 468,
     "scores": [
       {
         "stratum": "low",
         "model": "delta_pred",
-        "n_hitters": 204,
-        "weight": 17320.49099252268,
-        "mean_obs": -0.009708995076110241,
-        "mean_pred": -0.007442775383760741,
-        "sd_obs": 0.07826314032972355,
-        "sd_pred": 0.02531933893912581,
-        "rmse": 0.0723486259845671,
-        "rank_corr_weighted": 0.3966944527373541
+        "n_hitters": 133,
+        "weight": 12033.136645738832,
+        "mean_obs": -0.010179360815305787,
+        "mean_pred": -0.008156689580851154,
+        "sd_obs": 0.07839809286340599,
+        "sd_pred": 0.02567474623633102,
+        "rmse": 0.07146572470288086,
+        "rank_corr_weighted": 0.41237922875562294
       },
       {
         "stratum": "medium",
@@ -331,26 +333,26 @@
       {
         "stratum": "all",
         "model": "delta_pred",
-        "n_hitters": 539,
-        "weight": 67942.65720014492,
-        "mean_obs": -0.007897841930629711,
-        "mean_pred": -0.005047626524250125,
-        "sd_obs": 0.06557780804681063,
-        "sd_pred": 0.025804099165628716,
-        "rmse": 0.05908948358814212,
-        "rank_corr_weighted": 0.43831244560420884
+        "n_hitters": 468,
+        "weight": 62655.30285336109,
+        "mean_obs": -0.007835337512569528,
+        "mean_pred": -0.004982614091764732,
+        "sd_obs": 0.0644181687984196,
+        "sd_pred": 0.02591599027646962,
+        "rmse": 0.057620427405314215,
+        "rank_corr_weighted": 0.4488048122476171
       },
       {
         "stratum": "low",
         "model": "delta_route_a",
-        "n_hitters": 204,
-        "weight": 17320.49099252268,
-        "mean_obs": -0.009708995076110241,
-        "mean_pred": -0.005549749466587934,
-        "sd_obs": 0.07826314032972355,
-        "sd_pred": 0.020637097055801475,
-        "rmse": 0.0739635149291963,
-        "rank_corr_weighted": 0.37738917392150134
+        "n_hitters": 133,
+        "weight": 12033.136645738832,
+        "mean_obs": -0.010179360815305787,
+        "mean_pred": -0.006096649999333016,
+        "sd_obs": 0.07839809286340599,
+        "sd_pred": 0.020676964096636944,
+        "rmse": 0.07330992034518871,
+        "rank_corr_weighted": 0.40182151890847423
       },
       {
         "stratum": "medium",
@@ -379,72 +381,72 @@
       {
         "stratum": "all",
         "model": "delta_route_a",
-        "n_hitters": 539,
-        "weight": 67942.65720014492,
-        "mean_obs": -0.007897841930629711,
-        "mean_pred": -0.003290739418577759,
-        "sd_obs": 0.06557780804681063,
-        "sd_pred": 0.020441380706591353,
-        "rmse": 0.06115332205424237,
-        "rank_corr_weighted": 0.3998682917387012
+        "n_hitters": 468,
+        "weight": 62655.30285336109,
+        "mean_obs": -0.007835337512569528,
+        "mean_pred": -0.0032051399958572535,
+        "sd_obs": 0.0644181687984196,
+        "sd_pred": 0.020434227044471905,
+        "rmse": 0.05979278787125331,
+        "rank_corr_weighted": 0.40964049969005956
       }
     ],
     "paired": [
       {
         "stratum": "low",
-        "n_hitters": 204,
+        "n_hitters": 133,
         "n_boot": 2000,
-        "rmse_difference": -0.001614888944629203,
-        "rmse_ci_low": -0.0032000507132620122,
-        "rmse_ci_high": 5.6606030503522986e-05,
+        "rmse_difference": -0.0018441956423078526,
+        "rmse_ci_low": -0.004024489135439605,
+        "rmse_ci_high": 0.0003428117663628499,
         "rmse_favours_model": false,
-        "rank_difference": 0.019305278815852756,
-        "rank_ci_low": -0.07119140484710357,
-        "rank_ci_high": 0.09969982170816387,
+        "rank_difference": 0.01055770984714871,
+        "rank_ci_low": -0.10245299589653982,
+        "rank_ci_high": 0.11549928389313834,
         "rank_favours_model": false,
-        "rank_se": 0.04458056394372475
+        "rank_se": 0.05517380948553271
       },
       {
         "stratum": "medium",
         "n_hitters": 163,
         "n_boot": 2000,
         "rmse_difference": -0.003622997119688366,
-        "rmse_ci_low": -0.005665369723842712,
-        "rmse_ci_high": -0.0016379310566149833,
+        "rmse_ci_low": -0.005690323107012207,
+        "rmse_ci_high": -0.0016692821507957804,
         "rmse_favours_model": true,
         "rank_difference": 0.025383957545960234,
-        "rank_ci_low": -0.06248731276530328,
-        "rank_ci_high": 0.11275610809940587,
+        "rank_ci_low": -0.0626233461462046,
+        "rank_ci_high": 0.11500225967177309,
         "rank_favours_model": false,
-        "rank_se": 0.04398007874357395
+        "rank_se": 0.04429868519286234
       },
       {
         "stratum": "high",
         "n_hitters": 172,
         "n_boot": 2000,
         "rmse_difference": -0.0012284521594493544,
-        "rmse_ci_low": -0.0028366851408238355,
-        "rmse_ci_high": 0.00023048303934530617,
+        "rmse_ci_low": -0.0027360417051432357,
+        "rmse_ci_high": 0.00026549848761394355,
         "rmse_favours_model": false,
         "rank_difference": 0.07225997844106946,
-        "rank_ci_low": -0.027725227217901983,
-        "rank_ci_high": 0.1675108853411569,
+        "rank_ci_low": -0.02587247007592957,
+        "rank_ci_high": 0.16450849909106505,
         "rank_favours_model": false,
-        "rank_se": 0.04900943044971206
+        "rank_se": 0.04866345917308687
       },
       {
         "stratum": "all",
-        "n_hitters": 539,
+        "n_hitters": 468,
         "n_boot": 2000,
-        "rmse_difference": -0.002063838466100254,
-        "rmse_ci_low": -0.0031053624008219962,
-        "rmse_ci_high": -0.001101296105237267,
+        "rmse_difference": -0.002172360465939098,
+        "rmse_ci_low": -0.0032733009748816895,
+        "rmse_ci_high": -0.0011237876417095833,
         "rmse_favours_model": true,
-        "rank_difference": 0.038444153865507646,
-        "rank_ci_low": -0.01262160393245892,
-        "rank_ci_high": 0.0870914599384559,
+        "rank_difference": 0.039164312557557535,
+        "rank_ci_low": -0.01442644550294939,
+        "rank_ci_high": 0.0933049198524998,
         "rank_favours_model": false,
-        "rank_se": 0.025641342339539238
+        "rank_se": 0.027196305727327067
       }
     ]
   }

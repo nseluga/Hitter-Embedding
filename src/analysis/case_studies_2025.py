@@ -65,6 +65,27 @@ def tally(graded):
             "wmae_eb": float(np.average(graded["err_eb"], weights=w))}
 
 
+def bootstrap(graded, draws=2000, seed=0):
+    """
+    Hitter-level bootstrap of the two headline numbers: the PA-weighted MAE difference
+    (model minus EB, negative favours the model) and the share of hitters the model was
+    closer on. Hitters are resampled with replacement; intervals are 2.5/97.5 percentiles.
+    """
+    rng = np.random.default_rng(seed)
+    w = graded["weight"].to_numpy()
+    diff = (graded["err_model"] - graded["err_eb"]).to_numpy()
+    closer = (graded["closer"] == "model").to_numpy()
+    idx = rng.integers(0, len(graded), size=(draws, len(graded)))
+    wmae = (w[idx] * diff[idx]).sum(axis=1) / w[idx].sum(axis=1)
+    share = closer[idx].mean(axis=1)
+    return {"n": int(len(graded)),
+            "wmae_diff": float(np.average(diff, weights=w)),
+            "ci": [float(x) for x in np.percentile(wmae, [2.5, 97.5])],
+            "share_model_closer": float(closer.mean()),
+            "share_ci": [float(x) for x in np.percentile(share, [2.5, 97.5])],
+            "draws": draws, "seed": seed}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--platoon-frame", default="results/model_evaluation_final_clean/platoon_frame.csv")
@@ -113,6 +134,9 @@ def main():
                        "4/5 in test_paper_figures is V.9 surfaces vs the training-window history"}
     with open(f"{args.out_dir}/case_studies_2025.json", "w") as f:
         json.dump(summary, f, indent=2)
+
+    with open(f"{args.out_dir}/all_hitters_bootstrap.json", "w") as f:
+        json.dump(bootstrap(graded), f, indent=1)
 
     with pd.option_context("display.width", 200, "display.max_columns", 30):
         print(table.round(3).to_string(index=False))

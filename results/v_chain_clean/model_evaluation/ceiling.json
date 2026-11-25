@@ -74,130 +74,130 @@
   "sampling_variance_source": {
     "rule": "hitter's own realized per-PA wOBA variance when that side has >= 50 denominator PAs, else the league (stand, p_throws) per-PA variance",
     "why": "wOBA is a weighted sum over outcome categories, not a rate, so its per-PA variance is the realized variance of woba_points; p(1-p) on a rate would be wrong. Per-hitter estimates below ~50 PA of a heavy-tailed outcome are noisier than the league value they replace.",
-    "fell_back_L_share": 0.344954128440367,
-    "fell_back_R_share": 0.12293577981651377,
-    "all_league_sensitivity_mean_ratio": 1.041372183984688
+    "fell_back_L_share": 0.2854122621564482,
+    "fell_back_R_share": 0.09090909090909091,
+    "all_league_sensitivity_mean_ratio": 1.0419048767299444
   },
   "part1_ceiling": {
     "by_stand": [
       {
         "stand": "L",
-        "n_hitters": 221,
+        "n_hitters": 190,
         "tau2_split_true": 0.0007322758887773,
         "tau_split_true": 0.027060596607933463,
-        "mean_sampling_var_weighted": 0.003922478896463031,
-        "mean_sampling_var_unweighted": 0.007035063800588563,
-        "mean_sampling_var_league_weighted": 0.003934630024700847,
-        "median_denom_L": 67.0,
-        "median_denom_R": 288.0,
-        "reliability_variance_ratio": 0.15731782286346405,
-        "reliability_variance_ratio_unweighted": 0.09427627966108486,
-        "reliability_mean_per_hitter": 0.14872638321042886,
-        "ceiling_rank_corr": 0.3966331086324792,
-        "ceiling_rank_corr_unweighted": 0.30704442620097316
+        "mean_sampling_var_weighted": 0.003625711330897608,
+        "mean_sampling_var_unweighted": 0.006081464229151489,
+        "mean_sampling_var_league_weighted": 0.0036204337299027053,
+        "median_denom_L": 79.5,
+        "median_denom_R": 315.0,
+        "reliability_variance_ratio": 0.1680307563710399,
+        "reliability_variance_ratio_unweighted": 0.10747047526078735,
+        "reliability_mean_per_hitter": 0.1600030666108371,
+        "ceiling_rank_corr": 0.4099155478522862,
+        "ceiling_rank_corr_unweighted": 0.32782689831798023
       },
       {
         "stand": "R",
-        "n_hitters": 324,
-        "tau2_split_true": 0.0004917731167240001,
+        "n_hitters": 283,
+        "tau2_split_true": 0.000491773116724,
         "tau_split_true": 0.022175958079054894,
-        "mean_sampling_var_weighted": 0.0041868010431916,
-        "mean_sampling_var_unweighted": 0.008360123939736544,
-        "mean_sampling_var_league_weighted": 0.004260910265874671,
-        "median_denom_L": 94.0,
-        "median_denom_R": 182.0,
-        "reliability_variance_ratio": 0.1051117498440746,
-        "reliability_variance_ratio_unweighted": 0.05555567508154427,
-        "reliability_mean_per_hitter": 0.10245094687268191,
-        "ceiling_rank_corr": 0.3242094228181448,
-        "ceiling_rank_corr_unweighted": 0.23570251394829092
+        "mean_sampling_var_weighted": 0.003884769865071646,
+        "mean_sampling_var_unweighted": 0.007082514255726047,
+        "mean_sampling_var_league_weighted": 0.00395565075095747,
+        "median_denom_L": 102.0,
+        "median_denom_R": 216.0,
+        "reliability_variance_ratio": 0.11236565452905274,
+        "reliability_variance_ratio_unweighted": 0.06492665151743862,
+        "reliability_mean_per_hitter": 0.10979495642519625,
+        "ceiling_rank_corr": 0.3352098663957443,
+        "ceiling_rank_corr_unweighted": 0.2548070868665913
       },
       {
         "stand": "pooled",
-        "n_hitters": 545,
-        "tau2_split_true": 0.0005903354341683785,
-        "tau_split_true": 0.024296819424944875,
-        "mean_sampling_var_weighted": 0.004078477121970155,
-        "mean_sampling_var_unweighted": 0.007822805975054518,
-        "mean_sampling_var_league_weighted": 0.004127194814564713,
-        "median_denom_L": 86.0,
-        "median_denom_R": 223.0,
-        "reliability_variance_ratio": 0.12644230777528392,
-        "reliability_variance_ratio_unweighted": 0.07005359053772359,
-        "reliability_mean_per_hitter": 0.12121584858028207,
-        "ceiling_rank_corr": 0.355587271672207,
-        "ceiling_rank_corr_unweighted": 0.2646763883268086
+        "n_hitters": 473,
+        "tau2_split_true": 0.0005899038609684141,
+        "tau_split_true": 0.02428793653171084,
+        "mean_sampling_var_weighted": 0.0037790679367972744,
+        "mean_sampling_var_unweighted": 0.006680401137228867,
+        "mean_sampling_var_league_weighted": 0.003818874382524555,
+        "median_denom_L": 96.0,
+        "median_denom_R": 260.0,
+        "reliability_variance_ratio": 0.13502121054434216,
+        "reliability_variance_ratio_unweighted": 0.08094629675406294,
+        "reliability_mean_per_hitter": 0.12996311907904776,
+        "ceiling_rank_corr": 0.36745232417871865,
+        "ceiling_rank_corr_unweighted": 0.2845106267858249
       }
     ],
-    "platoon_within_stand_rank_corr_recomputed": 0.1766184765973642,
+    "platoon_within_stand_rank_corr_recomputed": 0.17876950475270922,
     "platoon_within_stand_rank_corr_reported": 0.1630066654919241,
     "recomputation_matches_report": false,
     "platoon_within_stand_rank_corr_by_stand": {
-      "L": 0.24521818201645368,
-      "R": 0.08269853285747115
+      "L": 0.2515888351621327,
+      "R": 0.08703514234209539
     },
     "fraction_of_ceiling": {
-      "pooled": 0.4966951594380392,
-      "L": 0.6182494014731211,
-      "R": 0.2550775117472706
+      "pooled": 0.48651074708064895,
+      "L": 0.6137577276107449,
+      "R": 0.25964373685630976
     },
     "split_half": [
       {
         "stand": "L",
-        "n_hitters": 185,
-        "half_split_spearman": -0.1547666881467723,
-        "half_split_pearson": -0.1146703354448399,
-        "reliability_spearman_brown": -0.36621057399509377,
-        "reliability_spearman_brown_ci_low": -0.8435635870592535,
-        "reliability_spearman_brown_ci_high": 0.0075224905012505035,
-        "reliability_spearman_brown_pearson": -0.2590455059527612,
+        "n_hitters": 166,
+        "half_split_spearman": -0.15389811833069897,
+        "half_split_pearson": -0.12202767728633063,
+        "reliability_spearman_brown": -0.3637815295412617,
+        "reliability_spearman_brown_ci_low": -0.8931493202331273,
+        "reliability_spearman_brown_ci_high": 0.01885112530728218,
+        "reliability_spearman_brown_pearson": -0.2779761368995391,
         "ceiling_rank_corr": NaN,
-        "median_half_denom_L": 40.0,
-        "median_half_denom_R": 162.0
+        "median_half_denom_L": 44.5,
+        "median_half_denom_R": 171.5
       },
       {
         "stand": "R",
-        "n_hitters": 268,
-        "half_split_spearman": 0.05362249360523725,
-        "half_split_pearson": 0.019345220427093773,
-        "reliability_spearman_brown": 0.1017869188076163,
-        "reliability_spearman_brown_ci_low": -0.14261961810370472,
-        "reliability_spearman_brown_ci_high": 0.29744649571358894,
-        "reliability_spearman_brown_pearson": 0.03795617037177719,
-        "ceiling_rank_corr": 0.3190406225038064,
-        "median_half_denom_L": 54.0,
-        "median_half_denom_R": 114.0
+        "n_hitters": 246,
+        "half_split_spearman": 0.03358610947094351,
+        "half_split_pearson": 0.02748803809237477,
+        "reliability_spearman_brown": 0.06498947530967703,
+        "reliability_spearman_brown_ci_low": -0.21287797930474384,
+        "reliability_spearman_brown_ci_high": 0.2813873206783435,
+        "reliability_spearman_brown_pearson": 0.05350531991284068,
+        "ceiling_rank_corr": 0.2549303342281515,
+        "median_half_denom_L": 56.5,
+        "median_half_denom_R": 121.5
       },
       {
         "stand": "pooled",
-        "n_hitters": 453,
-        "half_split_spearman": -0.036345355034375075,
-        "half_split_pearson": -0.03581826824984697,
-        "reliability_spearman_brown": -0.07543232469070198,
-        "reliability_spearman_brown_ci_low": -0.29564128191356887,
-        "reliability_spearman_brown_ci_high": 0.10834651178081936,
-        "reliability_spearman_brown_pearson": -0.0742977533598998,
+        "n_hitters": 412,
+        "half_split_spearman": -0.04397681955399279,
+        "half_split_pearson": -0.037125772959347006,
+        "reliability_spearman_brown": -0.09199948380640012,
+        "reliability_spearman_brown_ci_low": -0.3410541446534491,
+        "reliability_spearman_brown_ci_high": 0.10410001990536198,
+        "reliability_spearman_brown_pearson": -0.07711448061799568,
         "ceiling_rank_corr": NaN,
-        "median_half_denom_L": 50.0,
-        "median_half_denom_R": 136.0
+        "median_half_denom_L": 53.0,
+        "median_half_denom_R": 144.5
       }
     ],
     "reliability_route_agreement": {
       "L": {
-        "eb_derived_reliability": 0.15731782286346405,
-        "split_half_reliability": -0.36621057399509377,
+        "eb_derived_reliability": 0.1680307563710399,
+        "split_half_reliability": -0.3637815295412617,
         "disagreement_factor": NaN,
         "agree_within_1_5x": false
       },
       "R": {
-        "eb_derived_reliability": 0.1051117498440746,
-        "split_half_reliability": 0.1017869188076163,
-        "disagreement_factor": 1.0326646201241483,
-        "agree_within_1_5x": true
+        "eb_derived_reliability": 0.11236565452905274,
+        "split_half_reliability": 0.06498947530967703,
+        "disagreement_factor": 1.7289823312717427,
+        "agree_within_1_5x": false
       },
       "pooled": {
-        "eb_derived_reliability": 0.12644230777528392,
-        "split_half_reliability": -0.07543232469070198,
+        "eb_derived_reliability": 0.13502121054434216,
+        "split_half_reliability": -0.09199948380640012,
         "disagreement_factor": NaN,
         "agree_within_1_5x": false
       }
@@ -206,83 +206,83 @@
     "adoption_note": "the two routes DISAGREE by more than 1.5x. Both are reported and NEITHER is adopted, per spec \u00a712.5. Any downstream reading of E.5 must carry both ceilings.",
     "decomposition_from_model_evaluation_eval": {
       "delta_obs": {
-        "variance": 0.00470881178875325,
-        "between_stand": 0.0005131826955664018,
-        "within_stand": 0.004195629093186848,
-        "share_between_stand": 0.10898348003462612
+        "variance": 0.0044660369937886205,
+        "between_stand": 0.0005170991955333953,
+        "within_stand": 0.003948937798255225,
+        "share_between_stand": 0.11578479897335794
       },
       "delta_pred": {
-        "variance": 0.0007554070213575485,
-        "between_stand": 0.0006090387813048305,
-        "within_stand": 0.00014636824005271796,
-        "share_between_stand": 0.8062392380339829
+        "variance": 0.0007600762512697714,
+        "between_stand": 0.0006110305203570912,
+        "within_stand": 0.0001490457309126802,
+        "share_between_stand": 0.8039068703124368
       },
       "delta_route_a": {
-        "variance": 0.00041470161321681827,
-        "between_stand": 0.0004147016132168182,
-        "within_stand": 5.421010862427522e-20,
-        "share_between_stand": 0.9999999999999999
+        "variance": 0.0004141411546957416,
+        "between_stand": 0.0004141411546957415,
+        "within_stand": 1.0842021724855044e-19,
+        "share_between_stand": 0.9999999999999998
       },
-      "post_hoc_within_stand_rank_corr": 0.1766184765973642,
+      "post_hoc_within_stand_rank_corr": 0.17876950475270922,
       "post_hoc_note": "added after the pre-registered E.5 table was read; descriptive, not evidence for the adoption rule"
     }
   },
   "part2_errors_in_variables": {
-    "observed_variance_raw": 0.00470881178875325,
-    "between_stand_variance": 0.0005131826955664018,
-    "within_stand_variance_raw": 0.004195629093186848,
-    "mean_sampling_variance_weighted": 0.004078477121970155,
-    "observed_variance_noise_corrected": 0.0006303346667830946,
-    "within_stand_variance_noise_corrected": 0.0001171519712166928,
-    "share_between_stand_corrected": 0.8141432204346677,
-    "share_between_stand_uncorrected": 0.10898348003462612,
-    "ci_low": 0.4217529927271177,
-    "ci_high": 3.4966938730263655,
+    "observed_variance_raw": 0.0044660369937886205,
+    "between_stand_variance": 0.0005170991955333953,
+    "within_stand_variance_raw": 0.003948937798255225,
+    "mean_sampling_variance_weighted": 0.0037790679367972744,
+    "observed_variance_noise_corrected": 0.000686969056991346,
+    "within_stand_variance_noise_corrected": 0.00016986986145795077,
+    "share_between_stand_corrected": 0.7527255998954103,
+    "share_between_stand_uncorrected": 0.11578479897335794,
+    "ci_low": 0.380279228408941,
+    "ci_high": 2.7526015327132205,
     "n_boot": 2000,
-    "n_boot_usable": 1976,
+    "n_boot_usable": 1991,
     "seed": 0,
-    "noise_share_of_observed_variance": 0.8661372135771882
+    "noise_share_of_observed_variance": 0.8461792730452558
   },
   "part3_recovery": {
     "by_stand": [
       {
         "stand": "L",
-        "n_hitters": 221,
-        "sd_pred_within_stand": 0.018242104149314917,
-        "sd_obs_within_stand_raw": 0.06232922012326187,
-        "var_obs_within_stand_noise_corrected": -3.7547215288997755e-05,
-        "noise_corrected_variance_is_positive": false,
-        "sd_obs_within_stand_true": NaN,
-        "mean_sampling_var_weighted": 0.003922478896463031,
+        "n_hitters": 190,
+        "sd_pred_within_stand": 0.018419369271384146,
+        "sd_obs_within_stand_raw": 0.06203262980118888,
+        "var_obs_within_stand_noise_corrected": 0.00022233582915373844,
+        "noise_corrected_variance_is_positive": true,
+        "sd_obs_within_stand_true": 0.014910929855436194,
+        "mean_sampling_var_weighted": 0.003625711330897608,
         "tau_split_eb": 0.027060596607933463,
-        "ratio_vs_eb": 0.6741205455894053,
-        "ratio_vs_realized_true": NaN,
-        "sd_obs_within_stand_raw_aweights": 0.0625352786371206,
-        "sd_pred_within_stand_aweights": 0.0183024119931036,
-        "var_obs_within_stand_noise_corrected_aweights": -1.1817822240717257e-05,
-        "ratio_vs_realized_true_aweights": NaN
+        "ratio_vs_eb": 0.680671218682003,
+        "ratio_vs_realized_true": 1.2352931339603113,
+        "sd_obs_within_stand_raw_aweights": 0.062259456945289296,
+        "sd_pred_within_stand_aweights": 0.018486721130258246,
+        "var_obs_within_stand_noise_corrected_aweights": 0.0002505286482247233,
+        "ratio_vs_realized_true_aweights": 1.1679686678066592
       },
       {
         "stand": "R",
-        "n_hitters": 324,
-        "sd_pred_within_stand": 0.0041145251590562525,
-        "sd_obs_within_stand_raw": 0.0664181819483767,
-        "var_obs_within_stand_noise_corrected": 0.00022457385013607226,
+        "n_hitters": 283,
+        "sd_pred_within_stand": 0.004234426919732378,
+        "sd_obs_within_stand_raw": 0.06339146042340396,
+        "var_obs_within_stand_noise_corrected": 0.00013370738954034556,
         "noise_corrected_variance_is_positive": true,
-        "sd_obs_within_stand_true": 0.014985788272095407,
-        "mean_sampling_var_weighted": 0.0041868010431916,
+        "sd_obs_within_stand_true": 0.01156319114865553,
+        "mean_sampling_var_weighted": 0.003884769865071646,
         "tau_split_eb": 0.022175958079054894,
-        "ratio_vs_eb": 0.1855399051706544,
-        "ratio_vs_realized_true": 0.2745618104532938,
-        "sd_obs_within_stand_raw_aweights": 0.06656075264821511,
-        "sd_pred_within_stand_aweights": 0.004123357239583319,
-        "var_obs_within_stand_noise_corrected_aweights": 0.00024353274990527446,
-        "ratio_vs_realized_true_aweights": 0.26422400825933473
+        "ratio_vs_eb": 0.19094674081891316,
+        "ratio_vs_realized_true": 0.3661988170302557,
+        "sd_obs_within_stand_raw_aweights": 0.06353965022629729,
+        "sd_pred_within_stand_aweights": 0.004244325711878987,
+        "var_obs_within_stand_noise_corrected_aweights": 0.00015251728580855436,
+        "ratio_vs_realized_true_aweights": 0.34367597269597466
       }
     ],
-    "asymmetry_vs_eb": 3.6332914203516924,
-    "asymmetry_vs_realized_true": NaN,
-    "asymmetry_vs_realized_true_aweights": NaN,
+    "asymmetry_vs_eb": 3.56471765772387,
+    "asymmetry_vs_realized_true": 3.3732854299697266,
+    "asymmetry_vs_realized_true_aweights": 3.398458899074323,
     "in_session_uncorrected": {
       "L": 0.54,
       "R": 0.18
@@ -295,8 +295,8 @@
         "R": 0.06
       },
       "observed": {
-        "L": 0.15731782286346405,
-        "R": 0.1051117498440746
+        "L": 0.1680307563710399,
+        "R": 0.11236565452905274
       },
       "held": true,
       "rule": "held if each observed reliability is within a factor of 2 of its expectation"
@@ -307,8 +307,8 @@
         "R": 0.25
       },
       "observed": {
-        "L": 0.3966331086324792,
-        "R": 0.3242094228181448
+        "L": 0.4099155478522862,
+        "R": 0.3352098663957443
       },
       "held": true,
       "rule": "held if each ceiling is within 0.10 of its expectation"
@@ -318,7 +318,7 @@
         0.4,
         0.55
       ],
-      "observed": 0.4966951594380392,
+      "observed": 0.48651074708064895,
       "held": true
     },
     "part2_corrected_share_50_to_60_percent": {
@@ -326,19 +326,19 @@
         0.5,
         0.6
       ],
-      "observed": 0.8141432204346677,
+      "observed": 0.7527255998954103,
       "held": false
     },
     "part3_asymmetry_survives_correction": {
       "expected": "the LHB/RHB recovery ratio stays near 3x after noise correction",
       "observed": {
-        "asymmetry_vs_eb": 3.6332914203516924,
-        "asymmetry_vs_realized_true": NaN,
-        "asymmetry_vs_realized_true_aweights": NaN
+        "asymmetry_vs_eb": 3.56471765772387,
+        "asymmetry_vs_realized_true": 3.3732854299697266,
+        "asymmetry_vs_realized_true_aweights": 3.398458899074323
       },
-      "held": false,
+      "held": true,
       "rule": "held if the noise-corrected LHB:RHB recovery ratio is at least 2x; NaN when a stand's noise-corrected variance is not positive, in which case only the C.2-denominated ratio is interpretable",
-      "both_stands_noise_corrected_positive": false
+      "both_stands_noise_corrected_positive": true
     }
   },
   "assumptions": [

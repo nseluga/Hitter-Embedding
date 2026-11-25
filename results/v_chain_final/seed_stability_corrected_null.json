@@ -1,0 +1,53 @@
+{
+  "arm": "clean_dim64_final",
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "reference_seed": 0,
+  "per_seed": {
+    "1": {
+      "real_median_cosine": 0.8373339777281121,
+      "corrected_null_median_cosine": 0.12111407861310917
+    },
+    "2": {
+      "real_median_cosine": 0.8397385198548138,
+      "corrected_null_median_cosine": 0.11743486839956188
+    },
+    "3": {
+      "real_median_cosine": 0.8417785794980779,
+      "corrected_null_median_cosine": 0.11970257405796719
+    },
+    "4": {
+      "real_median_cosine": 0.8422523299581868,
+      "corrected_null_median_cosine": 0.11872936742063833
+    }
+  },
+  "real_median_per_seed": [
+    0.8373339777281121,
+    0.8397385198548138,
+    0.8417785794980779,
+    0.8422523299581868
+  ],
+  "corrected_null_median_per_seed": [
+    0.12111407861310917,
+    0.11743486839956188,
+    0.11970257405796719,
+    0.11872936742063833
+  ],
+  "real_mean": 0.8402758517597976,
+  "corrected_null_mean": 0.11924522212281914,
+  "margin": 0.7210306296369784,
+  "median_diff": 0.721542578937143,
+  "diff_ci95": [
+    0.716219899115003,
+    0.7235229625375484
+  ],
+  "n_boot": 1000,
+  "boot_seed": 7,
+  "supersedes": "seed_stability_summary.json",
+  "note": "seed_stability_summary.json's null shuffles rows after fitting the Procrustes rotation, which leaves the fitted alignment intact and reports a null near zero; this sidecar shuffles rows before fitting so the null rotation gets the same fitting freedom as the real one."
+}

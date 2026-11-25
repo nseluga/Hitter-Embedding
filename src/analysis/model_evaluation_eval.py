@@ -374,6 +374,8 @@ def platoon_frame(pa_df, predictions, eval_season, min_eval_pa=claim1_eval.MIN_E
     actual = eval_targets.aggregate(pa_df, by=tuple(claim1_eval.KEY))
     actual = actual[actual["season"] == eval_season]
     actual = actual[actual["denominator"] >= min_eval_pa]
+    # seen hitters only, the same rule as claim1_eval.build_eval_frame (decision log 2026-11-17)
+    actual = actual[actual["batter"].isin(pa_df.loc[pa_df["season"] < eval_season, "batter"])]
     prior = claim1_eval.prior_exposure(pa_df, eval_season)
 
     frame = (actual.merge(predictions[claim1_eval.KEY + ["pred_woba"]],

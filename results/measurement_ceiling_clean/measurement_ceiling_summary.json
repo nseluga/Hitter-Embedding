@@ -7,26 +7,28 @@
   ],
   "post_selection_descriptive": "post-selection descriptive: computed on 2024 after the pre-registered platoon gate ran and failed (docs/research-manifest.md, 2026-08-20). Not a test of a hypothesis.",
   "population": {
-    "n_platoon": 545,
-    "n_pooled": 617,
-    "n_intersection": 545,
+    "n_platoon": 473,
+    "n_pooled": 521,
+    "n_intersection": 473,
     "n_platoon_only": 0,
-    "n_pooled_only": 72,
+    "n_pooled_only": 48,
     "platoon_is_subset_of_pooled": true,
     "pooled_rebuilt_coverage": {
       "eval_season": 2024,
       "actual_groups": 649,
-      "dropped_below_min_eval_pa": 32,
+      "unseen_groups": 108,
+      "seen_only": true,
+      "dropped_below_min_eval_pa": 20,
       "min_eval_pa": 10,
       "dropped_no_prediction": 0,
-      "scored_groups": 617,
+      "scored_groups": 521,
       "by_stratum": {
         "low": {
-          "scored": 161,
-          "dropped": 19,
-          "share_dropped": 0.10555555555555556,
-          "mean_woba_scored": 0.26481036988582085,
-          "mean_woba_dropped": 0.15133268588137008
+          "scored": 65,
+          "dropped": 7,
+          "share_dropped": 0.09722222222222222,
+          "mean_woba_scored": 0.2721843557355097,
+          "mean_woba_dropped": 0.15474126984126985
         },
         "medium": {
           "scored": 108,
@@ -61,21 +63,23 @@
   },
   "headline": {
     "primary_route": "B_prime",
-    "platoon_ceiling_b_prime": 0.2964517824970523,
-    "platoon_fraction_b_prime": 0.5957747162445225,
-    "platoon_ceiling_a": 0.16709992545088512,
-    "platoon_fraction_a": 1.0569632279655137,
-    "level_ceiling": 0.7420469557106563,
-    "level_fraction": 0.6406199032345793
+    "platoon_ceiling_b_prime": 0.3066241400791179,
+    "platoon_fraction_b_prime": 0.5830248874292203,
+    "platoon_ceiling_a": 0.20740442591444588,
+    "platoon_fraction_a": 0.8619367883038883,
+    "level_ceiling": 0.7542723587872403,
+    "level_fraction": 0.6383714089223251
   },
-  "fallback_rules_fired": [],
+  "fallback_rules_fired": [
+    "4 \u2014 committed Route B failed to reproduce; current code's value adopted"
+  ],
   "coverage_labels_coverage": {
     "nominal": 0.95,
     "interval": "seed_plus_target_noise (the fair test \u2014 seed spread convolved with the target's own sampling noise)",
-    "measured_coverage_all_groups": 0.8694516971279374,
-    "measured_coverage_m6_intersection": 0.8798165137614679,
+    "measured_coverage_all_groups": 0.8642350557244174,
+    "measured_coverage_m6_intersection": 0.8742071881606766,
     "committed_coverage_value": 0.869452,
-    "reproduces_committed": true,
+    "reproduces_committed": false,
     "label_for_notebook": "every displayed interval carries its MEASURED coverage, not the nominal level \u2014 the plan's own fallback, already fired. No further attempt is made to close the gap."
   },
   "route_c_verdict": "uninformative_inside_both_nulls",
@@ -88,9 +92,9 @@
       "high": false
     },
     "relative_ci_width": {
-      "low": 0.12618554077739538,
-      "medium": 0.12130501819239217,
-      "high": 0.10789479719411234
+      "low": 0.1456408722383769,
+      "medium": 0.12394511733907905,
+      "high": 0.110153487278467
     },
     "illustration_stratum": "low",
     "default_stratum": "low",
@@ -107,6 +111,7 @@
     "differential_min_eval_pa_sensitivity.csv",
     "differential_route_diagnostics.csv",
     "level_ceiling_level_ceiling.json",
+    "measurement_ceiling_summary.json",
     "population.csv",
     "routes.json",
     "routes_route_c_diagnostic.json"

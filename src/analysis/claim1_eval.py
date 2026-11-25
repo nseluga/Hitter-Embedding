@@ -193,11 +193,13 @@ def assign_stratum(prior_pa, boundaries=STRATUM_BOUNDARIES):
 
 
 def build_eval_frame(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
-                     boundaries=STRATUM_BOUNDARIES):
+                     boundaries=STRATUM_BOUNDARIES, seen_only=True):
     """
     Join model predictions to held-out actuals and attach exposure strata.
     pa_df: PA-level eval targets; predictions: frame with batter/season/p_throws/pred_woba.
     Returns (eval_frame, coverage) where coverage records what was dropped and why.
+    seen_only drops hitters with no PA in any season before eval_season (decision log
+    2026-11-17). Pass False only to study those hitters, as the cold-start scripts do.
     """
     from src.data.eval_targets import aggregate, drop_pitcher_batters
 
@@ -227,6 +229,14 @@ def build_eval_frame(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
     actuals["prior_pa"] = actuals["prior_pa"].fillna(0.0)
     actuals["stratum"] = assign_stratum(actuals["prior_pa"], boundaries)
 
+    # A hitter with no earlier PA has no embedding row and no history for a baseline:
+    # every method gives him one generic projection, so he cannot tell methods apart.
+    # "Earlier PA" matches the model's training vocabulary exactly on 2024 (541 hitters).
+    seen = actuals["batter"].isin(pa_df.loc[pa_df["season"] < eval_season, "batter"].unique())
+    n_unseen = int((~seen).sum())
+    if seen_only:
+        actuals = actuals[seen]
+
     # low-PA held-out groups measure target noise, not model skill
     scorable = actuals[actuals["denominator"] >= min_eval_pa]
     dropped = actuals[actuals["denominator"] < min_eval_pa]
@@ -243,7 +253,9 @@ def build_eval_frame(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
     coverage = {
         "eval_season": int(eval_season),
         "actual_groups": int(n_actual_groups),
-        "dropped_below_min_eval_pa": int(n_actual_groups - len(scorable)),
+        "unseen_groups": n_unseen,
+        "seen_only": bool(seen_only),
+        "dropped_below_min_eval_pa": int(len(dropped)),
         "min_eval_pa": int(min_eval_pa),
         "dropped_no_prediction": int(n_unpredicted),
         "scored_groups": int(len(frame)),

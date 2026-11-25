@@ -28,7 +28,7 @@
       4
     ],
     "eval_season": 2025,
-    "git_revision": "3d3a636fa25ce2102d32fee5018370dbee905994"
+    "git_revision": "dbca3f2c8235f9c97bb8a87cec2355e8a5df1336"
   },
   "pooled_hand_label": "B",
   "pooling_weight": "prior side-specific denominator PA, normalized within batter",
