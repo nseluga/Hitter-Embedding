@@ -2,30 +2,30 @@
   "post_selection_descriptive": "post-selection descriptive: computed on 2024 after the pre-registered platoon gate ran and failed (docs/research-manifest.md, 2026-08-20). Not a test of a hypothesis.",
   "primary_population": "M.6 intersection",
   "intersection": {
-    "n_hitters": 545,
-    "observed_between_hitter_variance": 0.0016816993016209667,
-    "E_var_noise": 0.0007556990189828914,
-    "true_talent_variance": 0.0009260002826380753,
-    "true_talent_sd": 0.03043025275343725,
-    "reliability": 0.5506336844794527,
-    "ceiling_rank_corr": 0.7420469557106563,
+    "n_hitters": 473,
+    "observed_between_hitter_variance": 0.0016373135638422104,
+    "E_var_noise": 0.0007058020117273406,
+    "true_talent_variance": 0.0009315115521148698,
+    "true_talent_sd": 0.030520674175300744,
+    "reliability": 0.5689267912304674,
+    "ceiling_rank_corr": 0.7542723587872403,
     "degenerate": false,
-    "achieved_rank_corr_weighted": 0.47537004896287477,
-    "fraction_of_ceiling": 0.6406199032345793,
+    "achieved_rank_corr_weighted": 0.4815059083901761,
+    "fraction_of_ceiling": 0.6383714089223251,
     "post_selection_descriptive": true
   },
   "committed_pooled_population": {
     "pooled_committed_617": {
-      "n_hitters": 617,
-      "observed_between_hitter_variance": 0.001816371029620449,
-      "E_var_noise": 0.0008197678076759383,
-      "true_talent_variance": 0.000996603221944511,
-      "true_talent_sd": 0.0315690231389017,
-      "reliability": 0.5486782192032441,
-      "ceiling_rank_corr": 0.7407281682258642,
+      "n_hitters": 521,
+      "observed_between_hitter_variance": 0.001733805222057157,
+      "E_var_noise": 0.0007519093227839244,
+      "true_talent_variance": 0.0009818958992732327,
+      "true_talent_sd": 0.03133521819412197,
+      "reliability": 0.5663242253407305,
+      "ceiling_rank_corr": 0.7525451649839566,
       "degenerate": false,
-      "achieved_rank_corr_weighted": 0.4787918707833156,
-      "fraction_of_ceiling": 0.6463799964973406,
+      "achieved_rank_corr_weighted": 0.483702652663759,
+      "fraction_of_ceiling": 0.6427556446716005,
       "post_selection_descriptive": true
     }
   },
@@ -39,12 +39,12 @@
   },
   "cross_check_split_half": {
     "route": "split-half on game_pk parity, pooled wOBA",
-    "n_hitters": 498,
+    "n_hitters": 446,
     "min_half_pa": 25,
-    "median_half_denom": 167.0,
-    "half_split_spearman": 0.2943139750766224,
-    "reliability_spearman_brown": 0.45477987682115417,
-    "ceiling_rank_corr": 0.6743736922665016
+    "median_half_denom": 182.5,
+    "half_split_spearman": 0.3513967878227093,
+    "reliability_spearman_brown": 0.5200497603503395,
+    "ceiling_rank_corr": 0.7211447568625452
   },
   "term_provenance": {
     "E_var_noise": "pooled/claim1_eval noise_floor squared (noise_floor is an RMSE)",
@@ -59,17 +59,19 @@
   "coverage": {
     "model_v1_coverage": {
       "eval_season": 2024,
-      "actual_groups": 545,
+      "actual_groups": 473,
+      "unseen_groups": 0,
+      "seen_only": true,
       "dropped_below_min_eval_pa": 0,
       "min_eval_pa": 10,
       "dropped_no_prediction": 0,
-      "scored_groups": 545,
+      "scored_groups": 473,
       "by_stratum": {
         "low": {
-          "scored": 123,
+          "scored": 51,
           "dropped": 0,
           "share_dropped": 0.0,
-          "mean_woba_scored": 0.2776752081910957,
+          "mean_woba_scored": 0.2824206000537896,
           "mean_woba_dropped": NaN
         },
         "medium": {
@@ -90,17 +92,19 @@
     },
     "no_info_league_average_coverage": {
       "eval_season": 2024,
-      "actual_groups": 545,
+      "actual_groups": 473,
+      "unseen_groups": 0,
+      "seen_only": true,
       "dropped_below_min_eval_pa": 0,
       "min_eval_pa": 10,
       "dropped_no_prediction": 0,
-      "scored_groups": 545,
+      "scored_groups": 473,
       "by_stratum": {
         "low": {
-          "scored": 123,
+          "scored": 51,
           "dropped": 0,
           "share_dropped": 0.0,
-          "mean_woba_scored": 0.2776752081910957,
+          "mean_woba_scored": 0.2824206000537896,
           "mean_woba_dropped": NaN
         },
         "medium": {
@@ -129,9 +133,9 @@
       "high": false
     },
     "relative_ci_width": {
-      "low": 0.12618554077739538,
-      "medium": 0.12130501819239217,
-      "high": 0.10789479719411234
+      "low": 0.1456408722383769,
+      "medium": 0.12394511733907905,
+      "high": 0.110153487278467
     },
     "illustration_stratum": "low",
     "default_stratum": "low",

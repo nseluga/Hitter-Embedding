@@ -1,0 +1,22 @@
+ stand  n_hitters  half_split_spearman  reliability  reliability_ci_low  reliability_ci_high      axis p_throws  eval_pa_covered  matchup
+     L        147            -0.022898    -0.046869           -0.440250             0.231020   fb_velo        R         0.844327 opposite
+     R        154             0.111235     0.200200           -0.092609             0.417079   fb_velo        R         0.844327     same
+pooled        301             0.044300     0.084842           -0.147833             0.256092   fb_velo        R         0.844327     both
+     L         33            -0.282754    -0.788444           -2.943618             0.132814   fb_velo        L         0.881085     same
+     R         72             0.074281     0.138290           -0.377542             0.449024   fb_velo        L         0.881085 opposite
+pooled        105            -0.004935    -0.009918           -0.501857             0.315256   fb_velo        L         0.881085     both
+     L        183            -0.045035    -0.094318           -0.500103             0.190018 fb_height        R         0.844327 opposite
+     R        209             0.086439     0.159123           -0.126277             0.368691 fb_height        R         0.844327     same
+pooled        392             0.026414     0.051468           -0.163599             0.223436 fb_height        R         0.844327     both
+     L         31             0.519355     0.683652            0.360880             0.870352 fb_height        L         0.881085     same
+     R         70            -0.041484    -0.086558           -0.778223             0.314930 fb_height        L         0.881085 opposite
+pooled        101             0.141013     0.247172           -0.103147             0.486544 fb_height        L         0.881085     both
+     L        185            -0.046446    -0.097417           -0.462146             0.171175 brk_share        R         0.844327 opposite
+     R        215            -0.071603    -0.154250           -0.527689             0.117952 brk_share        R         0.844327     same
+pooled        400            -0.063593    -0.135824           -0.391885             0.059136 brk_share        R         0.844327     both
+     L         54            -0.050658    -0.106721           -1.050371             0.378242 brk_share        L         0.881085     same
+     R        141             0.077653     0.144115           -0.161494             0.375360 brk_share        L         0.881085 opposite
+pooled        195             0.041844     0.080327           -0.215829             0.297056 brk_share        L         0.881085     both
+[   12.4s] LHB vs LHP: 210 hitters x 540 pitchers
+[  186.9s]   LHB vs LHP: 64/540 pitchers
+[  410.6s]   LHB vs LHP: 128/540 pitchers

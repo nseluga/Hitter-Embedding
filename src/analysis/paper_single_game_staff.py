@@ -13,7 +13,8 @@ Staff weights (stated as conventions in the paper):
             the day before
 Pitchers the model cannot query (no training-season pitches) drop out; their weight is reported.
 
-Run: .venv/bin/python -m src.analysis.paper_single_game_staff
+Run: OMP_NUM_THREADS=1 .venv/bin/python -m src.analysis.paper_single_game_staff
+(one thread because torch and xgboost each load an OpenMP runtime and segfault together on macOS)
 """
 import json
 from pathlib import Path
@@ -21,6 +22,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.analysis import baseline_ladder_bivariate_eb as eb, baseline_ladder_gbm as gbm
+from src.analysis import baseline_ladder_report
 from src.model import loader, query, query_tables as qt
 
 GAME_DATE, TEAM, OPP, STARTER = pd.Timestamp("2025-08-30"), "PHI", "ATL", 519242  # Sale
@@ -112,6 +115,28 @@ def per_pitcher_matrix(hitters):
             p.set_index(["batter", "p_throws"]).pred_woba)
 
 
+def baseline_vs_lhp(hitters):
+    """
+    The two baselines' 2025 projections against left-handed pitchers for these hitters, built
+    with the same calls as the scored 2025 run (baseline_ladder_report.build_predictions).
+    Projections only: both baselines read seasons before 2025, and no 2025 outcome is scored
+    here, so this needs no --final-run. Neither baseline can take a staff as input, which is
+    why each contributes one generic vs-LHP column and nothing in the staff column.
+    """
+    pa_df = baseline_ladder_report.load_targets("data/processed/eval_targets_pa.parquet")
+    params, _, _ = baseline_ladder_report.fit_and_describe(pa_df, 2025, 0)
+    process = gbm.season_process(pd.read_parquet("data/processed/pitch_events_labeled.parquet",
+                                                 columns=baseline_ladder_report.PITCH_COLUMNS))
+    preds = {"eb": eb.predict(pa_df, 2025, params=params),
+             "gbm": gbm.predict(pa_df, process, 2025, feature_set="full", seed=0)}
+    out = {}
+    for name, pred in preds.items():
+        lhp = pred[pred.p_throws == "L"].set_index("batter").pred_woba
+        assert set(hitters) <= set(lhp.index), f"{name} has no vs-LHP projection for a hitter"
+        out[name] = lhp.reindex(hitters)
+    return pd.DataFrame(out)
+
+
 def main():
     weights, pitcher_names, hands, hitters, started, meta = staff_weights()
     w00, generic = per_pitcher_matrix(hitters)
@@ -136,6 +161,10 @@ def main():
     table = pd.DataFrame(rows).sort_values("vs_staff", ascending=False)
     table["rank_staff"] = range(1, len(table) + 1)
     table["rank_generic"] = table.vs_lhp_generic.rank(ascending=False).astype(int)
+    base = baseline_vs_lhp(hitters)
+    for name in base:
+        table[f"vs_lhp_{name}"] = table.batter.map(base[name])
+        table[f"rank_{name}"] = table[f"vs_lhp_{name}"].rank(ascending=False).astype(int)
 
     staff = pd.DataFrame({"pitcher": weights.index, "name": pitcher_names.reindex(weights.index)
                           .fillna("Sale, Chris").values, "weight": weights.values,

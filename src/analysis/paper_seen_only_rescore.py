@@ -19,7 +19,7 @@ preds[LABEL] = model_v1_ablation_report.load_predictions(
 vocab = {int(b) for b in json.load(open("data/processed/phase_d5_clean_final/manifest.json"))["vocabulary"]}
 out, calib = [], []
 for floor in (10, 50):  # the two floors the strata figure draws
-    frames = {k: evaluation.build_eval_frame(pa_df, p, SEASON, min_eval_pa=floor)[0] for k, p in preds.items()}
+    frames = {k: evaluation.build_eval_frame(pa_df, p, SEASON, min_eval_pa=floor, seen_only=False)[0] for k, p in preds.items()}
     seen = {k: f[f["batter"].isin(vocab)] for k, f in frames.items()}
     for tag, fr in (("all", frames), ("seen_only", seen)):
         c = model_v1_ablation_report.compare(fr, name=LABEL, seed=0)

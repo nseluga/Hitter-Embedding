@@ -147,7 +147,7 @@ def cold_start_group_count(pa_df, eval_season=EVAL_SEASON):
     actuals = actuals[actuals["season"] == eval_season]
     placeholder = actuals[claim1_eval.KEY].copy()
     placeholder["pred_woba"] = 0.0
-    frame, coverage = claim1_eval.build_eval_frame(pa_df, placeholder, eval_season)
+    frame, coverage = claim1_eval.build_eval_frame(pa_df, placeholder, eval_season, seen_only=False)
     zero_prior = frame[(frame["stratum"] == "low") & (frame["prior_pa"] == 0)]
     by_hand = zero_prior.groupby("p_throws").size().to_dict()
     return {"total": int(len(zero_prior)),

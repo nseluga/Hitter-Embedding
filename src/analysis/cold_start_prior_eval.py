@@ -128,10 +128,10 @@ def run_eval(checkpoint_dir, arm, seeds, stats_csv, data_dir, pitch_events, eval
     debut_mu = eb_debut_mu(stats)
     eb_prior = eb.predict(pa_df, eval_season, params=eb_params, debut_mu=debut_mu)
 
-    frame_model_base, _ = claim1_eval.build_eval_frame(pa_df, model_base, eval_season)
-    frame_model_prior, _ = claim1_eval.build_eval_frame(pa_df, model_prior, eval_season)
-    frame_eb_base, _ = claim1_eval.build_eval_frame(pa_df, eb_base, eval_season)
-    frame_eb_prior, _ = claim1_eval.build_eval_frame(pa_df, eb_prior, eval_season)
+    frame_model_base, _ = claim1_eval.build_eval_frame(pa_df, model_base, eval_season, seen_only=False)
+    frame_model_prior, _ = claim1_eval.build_eval_frame(pa_df, model_prior, eval_season, seen_only=False)
+    frame_eb_base, _ = claim1_eval.build_eval_frame(pa_df, eb_base, eval_season, seen_only=False)
+    frame_eb_prior, _ = claim1_eval.build_eval_frame(pa_df, eb_prior, eval_season, seen_only=False)
 
     summary = {}
     tables_out = []

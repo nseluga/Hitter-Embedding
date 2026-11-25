@@ -27,7 +27,7 @@
       4
     ],
     "eval_season": 2024,
-    "git_revision": "802f898a3c4de0f64fac8cb1c43c8824ae073bc7"
+    "git_revision": "dbca3f2c8235f9c97bb8a87cec2355e8a5df1336"
   },
   "pooled_hand_label": "B",
   "pooling_weight": "prior side-specific denominator PA, normalized within batter",
@@ -48,17 +48,19 @@
   "coverage": {
     "eval_season": 2024,
     "actual_groups": 649,
-    "dropped_below_min_eval_pa": 32,
+    "unseen_groups": 108,
+    "seen_only": true,
+    "dropped_below_min_eval_pa": 20,
     "min_eval_pa": 10,
     "dropped_no_prediction": 0,
-    "scored_groups": 617,
+    "scored_groups": 521,
     "by_stratum": {
       "low": {
-        "scored": 161,
-        "dropped": 19,
-        "share_dropped": 0.10555555555555556,
-        "mean_woba_scored": 0.26481036988582085,
-        "mean_woba_dropped": 0.15133268588137008
+        "scored": 65,
+        "dropped": 7,
+        "share_dropped": 0.09722222222222222,
+        "mean_woba_scored": 0.2721843557355097,
+        "mean_woba_dropped": 0.15474126984126985
       },
       "medium": {
         "scored": 108,

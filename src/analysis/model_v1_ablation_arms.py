@@ -163,11 +163,14 @@ def main():
     parser.add_argument("--final-run", action="store_true")
     parser.add_argument("--n-boot", type=int, default=2000)
     parser.add_argument("--out-dir", default="results/model_v1")
+    parser.add_argument("--tag", default="",
+                        help="suffix on output names, so a re-score does not overwrite the original")
     args = parser.parse_args()
 
     ce.assert_not_test_season(args.eval_season, final_run=args.final_run)
     pa_df = pd.read_parquet(args.eval_targets)
     out_dir = Path(args.out_dir)
+    tag = args.stage + args.tag
 
     frames, missing = load_arm_frames(out_dir, args.stage, args.arms, pa_df, args.eval_season)
     if missing:
@@ -175,17 +178,17 @@ def main():
     assert BASELINE in frames, "baseline has no predictions, so nothing can be compared"
 
     comparisons = compare_arms(frames, n_boot=args.n_boot)
-    comparisons.to_csv(out_dir / f"model_v1_arms_paired_{args.stage}.csv", index=False)
+    comparisons.to_csv(out_dir / f"model_v1_arms_paired_{tag}.csv", index=False)
 
     table = rank_arms(frames, comparisons)
-    table.to_csv(out_dir / f"model_v1_arms_{args.stage}.csv", index=False)
+    table.to_csv(out_dir / f"model_v1_arms_{tag}.csv", index=False)
     print(f"\nclaim-1 by arm, decisive stratum '{DECISIVE_STRATUM}' (pre-registered). "
           f"NEGATIVE rmse_difference favours the arm.")
     print(table.to_string(index=False, float_format="%.5f"))
 
     per_seed, spread = seed_spread(out_dir, args.stage, BASELINE, pa_df, args.eval_season)
     if spread is not None:
-        per_seed.to_csv(out_dir / f"model_v1_arms_baseline_per_seed_{args.stage}.csv", index=False)
+        per_seed.to_csv(out_dir / f"model_v1_arms_baseline_per_seed_{tag}.csv", index=False)
         print(f"\nbaseline seed spread -- CONTEXT, never the test. Every other arm's interval "
               f"assumes its seed noise resembles this.")
         print(spread.to_string(index=False, float_format="%.5f"))
@@ -207,8 +210,8 @@ def main():
                                          "arms or against splithead",
         "any_arm_beats_baseline": bool(table.get("beats_baseline", pd.Series(dtype=bool)).any()),
     }
-    (out_dir / f"model_v1_arms_verdict_{args.stage}.json").write_text(json.dumps(verdict, indent=2))
-    print(f"\nwrote {out_dir / f'model_v1_arms_verdict_{args.stage}.json'}")
+    (out_dir / f"model_v1_arms_verdict_{tag}.json").write_text(json.dumps(verdict, indent=2))
+    print(f"\nwrote {out_dir / f'model_v1_arms_verdict_{tag}.json'}")
     return 0
 
 
