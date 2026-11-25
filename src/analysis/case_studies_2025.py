@@ -35,13 +35,16 @@ def grade(frame, woba_sd):
     frame: batter, delta_obs, delta_pred, delta_eb, denom_L, denom_R.
     Adds abs errors, who was closer, sign checks and the SE of the observed split.
     """
+    # delta_* are predicted (or observed) L-R wOBA differentials; error = absolute miss vs the observed split
     out = frame.copy()
     out["err_model"] = (out["delta_pred"] - out["delta_obs"]).abs()
     out["err_eb"] = (out["delta_eb"] - out["delta_obs"]).abs()
     out["closer"] = np.where(out["err_model"] < out["err_eb"], "model",
                              np.where(out["err_eb"] < out["err_model"], "eb", "tie"))
+    # sign check: did the estimator get the direction of the platoon split right
     out["model_sign_right"] = np.sign(out["delta_pred"]) == np.sign(out["delta_obs"])
     out["eb_sign_right"] = np.sign(out["delta_eb"]) == np.sign(out["delta_obs"])
+    # SE of a difference of two independent side means: sd * sqrt(1/n_L + 1/n_R)
     out["se_obs"] = woba_sd * np.sqrt(1 / out["denom_L"] + 1 / out["denom_R"])
     # who is closer depends only on which side of the two predictions' midpoint the
     # observed split lands; within ~2 SE of the midpoint, noise alone could flip it
@@ -53,6 +56,7 @@ def grade(frame, woba_sd):
 
 def tally(graded):
     """Counts of who was closer, plus PA-weighted mean absolute error per estimator."""
+    # weight: per-hitter weight column carried in from the platoon frame; must be positive
     w = graded["weight"]
     assert np.isfinite(w).all() and (w > 0).all(), "weights must be finite and positive"
     return {"n": int(len(graded)),
@@ -95,20 +99,25 @@ def main():
     args = parser.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
+    # observed 2025 splits and the model's 2025 predictions, from the claim-1 eval output
     platoon = pd.read_csv(args.platoon_frame)
     pa_df = pd.read_parquet("data/processed/eval_targets_pa.parquet")
     eb = eb_delta_frame(pa_df, eval_season=EVAL_SEASON)
+    # per-PA wOBA standard deviation in 2025, the noise scale used for each hitter's se_obs
     season = pa_df[(pa_df["season"] == EVAL_SEASON) & pa_df["in_denominator"]]
     woba_sd = float(season["woba_points"].std(ddof=1))
 
+    # one row per hitter: observed + model + EB differentials, with names; then grade
     names = pd.read_csv(args.names)[["batter", "name"]]
     frame = platoon.merge(eb, on="batter", how="inner").merge(names, on="batter", how="left")
     graded = grade(frame, woba_sd)
 
+    # the TOP_N hitters with the largest absolute model-vs-EB rank gap in 2024 (V.10)
     disagreement = pd.read_csv(args.disagreement)
     top = disagreement.assign(abs_gap=disagreement["rank_gap"].abs()).nlargest(TOP_N, "abs_gap")
     top = top[["batter", "rank_gap"]].rename(columns={"rank_gap": "rank_gap_2024"})
 
+    # the five Phase V anchor hitters, and any that did not play in the 2025 frame
     anchors = graded[graded["batter"].isin(ANCHORS)].assign(group="anchor")
     missing = sorted(set(ANCHORS) - set(anchors["batter"]))
     disagree = graded.merge(top, on="batter").assign(group="disagreement_top")
@@ -116,12 +125,14 @@ def main():
     absent = top[~top["batter"].isin(disagree["batter"])].merge(
         disagreement[["batter", "name"]], on="batter")
 
+    # output column order for the per-hitter CSV
     cols = ["group", "batter", "name", "stand", "stratum", "prior_pa", "denom_L", "denom_R",
             "weight", "delta_obs", "se_obs", "delta_pred", "delta_eb", "err_model",
             "err_eb", "closer", "z_midpoint", "within_noise", "model_sign_right", "eb_sign_right", "rank_gap_2024"]
     table = pd.concat([anchors, disagree], ignore_index=True).reindex(columns=cols)
     table.to_csv(f"{args.out_dir}/case_studies_2025.csv", index=False)
 
+    # tallies per group plus the hitters who dropped out of 2025
     summary = {"woba_sd_per_pa": woba_sd,
                "anchors_missing_from_2025_frame": [ANCHORS[b] for b in missing],
                "anchors": tally(anchors) if len(anchors) else None,

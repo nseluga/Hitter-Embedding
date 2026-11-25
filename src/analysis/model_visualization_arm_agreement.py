@@ -67,8 +67,10 @@ def seed_mean_embedding(checkpoint_dir, arm, seeds=SEEDS):
     Returns an array of shape (n_hitters, dim) whose row i is embedding index
     i + 1.
     """
+    # embeddings: dict seed -> [n_rows, dim] table, row 0 = cold-start. Seed 0 is the common frame.
     embeddings = load_seed_embeddings(checkpoint_dir, arm, seeds=seeds)
     reference_rows = embeddings[seeds[0]][COLD_START_ROW + 1:]
+    # Seed 0 is only centered; each other seed is centered and rotated onto it, then all are averaged.
     aligned_stack = [reference_rows - reference_rows.mean(axis=0)]
     for seed in seeds[1:]:
         aligned_stack.append(
@@ -85,8 +87,10 @@ def shared_batter_rows(reference_stats_path, comparison_stats_path):
     one, since row 0 was dropped). Order is by batter id so the two arms line up
     element for element.
     """
+    # Each build's stats CSV maps batter id -> that build's embedding row.
     reference = pd.read_csv(reference_stats_path)[["batter", "embedding_index"]]
     comparison = pd.read_csv(comparison_stats_path)[["batter", "embedding_index"]]
+    # Inner join keeps only batters present in both builds.
     merged = reference.merge(comparison, on="batter", suffixes=("_reference",
                                                                 "_comparison"))
     merged = merged.sort_values("batter").reset_index(drop=True)
@@ -103,6 +107,9 @@ def null_cosines(reference_matrix, comparison_matrix, rng):
     Fitting after the shuffle is what makes this a null rather than a floor of
     zero. The rotation still gets to do its best, but on rows that no longer
     correspond to the same hitters.
+
+    reference_matrix, comparison_matrix [H, D]: H shared hitters in the same order, D embedding dims.
+    rng: numpy Generator. Returns [H] per-row cosines after the (post-shuffle) rotation.
     """
     shuffled = comparison_matrix[rng.permutation(len(comparison_matrix))]
     return row_cosine(procrustes_align(shuffled, reference_matrix),
@@ -123,9 +130,12 @@ def arm_agreement(reference_matrix, comparison_matrix, batters,
     Returns (per_hitter frame, summary dict).
     """
     rng = np.random.default_rng(seed)
+    # Real agreement: rotate comparison onto reference with hitters correctly matched, then per-row cosine
+    # against the centered reference (procrustes_align centers its output the same way).
     reference_centered = reference_matrix - reference_matrix.mean(axis=0)
     real_cosine = row_cosine(procrustes_align(comparison_matrix, reference_matrix),
                              reference_centered)
+    # One null draw is paired with the real cosines for the CI; more draws only firm up the floor.
     null_cosine = null_cosines(reference_matrix, comparison_matrix, rng)
     repeated_null_medians = [
         float(np.median(null_cosines(reference_matrix, comparison_matrix, rng)))
@@ -137,11 +147,13 @@ def arm_agreement(reference_matrix, comparison_matrix, batters,
         "cosine_null": null_cosine,
     })
 
+    # Bootstrap over hitters of (median real cosine - median null cosine).
     difference, low, high = bootstrap_ci(
         (real_cosine, null_cosine),
         lambda real, null: float(np.median(real) - np.median(null)),
         n_boot=n_boot, seed=seed)
 
+    # The two arms are distinguishable from the null only if the CI on the gap excludes zero.
     summary = {
         "reference_arm": REFERENCE_ARM,
         "comparison_arm": COMPARISON_ARM,
@@ -161,7 +173,11 @@ def arm_agreement(reference_matrix, comparison_matrix, batters,
 
 
 def fig_arm_agreement(per_hitter, summary, path):
-    """Histogram of the real cosines against the shuffled null."""
+    """
+    Histogram of the real cosines against the shuffled null.
+    per_hitter: frame with cosine_real and cosine_null, one row per shared hitter; summary: dict from
+    `arm_agreement`; path: output PNG. Returns path.
+    """
     figure, axis = plt.subplots(figsize=(7, 4.5))
     bins = np.linspace(-1, 1, 61)
     axis.hist(per_hitter["cosine_null"], bins=bins, color="#7a7a7a", alpha=0.55,
@@ -197,11 +213,13 @@ def main():
     out_dir = Path(arguments.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Seed-mean embedding per arm, [n_hitters, dim] with the cold-start row already dropped.
     reference_matrix = seed_mean_embedding(arguments.checkpoint_dir,
                                            arguments.reference_arm)
     comparison_matrix = seed_mean_embedding(arguments.checkpoint_dir,
                                             arguments.comparison_arm)
 
+    # Row indices of the shared batters in each arm's matrix, so the two line up by hitter, not by index.
     batters, reference_rows, comparison_rows = shared_batter_rows(
         arguments.reference_stats, arguments.comparison_stats)
 

@@ -149,6 +149,8 @@ def simulate_differentials(tau2, sampling_var, rng):
     sampling_var = np.asarray(sampling_var, dtype="float64")
     assert (sampling_var > 0).all(), "a simulated hitter has non-positive sampling variance"
     assert tau2 >= 0, "cannot plant a negative tau2"
+    # true [H]: planted skill ~ N(0, tau2); observed [H]: skill plus per-hitter sampling noise
+    # (returns both, so callers can score a perfect predictor against the noisy observation)
     true = rng.normal(0.0, np.sqrt(tau2), size=len(sampling_var))
     observed = true + rng.normal(0.0, np.sqrt(sampling_var))
     return true, observed
@@ -166,11 +168,14 @@ def monte_carlo_ceiling(tau2, sampling_var, weight, n_draws=200, seed=0):
     callers should report beside it (see the module docstring for why the sign of that gap
     depends on the exposure skew).
     """
+    # tau2: planted true-differential variance; sampling_var [H], weight [H]: per-hitter
+    # sampling variance and PA weight over H hitters; each of n_draws redraws true skill and noise
     rng = np.random.default_rng(seed)
     weight = np.asarray(weight, dtype="float64")
     sampling_var = np.asarray(sampling_var, dtype="float64")
     analytic = ceiling_from_variances(
         tau2, float(np.average(sampling_var, weights=weight)))
+    # per draw: correlate the perfect predictor (true) with the noisy observation
     pearson, spearman = [], []
     for _ in range(n_draws):
         true, observed = simulate_differentials(tau2, sampling_var, rng)
@@ -200,6 +205,7 @@ def recover_route_a(tau2, sampling_var, weight, n_draws=200, seed=0):
     weight = np.asarray(weight, dtype="float64")
     sampling_var = np.asarray(sampling_var, dtype="float64")
     mean_sampling = float(np.average(sampling_var, weights=weight))
+    # one tau2 estimate per simulated draw, on the same weighting E.15 applies
     estimates = []
     for _ in range(n_draws):
         _, observed = simulate_differentials(tau2, sampling_var, rng)
@@ -248,6 +254,7 @@ def simulate_split_half(tau2, half_sampling_var, rng, n_draws=1000):
     assert (half_sampling_var > 0).all(), "a simulated half has non-positive sampling variance"
     draws = []
     for _ in range(n_draws):
+        # same planted skill in both halves, independent noise in each; tau2 == 0 plants none
         true = rng.normal(0.0, np.sqrt(tau2), size=len(half_sampling_var)) if tau2 > 0 \
             else np.zeros(len(half_sampling_var))
         a = true + rng.normal(0.0, np.sqrt(half_sampling_var))
@@ -299,6 +306,7 @@ def within_stand_residual(values, weight, stand):
     values = np.asarray(values, dtype="float64")
     weight = np.asarray(weight, dtype="float64")
     stand = np.asarray(stand)
+    # values, weight, stand [H]: per-hitter value, weight and batting side
     out = values.copy()
     for side in np.unique(stand):
         mask = stand == side
@@ -346,6 +354,8 @@ def paired_rank_bootstrap(frame, columns, n_boot=2000, seed=0, ci=(2.5, 97.5)):
     n = len(frame)
     rng = np.random.default_rng(seed)
 
+    # draws [n_boot, len(columns)]; pick [n]: hitter indices resampled with replacement,
+    # shared by every column so the models are scored on identical resamples
     draws = np.empty((int(n_boot), len(columns)), dtype="float64")
     for b in range(int(n_boot)):
         pick = rng.integers(0, n, n)
@@ -353,6 +363,7 @@ def paired_rank_bootstrap(frame, columns, n_boot=2000, seed=0, ci=(2.5, 97.5)):
             draws[b, j] = within_stand_rank_correlation(
                 obs[pick], predictions[name][pick], weight[pick], stand[pick])
 
+    # per-model summary: point estimate on the full sample, percentile CI over finite replicates
     rows = []
     for j, name in enumerate(columns):
         column = draws[:, j]
@@ -377,6 +388,7 @@ def paired_contrast(draws, columns, a, b, point_a, point_b, ci=(2.5, 97.5)):
     because a higher rank correlation is better. `favours_a_share` is the share of
     replicates in which A ranks better — the same meaning it carries there.
     """
+    # draws [n_boot, len(columns)]; a, b: column names; point_a/point_b: full-sample estimates
     index = {name: j for j, name in enumerate(columns)}
     difference = draws[:, index[a]] - draws[:, index[b]]
     difference = difference[np.isfinite(difference)]
@@ -444,6 +456,7 @@ def paired_differential_bootstrap(frame, columns, n_boot=2000, seed=0, ci=(2.5, 
     n = len(frame)
     rng = np.random.default_rng(seed)
 
+    # same resampling loop as paired_rank_bootstrap, with RMSE scored on each replicate too
     rank_draws = np.empty((int(n_boot), len(columns)), dtype="float64")
     rmse_draws = np.empty((int(n_boot), len(columns)), dtype="float64")
     for b in range(int(n_boot)):

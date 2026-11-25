@@ -102,6 +102,7 @@ def wilson_interval(successes, n, z=WILSON_Z_95):
     proportion = successes / n
     denominator = 1 + z ** 2 / n
     center = proportion + z ** 2 / (2 * n)
+    # Wilson score interval (better than a normal interval for rates near 0 or 1 and small n).
     adjustment = z * np.sqrt(proportion * (1 - proportion) / n + z ** 2 / (4 * n ** 2))
     return ((center - adjustment) / denominator, (center + adjustment) / denominator)
 
@@ -135,6 +136,7 @@ def handedness_only_agreement(frame):
     his deviation from the overall mean match the sign of his stand-group's
     deviation from the overall mean.
     """
+    # A handedness-only predictor knows only the stand-group mean, so its predicted sign is the stand group's side of the overall mean.
     overall_mean_obs = frame["delta_obs"].mean()
     stand_group_mean_obs = frame.groupby("stand")["delta_obs"].transform("mean")
     hitter_sign = np.sign(frame["delta_obs"] - overall_mean_obs)
@@ -187,6 +189,7 @@ def permutation_null_rates(frame, n_reps=2000, seed=7, extra_masks=None):
     stratum = frame["stratum"].to_numpy()
     obs_sign = np.sign(frame["centered_obs"].to_numpy())
     pred = frame["centered_pred"].to_numpy()
+    # Row indices of each stand group, so shuffles never cross stands.
     group_idx = {s: np.where(stand == s)[0] for s in np.unique(stand)}
     extra_masks = extra_masks or {}
 
@@ -196,6 +199,7 @@ def permutation_null_rates(frame, n_reps=2000, seed=7, extra_masks=None):
     permuted = pred.copy()
     for rep in range(n_reps):
         for idx in group_idx.values():
+            # Shuffle centered predictions within each stand: breaks hitter-level pairing while keeping stand structure.
             permuted[idx] = rng.permutation(pred[idx])
         agree = np.sign(permuted) == obs_sign
         overall_draws[rep] = agree.mean()
@@ -212,6 +216,7 @@ def null_summary(draws, observed_rate):
     n = len(draws)
     null_mean = float(draws.mean())
     ci95 = [float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))]
+    # One-sided permutation p with +1 correction so it is never exactly zero.
     p_value = float((np.sum(draws >= observed_rate) + 1) / (n + 1))
     return {
         "null_mean": null_mean,
@@ -239,6 +244,7 @@ def compute_sign_agreement(frame):
     """
     frame = add_centered_columns(frame)
 
+    # Within-stand agreement of the model: overall, per stratum, per stand and per stand-stratum cell.
     model_within_stand = {"overall": rate_and_independence(frame)}
     for stratum_name in STRATA:
         model_within_stand[stratum_name] = rate_and_independence(
@@ -268,6 +274,7 @@ def compute_sign_agreement(frame):
         "overall_untied": ~tied_mask,
     }
 
+    # Permutation null from one full-frame shuffle, scored overall, by stratum and for the tied/untied subsets.
     overall_draws, stratum_draws, extra_draws = permutation_null_rates(
         frame, extra_masks=extra_masks)
     model_within_stand["overall"]["permutation_null"] = null_summary(
@@ -281,6 +288,7 @@ def compute_sign_agreement(frame):
         cell["permutation_null"] = null_summary(extra_draws[name], cell["rate"])
         model_within_stand[name] = cell
 
+    # Count of rows per stratum that share their delta_pred with another row.
     n_tied_predictions = {
         stratum_name: int(
             frame.loc[frame["stratum"] == stratum_name, "delta_pred"]
@@ -309,6 +317,7 @@ def compute_sign_agreement(frame):
             "hitter, which is the handedness-only baseline again, not a new "
             "comparator.")
 
+    # Collected output written as JSON.
     summary = {
         "n_hitters": int(len(frame)),
         "model_within_stand": model_within_stand,
@@ -397,6 +406,7 @@ def fig_sign_agreement(summary, path):
 
 
 def main():
+    """CLI entry: loads the platoon frame, computes the sign-agreement statistic and nulls, writes per-hitter CSV, summary JSON and the figure, and prints the headline cells."""
     parser = argparse.ArgumentParser(
         description="Within-stand sign agreement of the platoon delta model.")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)

@@ -89,11 +89,13 @@ def load_pa_terminals(snapshot_dir, seasons=None):
     snapshot_dir = Path(snapshot_dir)
     frames = []
     for path in sorted(snapshot_dir.glob("season=*.parquet")):
+        # the season comes from the file name, season=<YYYY>.parquet
         season = int(path.stem.split("=")[1])
         if seasons is not None and season not in seasons:
             continue
         available = set(pq.ParquetFile(path).schema.names)
         frame = pd.read_parquet(path, columns=sorted(set(PA_COLUMNS) & available))
+        # regular season is the only restriction; a PA's terminal pitch is the one with a non-null `events`
         frame = frame[frame["game_type"] == "R"]
         frame = frame[frame["events"].notna() & ~frame["events"].isin(NON_BATTING_EVENTS)]
         frame["season"] = season
@@ -117,6 +119,7 @@ def add_woba_points(df, weights):
     Points are 0 except for the six credited categories; the denominator excludes
     intentional walks, sac bunts, and interference.
     """
+    # weights are keyed by season string; points start at 0 and are filled per credited category
     df = df.copy()
     season_str = df["season"].astype(str)
     points = pd.Series(0.0, index=df.index)
@@ -148,6 +151,7 @@ def xwoba_coverage(pa_df):
     known to be small.
     """
     out = {}
+    # per season: PAs in the wOBA denominator vs those that also carry an xwOBA estimate
     for season, sub in pa_df.groupby("season"):
         denominator = int(sub["in_denominator"].sum())
         estimated = int(sub["in_xwoba_denominator"].sum())
@@ -161,6 +165,7 @@ def xwoba_coverage(pa_df):
 
 def build(snapshot_dir, seasons=None, weights=None):
     """Run the full PA-level pipeline and return the eval-target primitive table."""
+    # pipeline: load PA terminals -> map events to categories -> score points; asserts guard the xwOBA column
     weights = weights or load_weights()
     df = load_pa_terminals(snapshot_dir, seasons)
     assert XWOBA_FIELD in df.columns, (
@@ -194,6 +199,7 @@ def primarily_pitchers(pa_df):
     Returns a set of (season, batter) pairs.
     """
     out = set()
+    # judged per season; pa_key is one row per distinct plate appearance
     for season, frame in pa_df.groupby("season"):
         pa_key = frame[["batter", "game_pk", "at_bat_number"]].drop_duplicates()
         batted = pa_key.groupby("batter").size()
@@ -216,6 +222,7 @@ def drop_pitcher_batters(pa_df):
     excluded = primarily_pitchers(pa_df)
     if not excluded:
         return pa_df
+    # match each PA's (season, batter) against the exclusion set
     keys = pd.MultiIndex.from_arrays([pa_df["season"], pa_df["batter"]])
     mask = ~keys.isin(excluded)
     return pa_df[mask]
@@ -244,11 +251,13 @@ def career_pitcher_batters(pa_df, min_batters_faced=PITCHER_MIN_BATTERS_FACED,
     with, and re-pointing it would desync the build from the code describing it. Switching
     the pipeline over is the deferred retrain.
     """
+    # PAs batted and batters faced, per (season, player), over distinct plate appearances
     plate_appearances = pa_df[["batter", "game_pk", "at_bat_number", "season"]].drop_duplicates()
     batted = plate_appearances.groupby(["season", "batter"]).size()
     faced = (pa_df[["pitcher", "game_pk", "at_bat_number", "season"]].drop_duplicates()
              .groupby(["season", "pitcher"]).size())
 
+    # a pitcher is real if he faced enough batters in ANY season; a two-way hitter is exempt if his best season of PAs clears the career gate
     real_pitchers = {p for (_season, p), n in faced.items() if n >= min_batters_faced}
     career_two_way = {b for b, n in batted.groupby(level=1).max().items()
                       if n >= career_two_way_min_pa}
@@ -260,6 +269,7 @@ def aggregate(pa_df, by=("batter", "season", "p_throws")):
     Roll the PA-level table up to wOBA per group (default: hitter x season x pitcher hand).
     wOBA = sum(woba_points) / sum(in_denominator); pa is the group's completed-PA count.
     """
+    # pa counts rows; the wOBA numerator and denominator are summed separately so any grouping rolls up exactly
     by = list(by)
     grouped = pa_df.groupby(by, sort=True)
     out = grouped.agg(pa=("woba_points", "size"),
@@ -287,6 +297,7 @@ def reconcile(pa_df, weights):
     bug is poisoning every target and we fail loud.
     """
     report = {}
+    # compare each season's computed league wOBA with the published value
     for season, sub in pa_df.groupby("season"):
         season_str = str(int(season))
         denom = int(sub["in_denominator"].sum())
@@ -308,6 +319,7 @@ def reconcile(pa_df, weights):
 
 
 def main():
+    """CLI: build and reconcile the PA-level eval-target table, print reports, write parquet and JSON."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Build the side-specific wOBA eval-target table from the raw snapshot.")

@@ -59,6 +59,7 @@ REDUNDANT_R2 = 0.99
 
 
 def load_pitches(path, columns):
+    """Read only `columns` of the labeled pitch parquet at `path`; returns a DataFrame, one row per pitch."""
     return pd.read_parquet(path, columns=columns)
 
 
@@ -67,6 +68,8 @@ def design_matrix(df):
     Build the predictor matrix from B.2's ten kept feature groups.
     df: pitch rows. Returns a float array with an intercept column appended.
     """
+    # Layout, left to right: 6 continuous columns (KEPT_CONTINUOUS), then one-hot dummies per
+    # categorical (first level dropped so the intercept is not collinear), then 1 intercept column.
     blocks = [df[KEPT_CONTINUOUS].to_numpy(dtype=float)]
     for col in KEPT_CATEGORICAL:
         dummies = pd.get_dummies(df[col].astype("category"), drop_first=True)
@@ -76,7 +79,10 @@ def design_matrix(df):
 
 
 def _r2(predictors, target):
-    """Ordinary least-squares R^2 of target on predictors. Both must be finite."""
+    """
+    Ordinary least-squares R^2 of target on predictors. Both must be finite.
+    predictors [N, P]: N pitches, P regressors (intercept included); target [N]. Returns a float.
+    """
     coefficients, *_ = np.linalg.lstsq(predictors, target, rcond=None)
     residual = target - predictors @ coefficients
     total = target - target.mean()
@@ -93,11 +99,14 @@ def redundancy_r2(pitch_df, train_seasons, extra_predictors=(),
     velocity plus extension, so effective_speed cannot be tested without it).
     Returns one row per flagged feature with its R^2 and the rows it was fit on.
     """
+    # Fit only on train seasons so the redundancy measurement never touches selection/report data.
     train = pitch_df[pitch_df["season"].isin(train_seasons)]
     assert len(train) > 0, "no train-season rows in the pitch table"
     if len(train) > sample_n:
         train = train.sample(n=sample_n, random_state=seed)
 
+    # Regression targets: each flagged feature not already used as a predictor; the circular
+    # spin_axis (degrees) becomes sin and cos so the wrap at 360 is not treated as a jump.
     extra_predictors = list(extra_predictors)
     targets = {name: train[name].to_numpy(dtype=float)
                for name in FLAGGED_LINEAR if name not in extra_predictors}
@@ -129,18 +138,22 @@ def frame_structure(pa_df, pitch_df, eval_season, vocabulary_seasons):
     vocabulary_seasons, which is exactly the seasons the hitter embedding table is
     built from. Returns one row per exposure stratum plus an "all" row.
     """
+    # Fixed baseline predictions, used only to obtain the row set (see module docstring item 3).
     predictions = trailing.predict(pa_df, eval_season, variant="bucketed")
     frame, _ = evaluation.build_eval_frame(pa_df, predictions, eval_season)
 
+    # Hitters in the embedding vocabulary; anyone else routes to the reserved untrained row (cold start).
     vocabulary = set(pitch_df.loc[pitch_df["season"].isin(vocabulary_seasons), "batter"].unique())
     frame = frame.assign(cold_start=~frame["batter"].isin(vocabulary))
 
+    # One summary row for a subset of the frame: size, distinct hitters and cold-start counts.
     def summarize(part, label):
         return {"stratum": label, "rows": len(part),
                 "hitters": int(part["batter"].nunique()),
                 "cold_start_rows": int(part["cold_start"].sum()),
                 "cold_start_share": float(part["cold_start"].mean())}
 
+    # One row per exposure stratum, plus an overall row.
     rows = [summarize(part, str(label)) for label, part in frame.groupby("stratum", observed=True)]
     rows.append(summarize(frame, "all"))
     return pd.DataFrame(rows)
@@ -155,10 +168,12 @@ def main():
     parser.add_argument("--out-dir", default=str(OUT_DIR))
     args = parser.parse_args()
 
+    # Train seasons come from the frozen split config.
     train_seasons = load_splits()["split"]["train"]
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Measurement 1: redundancy R^2 of the flagged features against the kept ten.
     redundancy_columns = (["season", FLAGGED_CIRCULAR] + FLAGGED_LINEAR
                           + KEPT_CONTINUOUS + KEPT_CATEGORICAL)
     pitch_df = load_pitches(args.pitch_events, redundancy_columns)
@@ -172,6 +187,7 @@ def main():
     print("redundancy of B.2's flagged features against its kept ten")
     print(redundancy.to_string(index=False, float_format="%.4f"))
 
+    # Measurements 2 and 3: cold-start share and stratum sizes per eval frame.
     pa_df = pd.read_parquet(args.eval_targets)
     batter_seasons = load_pitches(args.pitch_events, ["batter", "season"])
     # 2024 is the selection frame, 2025 the report frame. The third row is 2025 scored

@@ -72,7 +72,9 @@ DEFAULT_N_PITCHES = 6
 # memory against Python and per-call torch overhead; it cannot change a number.
 DEFAULT_CHUNK_PITCHERS = 64
 
+# count dimensions: balls 0-3, strikes 0-2
 N_BALLS, N_STRIKES = 4, 3
+# the 12 counts, balls-major: position = balls * N_STRIKES + strikes
 COUNT_STATES = [(b, s) for b in range(N_BALLS) for s in range(N_STRIKES)]
 
 # the four absorbing states of a plate appearance (spec §8). `bip` is the remainder, so the
@@ -89,6 +91,7 @@ ABSORBING_EVENTS = {"bb": ("walk",),
 # by more than the between-seed spread, which is why the per-seed compositions are persisted.
 FIDELITY_TOLERANCE = {"bb": 0.02, "k": 0.02, "hbp": 0.20, "bip": 0.02}
 
+# reference point for the elapsed-time stamp in `_progress`
 _STARTED = time.monotonic()
 
 
@@ -106,6 +109,8 @@ def load_ensemble(checkpoint_paths, manifest, n_context):
     Rebuild each seed's model from its own checkpoint and put it in eval mode.
     Architecture comes from the checkpoint's recorded args, never from the filename.
     Only embedding_dim and bilinear are read: older checkpoints predate the other keys.
+    checkpoint_paths: list of .pt files, one per seed. manifest: dataset manifest (sizes).
+    n_context: width of the context feature vector. Returns a list of models in eval mode.
     """
     models = []
     for path in checkpoint_paths:
@@ -130,6 +135,12 @@ def load_ensemble(checkpoint_paths, manifest, n_context):
 
 
 def _trunk(model, hitter, context):
+    """
+    Shared hidden representation the output heads read.
+    hitter [M]: embedding row index per row. context [M, n_context]: pitch/count features.
+    Returns trunk [M, hidden]: hitter embedding and encoded context through the trunk MLP,
+    plus the optional hitter x context interaction term when the model has one.
+    """
     embedded = model.embedding(hitter)
     encoded = model.context_tower(context)
     trunk = model.trunk(torch.cat([embedded, encoded], dim=1))
@@ -153,6 +164,7 @@ def league_spray_ratio(points, spray_mass):
     spray_mass: (K,K,K) raw train cell counts from `fit_outcome_table`. An (ev, la) cell with
     no observations backs off to the global spray marginal rather than dividing by zero.
     """
+    # mass[e,l,s]: train balls in play per (ev, la, spray) bin triple
     mass = spray_mass.to(points.dtype)
     total = mass.sum(dim=-1, keepdim=True)                             # (K_e, K_l, 1)
     globally = mass.sum(dim=(0, 1))
@@ -177,12 +189,19 @@ def spray_kernels(model, points, n_bins, spray_mass=None):
             "an arm with no spray head needs tables['spray_mass'] to marginalise the points"
         return None, league_spray_ratio(points, spray_mass)
 
+    # head_spray input is a packed vector [trunk (hidden) ; onehot ev (K) ; onehot la (K)],
+    # so its weight [K_s, hidden + 2K] splits into: hidden trunk columns | K ev columns | K la
+    # columns. A one-hot input just selects one column, so the ev/la columns act as per-bin
+    # additive logits; they are transposed to [K, K_s] here.
     hidden = model.head_spray.weight.shape[1] - 2 * n_bins
     column_ev = model.head_spray.weight[:, hidden:hidden + n_bins].T
     column_la = model.head_spray.weight[:, hidden + n_bins:].T
 
+    # the trunk-independent part of the spray logits for every (ev, la) pair
     logits = column_ev.unsqueeze(1) + column_la.unsqueeze(0)          # (K_e, K_l, K_s)
     logits = logits - logits.amax(dim=-1, keepdim=True)
+    # rows are (ev, la) flattened, columns are spray bins; `weighted` folds in points so one
+    # matmul gives the numerator of R and another (with `kernel`) its denominator
     kernel = torch.exp(logits).reshape(n_bins * n_bins, n_bins)
     weighted = kernel * points.reshape(n_bins * n_bins, n_bins)
     return weighted, kernel
@@ -198,6 +217,8 @@ def _conditionals(model, trunk, weighted, kernel, n_bins):
     weighted is None for an arm with no spray head; `kernel` is then the league (K_e, K_l)
     ratio already, the same for every row, and there is no spray forward pass to run.
     """
+    # head_la input is [trunk (hidden) ; onehot ev (K_e)]: its first `hidden` weight columns
+    # act on the trunk and the last K_e columns add a per-ev-bin logit offset
     hidden = trunk.shape[1]
     p_ev = torch.softmax(model.head_ev(trunk), dim=1)
 
@@ -209,6 +230,8 @@ def _conditionals(model, trunk, weighted, kernel, n_bins):
     if weighted is None:
         return p_ev, p_la, kernel.expand(p_ev.shape[0], n_bins, n_bins)
 
+    # per-row spray logits from the trunk alone, max-shifted; the (ev, la) offsets are
+    # already inside weighted/kernel (see spray_kernels)
     base_spray = (trunk @ model.head_spray.weight[:, :hidden].T + model.head_spray.bias)
     scaled = torch.exp(base_spray - base_spray.amax(dim=1, keepdim=True))   # (M, K_s)
     numerator = scaled @ weighted.T                                    # (M, K_e*K_l)
@@ -221,9 +244,15 @@ def expected_woba(models, hitter, context, points, n_bins, kernels=None):
     """
     E[wOBA points | in play, hitter, pitch] plus the swing and contact probabilities.
     Conditionals are averaged across the ensemble BEFORE composition (spec §6).
-    Returns (p_swing (M,), p_contact (M,), q (M,)) as float64 numpy arrays.
+    hitter [M], context [M, n_context]: one row per (hitter, pitch) pair, M rows.
+    points [K, K, K]: wOBA points per (ev, la, spray) bin. kernels: optional precomputed
+    spray_kernels per model.
+    Returns (p_swing (M,), p_contact (M,), q (M,), split) as float64 numpy arrays, where
+    q is E[points | in play, measured] and split is the ensemble-mean (M, 3) contact
+    split from the trained head, or None if the models have no such head.
     """
     kernels = kernels or [spray_kernels(model, points, n_bins) for model in models]
+    # running sums over the ensemble, divided by n below (average conditionals, not wOBA)
     swing = contact = p_ev = p_la = ratio = split = None
     with torch.no_grad():
         for model, (weighted, kernel) in zip(models, kernels):
@@ -244,6 +273,7 @@ def expected_woba(models, hitter, context, points, n_bins, kernels=None):
         n = len(models)
         swing, contact = swing / n, contact / n
         p_ev, p_la, ratio = p_ev / n, p_la / n, ratio / n
+        # sum over (ev, la) of p(ev) * p(la | ev) * R(ev, la): expected points given in play
         quality = torch.einsum("me,mel,mel->m", p_ev, p_la, ratio)
         split = None if split is None else (split / n).double().numpy()
     return (swing.double().numpy(), contact.double().numpy(),
@@ -258,6 +288,7 @@ def expected_woba_naive(models, hitter, context, points, n_bins, spray_mass=None
 
     For an arm with no spray head the joint's spray axis is the league conditional
     P(spray | ev, la), broadcast over rows, rather than a predicted softmax.
+    Returns q (M,) float64 numpy, the same quantity as `expected_woba`'s third output.
     """
     with torch.no_grad():
         total = None
@@ -268,6 +299,7 @@ def expected_woba_naive(models, hitter, context, points, n_bins, spray_mass=None
             base_la = trunk @ model.head_la.weight[:, :hidden].T + model.head_la.bias
             p_la = torch.softmax(base_la.unsqueeze(1)
                                  + model.head_la.weight[:, hidden:].T.unsqueeze(0), dim=-1)
+            # same head weight layout as spray_kernels / _conditionals
             if model.head_spray is None:
                 ratio = league_spray_ratio(points, spray_mass)
                 p_spray = None
@@ -276,6 +308,7 @@ def expected_woba_naive(models, hitter, context, points, n_bins, spray_mass=None
                            + model.head_spray.bias)
                 column_ev = model.head_spray.weight[:, hidden:hidden + n_bins].T
                 column_la = model.head_spray.weight[:, hidden + n_bins:].T
+                # full (M, K_e, K_l, K_s) spray logits: trunk term plus ev and la offsets
                 joint = (base_sp[:, None, None, :] + column_ev[None, :, None, :]
                          + column_la[None, None, :, :])
                 p_spray = torch.softmax(joint, dim=-1)
@@ -291,7 +324,9 @@ def solve_chain(aggregates, w_bb, w_hbp, w_k=0.0):
     """
     Expected wOBA points of a plate appearance, by backward induction over the 12 counts.
     aggregates: dict of (..., 4, 3) arrays -- ball, strike, hbp, foul, and the wOBA-points
-    contribution of balls in play. Vectorised over any leading axes, normally hitters.
+    contribution of balls in play (key "bip_points"). Last two axes are (balls, strikes);
+    ball/strike/hbp/foul are per-count probabilities that the next pitch lands in that state.
+    w_bb, w_hbp: payoff of the absorbing walk and hit-by-pitch. Vectorised over any leading axes, normally hitters.
     Returns W with the same shape; W[..., 0, 0] is the answer.
 
     Order matters and is not incidental: every dependency is on a higher ball or strike
@@ -302,12 +337,16 @@ def solve_chain(aggregates, w_bb, w_hbp, w_k=0.0):
     call wants -- a strikeout scores no points. `absorbing_rates` sets it to 1 to read the
     strikeout PROBABILITY out of the same recursion instead of writing a second one.
     """
+    # W[..., b, s]: expected payoff from count (b, s) onward; lead = batch axes (e.g. hitters)
     lead = aggregates["ball"].shape[:-2]
     W = np.zeros(lead + (N_BALLS, N_STRIKES), dtype="float64")
     for strikes in reversed(range(N_STRIKES)):
         for balls in reversed(range(N_BALLS)):
+            # a fourth ball or third strike ends the PA with its absorbing payoff; otherwise
+            # the value is that of the next count
             ball_value = w_bb if balls == N_BALLS - 1 else W[..., balls + 1, strikes]
             strike_value = w_k if strikes == N_STRIKES - 1 else W[..., balls, strikes + 1]
+            # expected payoff of everything except the foul self-loop / foul-to-next-strike
             fixed = (aggregates["ball"][..., balls, strikes] * ball_value
                      + aggregates["strike"][..., balls, strikes] * strike_value
                      + aggregates["hbp"][..., balls, strikes] * w_hbp
@@ -334,6 +373,8 @@ def absorbing_rates(aggregates):
     implementation that could drift from it. The four states are exhaustive by construction,
     so their sum is a free check that no probability mass leaks out of the chain.
     """
+    # aggregates: as in solve_chain (needs key "bip", the per-count in-play probability).
+    # Returns {"bb","k","hbp","bip": array shaped like W}; [..., 0, 0] is the PA-level rate.
     zero = np.zeros_like(aggregates["bip_points"])
     #      key    w_bb  w_hbp  w_k   bip_points
     payoffs = {"bb": (1.0, 0.0, 0.0, zero),
@@ -362,6 +403,7 @@ def observed_absorbing_rates(pa_df, seasons):
     Committed to the repository per standards §6: D5-R1 quoted reference rates that were not
     reproducible from the repo, which is how the check ran for a phase with no pass condition.
     """
+    # one row per PA in the wOBA denominator, in the given seasons
     window = pa_df[np.isin(pa_df["season"].to_numpy(), seasons)
                    & pa_df["in_denominator"].to_numpy()]
     assert len(window), f"no plate appearances in the denominator for seasons {seasons}"
@@ -388,13 +430,16 @@ def league_fidelity(predictions, pa_df, manifest, observed, eval_season):
     windows and only the train window is the pass target, per spec §8's reason for comparing
     against the train window at all.
     """
+    # vocabulary maps batter id -> embedding row; row 0 is the shared cold-start row
     trained = {int(batter) for batter, row in manifest["vocabulary"].items() if int(row) != 0}
+    # plate appearances per (batter, hand) in the eval season, used as weights
     counts = (pa_df[(pa_df["season"] == eval_season) & pa_df["in_denominator"]]
               .groupby(["batter", "p_throws"]).size().rename("pa").reset_index())
     frame = predictions.merge(counts, on=["batter", "p_throws"], how="inner")
     frame = frame[frame["batter"].isin(trained)]
     assert len(frame), "no trained hitter survived the plate-appearance join"
 
+    # PA-weighted mean modelled rate per absorbing state vs the observed league rate
     weight = frame["pa"].to_numpy(dtype="float64")
     rates = {}
     for key in ABSORBING_KEYS:
@@ -412,6 +457,8 @@ def _panel(slots, probability, n_pitchers, generator):
     The pitchers a hand's hitters are scored against, with their batters-faced weights.
     n_pitchers <= 0 or >= the pool takes everyone, which is the default and makes the
     result independent of the draw.
+    slots [P], probability [P]: pitcher slots and their batters-faced weights (sum to 1).
+    Returns (slots, weights) for the chosen panel, weights renormalised to sum to 1.
     """
     if n_pitchers <= 0 or n_pitchers >= len(slots):
         return slots, probability
@@ -425,6 +472,7 @@ def _stand_lookup(pa_df, eval_season):
     Keyed on the PAIR, following gbm.py:136 -- a per-batter mode would label every
     switch hitter right-handed, since they face right-handed pitching far more often.
     """
+    # most common stand per (batter, hand) in the eval season
     window = pa_df[pa_df["season"] == eval_season]
     modes = (window.groupby(["batter", "p_throws"])["stand"]
              .agg(lambda values: values.mode().iat[0]))
@@ -436,9 +484,12 @@ def _contact_split(tables, frame, pitch_rows, split_head=None):
     p(foul, foul_tip, in_play | contact) per pitch, (n_pitches, 3).
     The league table indexed by (balls, strikes, in_zone) until split_head is supplied,
     at which point the trained three-class head replaces it (spec §2.1).
+    frame: aligned pitch frame; pitch_rows [P]: positions into it. Class order is
+    CONTACT_CLASSES (foul, foul_tip, in_play).
     """
     if split_head is not None:
         return split_head(pitch_rows)
+    # table lookup by (balls, strikes, in_zone)
     subset = frame.iloc[pitch_rows]
     in_zone = (subset["zone"].to_numpy() <= 9).astype("int64")
     return tables["split"][subset["balls"].to_numpy(), subset["strikes"].to_numpy(),
@@ -450,13 +501,18 @@ def _cell_aggregates(models, kernels, tensors, frame, tables, points, n_bins,
                      measured_share=1.0, unmeasured_value=0.0):
     """
     One (pitcher, stand, count) cell scored against every hitter in the group.
-    Returns a dict of (n_hitters,) arrays -- the per-state outcome masses and the
-    wOBA-points contribution of balls in play.
+    hitter_rows [H]: embedding rows of the hitters; pitch_rows [P]: frame/tensor rows of
+    the sampled pitches. measured_share/unmeasured_value: the D5-R15 split of balls in play.
+    Returns a dict of (H, P) arrays (per hitter, per pitch) -- the per-state outcome masses
+    ("ball","strike","hbp","foul","bip") and the wOBA-points contribution of balls in play
+    ("bip_points").
 
     bip_points is accumulated in its own term rather than as mass x mean quality: a pitch
     more likely to be put in play is not the pitch with average contact quality, and
     factoring the two apart would silently discard that covariance.
     """
+    # score every hitter against every pitch: hitters repeat per pitch, pitches tile per
+    # hitter, giving H*P rows ordered hitter-major
     n_hitters, n_pitches = len(hitter_rows), len(pitch_rows)
     hitter = torch.from_numpy(np.repeat(hitter_rows, n_pitches))
     context = tensors["context"][torch.from_numpy(np.tile(pitch_rows, n_hitters))]
@@ -475,6 +531,8 @@ def _cell_aggregates(models, kernels, tensors, frame, tables, points, n_bins,
         split = model_split.reshape(n_hitters, n_pitches, 3)
     else:
         split = _contact_split(tables, frame, pitch_rows, split_head)        # (P, 3)
+    # outcome tree per pitch: take (ball / called strike / HBP) vs swing; swing splits into
+    # miss (strike) and contact; contact splits into foul, foul tip, in play
     take_mass, contact_mass = 1.0 - p_swing, p_swing * p_contact
     in_play = contact_mass * split[..., 2]
 
@@ -486,6 +544,8 @@ def _cell_aggregates(models, kernels, tensors, frame, tables, points, n_bins,
     # is a fixed league rate; `measured_share=1.0` reproduces the pre-fix number exactly.
     expected_points = measured_share * quality + (1.0 - measured_share) * unmeasured_value
 
+    # a swinging miss, a called strike and a foul tip all count as a strike; a plain foul is
+    # kept apart because it adds a strike only below two strikes (at two it self-loops)
     return {
         "ball": take_mass * take[:, 0],
         "strike": (take_mass * take[:, 1] + p_swing * (1.0 - p_contact)
@@ -507,6 +567,7 @@ def _sample_grid(repertoire, slots, stand_slot, n_pitches, generator):
     never faced this stand at some count cannot finish a plate appearance, so he is
     marked unusable rather than scored with an absorbing hole in his chain.
     """
+    # grid[i, c, k]: frame row of the k-th sampled pitch for pitcher i at count c
     grid = np.zeros((len(slots), len(COUNT_STATES), n_pitches), dtype="int64")
     usable = np.ones(len(slots), dtype=bool)
     levels = np.zeros(4, dtype="int64")
@@ -528,9 +589,12 @@ def _group_woba(models, kernels, tensors, frame, tables, points, n_bins, hitter_
                 progress=None, keep_matrix=False):
     """
     Batters-faced-weighted mean of W(0,0) over the pitchers in `grid`, per hitter.
+    hitter_rows [H]: embedding rows. grid [n_pitchers, 12, n_pitches]: from `_sample_grid`.
+    pitcher_weights [n_pitchers]: batters-faced weights. chunk: pitchers per forward pass.
+    w_bb, w_hbp: season wOBA weights of a walk and hit-by-pitch.
     Pitchers are processed in chunks so one forward pass covers many of them: the batch is
     (n_hitters x chunk x n_pitches) rows, which is where the arithmetic actually lives.
-    Returns (total, used_weight, absorbing) so a partial panel renormalises rather than
+    Returns (total [H], used_weight scalar, absorbing {key: [H]}) so a partial panel renormalises rather than
     under-counts. `absorbing` carries the same weighted sums for the four §8 absorbing rates:
     they ride on the forward passes the wOBA number already paid for, so the fidelity check
     costs four extra 12-state backward inductions per chunk and nothing else.
@@ -549,9 +613,11 @@ def _group_woba(models, kernels, tensors, frame, tables, points, n_bins, hitter_
         stop = min(start + chunk, n_pitchers)
         block = grid[start:stop]                                   # (C, 12, X)
         width = stop - start
+        # aggregates[key][h, c, count]: pitch-averaged outcome mass per hitter, pitcher, count
         aggregates = {key: np.zeros((n_hitters, width, n_states)) for key in AGGREGATE_KEYS}
 
         for position in range(n_states):
+            # all chunk pitchers' sampled pitches at this count, as one flat batch
             rows = block[:, position, :].reshape(-1)               # (C * X,)
             cell = _cell_aggregates(models, kernels, tensors, frame, tables, points,
                                     n_bins, hitter_rows, rows, split_head,
@@ -568,6 +634,7 @@ def _group_woba(models, kernels, tensors, frame, tables, points, n_bins, hitter_
             "per-count outcome masses do not sum to 1"
 
         solved = solve_chain(shaped, w_bb, w_hbp)                   # (H, C, 4, 3)
+        # weighted sum over pitchers of W(0,0); divided by `used` by the caller
         weights = pitcher_weights[start:stop]
         total += solved[:, :, 0, 0] @ weights
         if keep_matrix:
@@ -590,6 +657,7 @@ def build_tables(frame, tensors, manifest, pa_df, take_count_offsets=False):
     """
     train_seasons = manifest["train_seasons"]
     train_mask = np.isin(frame["season"].to_numpy(), train_seasons)
+    # per-pitch quality bin labels [N]; -1 marks a ball not in play or not measured
     bins = {name: tensors[name].numpy() for name in ("ev", "la", "spray")}
 
     surfaces, take_alpha = qt.fit_take_surfaces(frame, train_mask)
@@ -598,6 +666,7 @@ def build_tables(frame, tensors, manifest, pa_df, take_count_offsets=False):
     repertoire = qt.build_repertoire(frame, train_mask)
     scored = int((train_mask & (bins["ev"] != -1) & (bins["la"] != -1)
                   & (bins["spray"] != -1)).sum())
+    # keys consumed by predict / league_composition; "coverage" is reporting only
     return {
         "take": surfaces,
         # None reproduces the count-blind surface exactly, so D5-R1's delta stays measurable
@@ -655,6 +724,7 @@ def _append_cold_start_row(model, vector):
     `nn.Embedding` module so nothing about the original is mutated in place. Returns
     (original_module, new_row_index) for `_restore_cold_start_row`.
     """
+    # build the grown table as a new module; the original stays untouched for the restore
     original = model.embedding
     vec = torch.as_tensor(vector, dtype=original.weight.dtype).reshape(1, -1)
     with torch.no_grad():
@@ -697,6 +767,8 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
     batter ids, pitcher ids, BF weights and the (batters x pitchers) W(0,0) matrix, so
     pred_woba = w00 @ bf_weight / bf_weight.sum(). Not JSON-serialisable; pop it first.
     """
+    # season-specific wOBA weights turn V's category probabilities into points [K, K, K];
+    # kernels depend only on model and points, so they are built once per call
     weights = eval_targets.load_weights()[str(eval_season)]
     points = torch.from_numpy(qt.woba_points_table(tables["outcome"], weights)).float()
     share, unmeasured = _unmeasured_terms(tables, weights, unmeasured_split)
@@ -704,6 +776,7 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
     n_bins = manifest["n_quality_bins"]
     kernels = [spray_kernels(model, points, n_bins, tables["spray_mass"]) for model in models]
 
+    # the (batter, hand) pairs to score: those with a PA in eval_season, pitchers excluded
     rows = (eval_targets.drop_pitcher_batters(pa_df)
             .query("season == @eval_season")[["batter", "p_throws"]].drop_duplicates())
     if batters is not None:
@@ -713,6 +786,7 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
         # and the pairing is the whole point of the diagnostic
         assert set(rows["batter"].astype(int)) == wanted, \
             f"requested batters absent from {eval_season}: {sorted(wanted - set(rows['batter']))}"
+    # one pitcher panel per throwing hand, drawn once so every hitter sees the same panel
     stand_of = _stand_lookup(pa_df, eval_season)
     generator = np.random.default_rng(seed)
     repertoire, pool = tables["repertoire"], tables["pitcher_weights"]
@@ -727,6 +801,7 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
         slots, panel_weights = panels[hand]
         side = rows[rows["p_throws"] == hand]
         batters = side["batter"].to_numpy()
+        # a hitter with no recorded stand defaults to "R"
         stands = np.array([stand_of.get((int(b), hand), "R") for b in batters])
         totals = np.zeros(len(batters), dtype="float64")
         rates = {key: np.zeros(len(batters), dtype="float64") for key in ABSORBING_KEYS}
@@ -735,6 +810,7 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
             group = stands == stand
             if not group.any():
                 continue
+            # unknown hitters map to the reserved row 0 (the cold-start row)
             hitter_rows = np.array([vocabulary.get(int(b), 0) for b in batters[group]],
                                    dtype="int64")
 
@@ -748,6 +824,7 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
                 hitter_rows = np.where(hitter_rows == 0, new_index, hitter_rows)
 
             try:
+                # sample real pitches per (pitcher, count) for this stand; stand slot 1 = R
                 grid, usable, levels = _sample_grid(repertoire, slots,
                                                     1 if stand == "R" else 0, n_pitches,
                                                     generator)
@@ -766,6 +843,7 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
                         f"  {label}: {done}/{n} pitchers"),
                     # only passed when on, so the default call is the pre-matrix call exactly
                     **({"keep_matrix": True} if keep_matrix else {}))
+                # divide by `used` weight to get the weighted mean over usable pitchers
                 total, used, absorbing = result[:3]
                 if keep_matrix:
                     per_pitcher.append({
@@ -785,6 +863,7 @@ def predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
              "pred_woba": totals,
              **{f"rate_{key}": rates[key] for key in ABSORBING_KEYS}}))
 
+    # final sanity checks: every hitter has a finite prediction and rates sum to 1
     rate_columns = [f"rate_{key}" for key in ABSORBING_KEYS]
     out = pd.concat(predictions, ignore_index=True)[
         claim1_eval.KEY + ["pred_woba"] + rate_columns]
@@ -836,6 +915,8 @@ def league_composition(models, tensors, manifest, frame, tables, shares, eval_se
     Reports per cell and then twice over: `league_pred_woba` weights the four (stand, hand)
     cells by their true share, and `league_pred_woba_uniform` keeps the flat 25% the five
     recorded arm values were produced under, so those stay checkable against a fresh run.
+    shares: {(stand, hand): PA share} from `handedness_shares`. Returns a dict of league-level
+    values (pred_woba, per-PA rates, per-pitch 0-0 masses) plus per-cell detail under "cells".
     """
     weights = eval_targets.load_weights()[str(eval_season)]
     points = torch.from_numpy(qt.woba_points_table(tables["outcome"], weights)).float()
@@ -844,6 +925,7 @@ def league_composition(models, tensors, manifest, frame, tables, shares, eval_se
     share, unmeasured = _unmeasured_terms(tables, weights, unmeasured_split)
     generator = np.random.default_rng(seed)
     repertoire, pool = tables["repertoire"], tables["pitcher_weights"]
+    # a single stand-in hitter: embedding row 0, the reserved zero row
     generic = np.zeros(1, dtype="int64")
 
     cells = {}
@@ -861,6 +943,7 @@ def league_composition(models, tensors, manifest, frame, tables, shares, eval_se
                 grid[usable], weight_vector, None, chunk, weights["wBB"], weights["wHBP"],
                 False, share, unmeasured)
 
+            # per-pitch outcome masses at the 0-0 count only (grid position 0), for the report
             block = grid[usable]
             first = block[:, 0, :].reshape(-1)
             cell = _cell_aggregates(models, kernels, tensors, frame, tables, points,
@@ -879,6 +962,7 @@ def league_composition(models, tensors, manifest, frame, tables, shares, eval_se
                 **masses,
             }
 
+    # combine the four (stand, hand) cells, once by true PA share and once flat (25% each)
     fields = (["pred_woba"] + [f"rate_{key}" for key in ABSORBING_KEYS]
               + [f"mass_{key}_00" for key in AGGREGATE_KEYS])
     share_weights = np.array([cell["share"] for cell in cells.values()])
@@ -903,6 +987,8 @@ def default_cold_start_prior(models, stats_csv=DEFAULT_HITTER_STATS,
     per-stand low-stratum mean makes the default a real prior instead of an accident.
 
     Imported lazily: `cold_start_prior_eval` imports this module at module level.
+    Returns {"L": vector, "R": vector}, one embedding-sized vector per stand (the format
+    `predict` takes as cold_start_prior).
     """
     from src.analysis.cold_start_prior_eval import ensemble_cold_start_prior
     stats = pd.read_csv(stats_csv)
@@ -954,6 +1040,11 @@ def build_parser():
 
 
 def main():
+    """
+    CLI entry: build the tables, load the seed ensemble, compose per-hitter wOBA with
+    `predict`, run the league fidelity check and zero-row probe, and write the CSV and
+    JSON outputs under --out-dir.
+    """
     args = build_parser().parse_args()
 
     claim1_eval.assert_not_test_season(args.eval_season, final_run=args.final_run)
@@ -971,6 +1062,7 @@ def main():
     tables = build_tables(frame, tensors, manifest, pa_df,
                           take_count_offsets=args.take_count_offsets)
 
+    # one checkpoint per seed, named <arm>_s<seed>.pt
     paths = [Path(args.checkpoint_dir) / f"{args.arm}_s{seed}.pt" for seed in args.seeds]
     models = load_ensemble(paths, manifest, tensors["context"].shape[1])
 
@@ -978,6 +1070,8 @@ def main():
         models, args.hitter_stats)
     _progress(f"cold-start prior: {'off' if cold_start_prior is None else args.hitter_stats}")
 
+    # reference rates for the fidelity check, from the train window (and the eval season,
+    # reported alongside)
     shares = handedness_shares(pa_df, manifest["train_seasons"])
     observed, n_observed = observed_absorbing_rates(pa_df, manifest["train_seasons"])
     observed_eval, n_observed_eval = observed_absorbing_rates(pa_df, [args.eval_season])
@@ -1039,6 +1133,7 @@ def main():
                                    n_pitches=args.n_pitches, seed=args.seed,
                                    unmeasured_split=not args.no_unmeasured_split)
         per_seed[str(seed)] = {key: value for key, value in single.items() if key != "cells"}
+    # between-seed spread (max - min) of each league-level number
     spread = {key: (max(run[key] for run in per_seed.values())
                     - min(run[key] for run in per_seed.values()))
               for key in next(iter(per_seed.values()))} if per_seed else {}

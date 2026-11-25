@@ -40,7 +40,10 @@ EDGE_BUCKETS = (0, 1, 3, 6, 12)
 
 
 def _edge_distance(x_index, z_index, n_x, n_z):
-    """Cells from the nearest grid boundary. 0 means the outer ring."""
+    """
+    Cells from the nearest grid boundary. 0 means the outer ring.
+    x_index, z_index [N]: grid cell indices of each take; n_x, n_z: grid size. Returns [N] ints.
+    """
     return np.minimum(np.minimum(x_index, n_x - 1 - x_index),
                       np.minimum(z_index, n_z - 1 - z_index))
 
@@ -66,10 +69,15 @@ def hbp_diagnosis(frame, train_mask):
       Fix: the neighbour smoothing becomes active work rather than latent.
 
     The two are not exclusive. Returns one record per bucket plus the population totals.
+
+    frame: aligned pitch frame, one row per pitch (needs description, plate_x, plate_z, stand,
+    p_throws). train_mask [N]: True for training-season rows.
     """
+    # Take outcome class per pitch: 0 ball, 1 called strike, 2 hit by pitch; NaN if not a take.
     klass = frame["description"].map(qt.TAKE_DESCRIPTION_TO_CLASS)
     usable = np.asarray(train_mask) & klass.notna().to_numpy()
 
+    # Locate each take on the same grid the take surfaces use.
     raw_x = frame["plate_x"].to_numpy(dtype="float64")
     raw_z = frame["plate_z"].to_numpy(dtype="float64")
     x_index, n_x = qt._grid_index(raw_x, qt.TAKE_GRID_X)
@@ -79,14 +87,17 @@ def hbp_diagnosis(frame, train_mask):
                | (raw_z < qt.TAKE_GRID_Z[0]) | (raw_z >= qt.TAKE_GRID_Z[1]))
     distance = _edge_distance(x_index, z_index, n_x, n_z)
 
+    # Shrunk per-cell (ball, called strike, HBP) probabilities, one surface per (stand, throws).
     surfaces, alpha = qt.fit_take_surfaces(frame, usable)
 
+    # Walk outward from the edge band by band; totals accumulate n-weighted sums for the population row.
     records, totals = [], {"observed": 0.0, "shrunk": 0.0, "n": 0.0}
     for low, high in zip(EDGE_BUCKETS, EDGE_BUCKETS[1:] + (max(n_x, n_z),)):
         band = usable & (distance >= low) & (distance < high)
         if not band.any():
             continue
         n = int(band.sum())
+        # Raw HBP rate among takes in this band (class 2 = hit by pitch).
         observed = float((klass.to_numpy()[band] == 2).sum()) / n
 
         # the shrunk surface's HBP probability, weighted by the SAME rows -- so the gap
@@ -124,7 +135,11 @@ def hbp_diagnosis(frame, train_mask):
 
 
 def _ols(design, y, weights):
-    """Weighted least squares coefficients. `design` already carries its intercept column."""
+    """
+    Weighted least squares coefficients. `design` already carries its intercept column.
+    design [N, P]: N rows, P regressors; y [N]: response; weights [N]: row weights. Returns [P].
+    """
+    # Scaling rows by sqrt(weight) turns weighted LS into ordinary LS.
     root = np.sqrt(weights)[:, None]
     solution, *_ = np.linalg.lstsq(design * root, y * np.sqrt(weights), rcond=None)
     return solution
@@ -147,6 +162,9 @@ def gradient_a(eval_frame, pa_df, eval_season, n_boot=2000, seed=0):
     Intervals are bootstrap, clustered on batter: a hitter contributes up to two rows (vs LHP
     and vs RHP) driven by the same talent, health and home park, so resampling rows would
     count them as independent and understate every interval.
+
+    eval_frame: scored frame with pred_woba, woba, prior_pa, denominator, one row per (batter, hand).
+    pa_df: PA target table used to build the C.2 posterior. Returns coefficients with bootstrap CIs.
     """
     # the debut prior matters here specifically: prior_pa == 0 is the left end of the very
     # regression this function fits, and it is where the model now carries a cold-start prior
@@ -158,6 +176,7 @@ def gradient_a(eval_frame, pa_df, eval_season, n_boot=2000, seed=0):
                              on=claim1_eval.KEY, how="inner")
     assert len(frame) > 0, "no rows survived the join to the C.2 posterior"
 
+    # Per-row level error: predicted minus observed wOBA.
     frame = frame.assign(excess=frame["pred_woba"] - frame["woba"])
     # prior_pa in hundreds, so the coefficient reads as wOBA per 100 prior PA rather than as
     # a number with four leading zeros
@@ -166,6 +185,7 @@ def gradient_a(eval_frame, pa_df, eval_season, n_boot=2000, seed=0):
     y = frame["excess"].to_numpy(dtype="float64")
     weights = frame["denominator"].to_numpy(dtype="float64")
 
+    # Design columns, in order: intercept | prior PA per 100 | C.2 posterior wOBA (talent proxy).
     names = ("intercept", "prior_pa_per_100", "eb_prior")
     design = np.column_stack([np.ones(len(frame)), exposure, talent])
     point = _ols(design, y, weights)
@@ -174,6 +194,7 @@ def gradient_a(eval_frame, pa_df, eval_season, n_boot=2000, seed=0):
     # exposure coefficient survives the control
     univariate = _ols(np.column_stack([np.ones(len(frame)), exposure]), y, weights)
 
+    # Batter-clustered bootstrap: refit on each resample, then take 2.5/97.5 percentiles per coefficient.
     clusters = claim1_eval.batter_clusters(frame)
     rng = np.random.default_rng(seed)
     draws = np.empty((n_boot, design.shape[1]))
@@ -208,7 +229,11 @@ def gradient_c(baseline, perturbed, eval_frame, n_boot=2000, seed=0):
 
     Reusing the two runs step 3 already needs for the unmeasured fix's two-sided check, so this
     costs no additional composition.
+
+    baseline, perturbed: prediction frames from the two runs (same hitters). eval_frame supplies
+    prior_pa, denominator, stratum. Returns the slope of delta on exposure with a clustered CI.
     """
+    # Pair each hitter's baseline and perturbed prediction, then attach exposure and weight columns.
     merged = (baseline[claim1_eval.KEY + ["pred_woba"]]
               .merge(perturbed[claim1_eval.KEY + ["pred_woba"]], on=claim1_eval.KEY,
                      suffixes=("_base", "_perturbed")))
@@ -217,11 +242,13 @@ def gradient_c(baseline, perturbed, eval_frame, n_boot=2000, seed=0):
     frame = merged.merge(eval_frame[claim1_eval.KEY + ["prior_pa", "denominator", "stratum"]],
                          on=claim1_eval.KEY, how="inner")
 
+    # Delta = change the knob caused; regressed on prior PA (hundreds) with denominator weights.
     delta = (frame["pred_woba_perturbed"] - frame["pred_woba_base"]).to_numpy(dtype="float64")
     exposure = frame["prior_pa"].to_numpy(dtype="float64") / 100.0
     weights = frame["denominator"].to_numpy(dtype="float64")
     design = np.column_stack([np.ones(len(frame)), exposure])
 
+    # Bootstrap only the slope (index 1), resampling whole batters.
     point = _ols(design, delta, weights)
     clusters = claim1_eval.batter_clusters(frame)
     rng = np.random.default_rng(seed)
@@ -230,6 +257,7 @@ def gradient_c(baseline, perturbed, eval_frame, n_boot=2000, seed=0):
                       for _ in range(n_boot)])
     low, high = np.percentile(draws, (2.5, 97.5))
 
+    # Mean delta per exposure stratum, for reading the gradient without the regression.
     by_stratum = {name: {"n": int(part.shape[0]),
                          "mean_delta": float(delta[part.index.to_numpy()].mean())}
                   for name, part in frame.reset_index(drop=True).groupby("stratum",
@@ -255,6 +283,9 @@ def hitter_exposure(data_dir, manifest):
 
     Read memmapped straight off the two columns it needs rather than through `load_tensors`,
     which would pull the 1.08 GB context block into RAM beside a training run.
+
+    data_dir: built Phase D tensor directory; manifest: its manifest dict. Returns float [n_hitters + 1]
+    of train-season pitch counts, indexed by embedding row (row 0 is the reserved cold-start row).
     """
     directory = Path(data_dir)
     seasons = np.load(directory / "season.npy", mmap_mode="r")
@@ -277,6 +308,9 @@ def woba_direction(embedding, pred_woba, weights):
 
     The alternative was a finite difference through the chain at one hitter. Rejected: it is a
     LOCAL gradient at whichever hitter is chosen, and the question is about a population.
+
+    embedding [H, D]: H hitters, D embedding coordinates; pred_woba [H]; weights [H]: PA weights.
+    Returns (unit direction [D], weighted R^2 of the fit).
     """
     design = np.column_stack([np.ones(len(embedding)), embedding])
     solution = _ols(design, pred_woba, weights)
@@ -307,7 +341,12 @@ def gradient_b(embedding, exposure, pred_by_row, pa_by_row, n_boot=2000, seed=0,
 
     Bootstrap resamples HITTERS, not (hitter, hand) rows: there is one embedding row per
     hitter, so the clustering the rest of this module needs does not apply here.
+
+    embedding [H, D]: one row per hitter; exposure [H]: train pitches per row; pred_by_row [H]: PA-weighted
+    predicted wOBA (NaN if unscored); pa_by_row [H]: eval PA; reserved: index of the cold-start row.
+    Returns a dict of slope/CI summaries for norm, projection and |projection|, per-quintile means, and flags.
     """
+    # Keep real, trained hitters only: drop the reserved row and anyone with no train pitches.
     rows = np.arange(len(embedding))
     trained = (rows != reserved) & (exposure > 0)
     embedding, exposure = embedding[trained], exposure[trained]
@@ -319,6 +358,7 @@ def gradient_b(embedding, exposure, pred_by_row, pa_by_row, n_boot=2000, seed=0,
     scored = np.isfinite(pred_by_row[trained]) & (pa_by_row[trained] > 0)
     direction, r_squared = woba_direction(embedding[scored], pred_by_row[trained][scored],
                                           pa_by_row[trained][scored])
+    # Signed coordinate of each embedding along the wOBA-raising direction.
     projection = embedding @ direction
 
     # per 1000 train pitches, so the coefficient is readable rather than four leading zeros
@@ -345,6 +385,7 @@ def gradient_b(embedding, exposure, pred_by_row, pa_by_row, n_boot=2000, seed=0,
                      "ci_low": float(low), "ci_high": float(high),
                      "excludes_zero": bool(low > 0 or high < 0),
                      "spearman": float(pd.Series(y).corr(pd.Series(exposure), method="spearman"))}
+    # Equal-count exposure buckets (quintiles by default) for a coarse look at the same gradient.
     edges = np.quantile(exposure, np.linspace(0, 1, quantiles + 1))
     bucket = np.clip(np.digitize(exposure, edges[1:-1]), 0, quantiles - 1)
     out["by_exposure_quintile"] = [
@@ -373,7 +414,11 @@ def per_hitter_predictions(predictions, vocabulary, n_rows):
     A hitter appears once per opposing hand, and the two rows are the same embedding seen
     through different contexts, so they average rather than count twice. Rows with no
     prediction stay NaN and are dropped downstream rather than filled.
+
+    predictions: CSV frame with batter, pred_woba and optionally pa; vocabulary: batter id (str) -> embedding
+    row; n_rows: embedding table size. Returns (pred [n_rows], pa [n_rows]) indexed by embedding row.
     """
+    # Map each batter to his embedding row; batters outside the vocabulary are dropped.
     frame = predictions.copy()
     frame["row"] = frame["batter"].astype(str).map(
         {key: int(value) for key, value in vocabulary.items()})
@@ -382,6 +427,7 @@ def per_hitter_predictions(predictions, vocabulary, n_rows):
     frame = frame.assign(weight=weight, weighted=frame["pred_woba"] * weight)
     grouped = frame.groupby(frame["row"].astype(int))[["weight", "weighted"]].sum()
 
+    # Weighted mean = sum(pred*weight) / sum(weight); rows with no prediction keep NaN / 0 PA.
     pred = np.full(n_rows, np.nan)
     pa = np.zeros(n_rows)
     pred[grouped.index] = grouped["weighted"] / grouped["weight"]
@@ -440,6 +486,7 @@ def _self_check():
 
 
 def main():
+    # CLI: each test is optional and enabled by its own flag, and they run as separate invocations.
     parser = argparse.ArgumentParser(description="D.5 level-bias attribution and gradient tests.")
     parser.add_argument("--predictions", default=None,
                         help="baseline model_v1_predictions_*.csv; gradient (a) needs it")
@@ -469,10 +516,12 @@ def main():
         _self_check()
         return 0
 
+    # Guard: refuse the frozen test season unless --final-run was passed.
     claim1_eval.assert_not_test_season(args.eval_season, final_run=args.final_run)
     pa_df = pd.read_parquet(args.eval_targets)
     report = {"eval_season": args.eval_season}
 
+    # HBP diagnosis: needs the pitch frame aligned to the training tensors (slow, hence --skip-hbp).
     if not args.skip_hbp:
         from src.model import loader
         tensors, manifest = loader.load_tensors(args.data_dir)
@@ -496,6 +545,7 @@ def main():
               f"{population['clipped_hbp']:.5f} against {population['unclipped_hbp']:.5f} "
               f"unclipped")
 
+    # Gradient (a) on one predictions CSV; (c) additionally needs the perturbed run's CSV.
     if args.predictions:
         predictions = pd.read_csv(args.predictions)
         eval_frame, coverage = claim1_eval.build_eval_frame(pa_df, predictions,
@@ -526,6 +576,7 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Gradient (b): per seed, load the trained embedding table from its checkpoint and test it against exposure.
     if args.gradient_b_arm:
         import torch
 

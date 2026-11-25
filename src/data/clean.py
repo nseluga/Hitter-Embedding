@@ -94,9 +94,11 @@ def load_snapshot(snapshot_dir, seasons=None):
     import pyarrow.parquet as pq
 
     snapshot_dir = Path(snapshot_dir)
+    # read only the retained columns that exist in each file; the intersection tolerates a column absent from a season file
     wanted = {c for c in RETAIN_COLUMNS if c != "season"}
     frames = []
     for path in sorted(snapshot_dir.glob("season=*.parquet")):
+        # the season comes from the file name, season=<YYYY>.parquet
         season = int(path.stem.split("=")[1])
         if seasons is not None and season not in seasons:
             continue
@@ -108,14 +110,17 @@ def load_snapshot(snapshot_dir, seasons=None):
 
 
 def filter_regular_season(df):
+    """Keep only regular-season pitches (game_type "R")."""
     return df[df["game_type"] == "R"]
 
 
 def drop_deprecated_columns(df):
+    """Drop the DEPRECATED_COLUMNS that are present."""
     return df.drop(columns=[c for c in DEPRECATED_COLUMNS if c in df.columns])
 
 
 def deduplicate(df):
+    """Keep the first row per pitch key (game_pk, at_bat_number, pitch_number)."""
     return df.drop_duplicates(subset=KEY_FIELDS)
 
 
@@ -128,13 +133,17 @@ def filter_position_player_pitchers(df):
     position players clear both conditions.
     """
     keep_masks = []
+    # judged per season, since a player's role can change between seasons
     for _, frame in df.groupby("season"):
+        # distinct plate appearances batted / faced per player this season
         batting = frame[["batter", "game_pk", "at_bat_number"]].drop_duplicates().groupby("batter").size()
         faced = frame[["pitcher", "game_pk", "at_bat_number"]].drop_duplicates().groupby("pitcher").size()
         primarily_batter = set(batting[batting >= BATTER_PA_THRESHOLD].index)
         few_faced = set(faced[faced < POSITION_PLAYER_MAX_BATTERS_FACED].index)
+        # both conditions must hold, which spares real pitchers and two-way players
         position_players = primarily_batter & few_faced
         keep_masks.append(~frame["pitcher"].isin(position_players))
+    # stitch the per-season masks back into the original row order
     keep = pd.concat(keep_masks).reindex(df.index)
     return df[keep]
 
@@ -154,6 +163,7 @@ def filter_invalid_pitch_type(df):
 
 def validate_core_context(df):
     """Drop rows missing a core context field or holding a physically impossible reading."""
+    # a row survives only if every core field is present and inside its physical bounds
     valid = df[CORE_CONTEXT_FIELDS].notna().all(axis=1)
     valid &= df["release_speed"].between(*RELEASE_SPEED_BOUNDS)
     valid &= df["plate_x"].abs() <= PLATE_X_ABS_MAX
@@ -163,6 +173,7 @@ def validate_core_context(df):
 
 def add_missingness_indicators(df):
     """Add a boolean `<field>_missing` column for each optional context field, keeping the field itself."""
+    # copy so the caller's frame is not mutated
     df = df.copy()
     for field in OPTIONAL_CONTEXT_FIELDS:
         if field in df.columns:
@@ -183,6 +194,7 @@ def clean(snapshot_dir, seasons=None):
     df = load_snapshot(snapshot_dir, seasons)
     df = df[[c for c in RETAIN_COLUMNS if c in df.columns]]
 
+    # each filter runs in order and its surviving row count is logged, so attrition is auditable stage by stage
     report = [("loaded", len(df))]
     for name, step in [
         ("regular_season", filter_regular_season),
@@ -203,6 +215,7 @@ def clean(snapshot_dir, seasons=None):
 
 
 def main():
+    """CLI: clean a snapshot, print the attrition report, write pitch_events.parquet and clean_report.json."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Clean a Statcast snapshot into a modeling pitch table.")

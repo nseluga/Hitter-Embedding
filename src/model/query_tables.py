@@ -74,8 +74,12 @@ BIP_CATEGORY_TO_CLASS = {"OUT": 0, "SF": 0, "1B": 1, "2B": 2, "3B": 3, "HR": 4}
 TAKE_GRID_X = (-2.5, 2.5, 0.1)
 TAKE_GRID_Z = (0.0, 5.0, 0.1)
 
+# count dimensions: balls 0-3, strikes 0-2 (12 counts)
 N_BALLS, N_STRIKES = 4, 3
+# (game, plate appearance) identifies one PA; used to join pitch rows to PA outcomes
 JOIN_KEYS = ["game_pk", "at_bat_number"]
+# columns re-read from the labeled parquet: the ones the model context excludes (pitcher,
+# description, zone) plus the keys and location/count fields the tables below are fit on
 ALIGN_COLUMNS = ["batter", "season", "pitcher", "description", "zone", "balls", "strikes",
                  "stand", "p_throws", "plate_x", "plate_z", "game_pk", "at_bat_number"]
 
@@ -90,6 +94,7 @@ def align_pitch_frame(pitch_events_path, eval_targets_path, season_tensor, caree
     desyncs the row count/order from the tensor and the asserts below catch it.
     Returns a DataFrame carrying the columns the model's context deliberately excludes.
     """
+    # re-apply the same pitcher-at-bat filter model_dataset.build used, so rows line up
     frame = pd.read_parquet(pitch_events_path, columns=ALIGN_COLUMNS)
     pa_df = pd.read_parquet(eval_targets_path)
     excluded = primarily_pitchers(pa_df)
@@ -97,6 +102,7 @@ def align_pitch_frame(pitch_events_path, eval_targets_path, season_tensor, caree
         excluded = excluded | expand_career_pitchers(pa_df)
     frame = drop_pitcher_at_bats(frame, excluded).reset_index(drop=True)
 
+    # two checks: row count, then per-row season equality (a cheap proxy for order)
     season = np.asarray(season_tensor)
     assert len(frame) == len(season), \
         f"parquet has {len(frame)} rows against the tensors' {len(season)}; rebuild"
@@ -113,9 +119,12 @@ def shrink(counts, alpha):
     """
     counts = np.asarray(counts, dtype="float64")
     totals = counts.sum(axis=1, keepdims=True)
+    # pooled class distribution over all cells (uniform if there are no observations)
     pool = counts.sum(axis=0)
     pool = pool / pool.sum() if pool.sum() > 0 else np.full(counts.shape[1],
                                                             1.0 / counts.shape[1])
+    # posterior mean: alpha pseudo-observations spread as the pool; weight on the cell
+    # is n/(n+alpha), matching the module docstring
     return (counts + alpha * pool) / (totals + alpha)
 
 
@@ -128,6 +137,7 @@ def fit_alpha(counts):
     """
     counts = np.asarray(counts, dtype="float64")
     totals = counts.sum(axis=1)
+    # cells with no observations carry no information; fewer than 2 gives no variance estimate
     usable = totals > 0
     if usable.sum() < 2:
         return 1.0
@@ -139,6 +149,7 @@ def fit_alpha(counts):
         # come straight from the counts without revisiting the raw rows
         stats = pd.DataFrame({"n": totals[usable], "mean": rate,
                               "ss": totals[usable] * rate * (1.0 - rate)})
+        # signal/noise: between-cell and within-cell variance; their ratio is alpha
         signal, noise = variance_components(stats)
         point = stabilization_point_vc(signal, noise, threshold=0.5)
         if np.isfinite(point):
@@ -147,7 +158,10 @@ def fit_alpha(counts):
 
 
 def _grid_index(values, spec):
-    """Bin index on a fixed grid, clipping out-of-range values into the edge cells."""
+    """
+    Bin index on a fixed grid, clipping out-of-range values into the edge cells.
+    values [N]: coordinates in feet. spec: (low, high, step). Returns (index [N] int64, n_bins).
+    """
     low, high, step = spec
     n = int(round((high - low) / step))
     index = np.floor((np.asarray(values, dtype="float64") - low) / step)
@@ -157,7 +171,9 @@ def _grid_index(values, spec):
 def fit_take_surfaces(frame, train_mask):
     """
     p(ball, called strike, hit by pitch | take, location), one surface per handedness cell.
-    Returns {(stand, p_throws): (n_x, n_z, 3) probability array} plus the fitted alpha.
+    frame: aligned pitch frame (see align_pitch_frame). train_mask [N]: True for training rows.
+    Returns {(stand, p_throws): (n_x, n_z, 3) probability array} plus the fitted alpha
+    (median over the four surfaces).
     Four surfaces rather than one because taken-pitch location differs markedly across
     handedness combinations (2026-08-08; Deshpande & Wyner 2017 Fig. 3).
     """
@@ -166,6 +182,8 @@ def fit_take_surfaces(frame, train_mask):
     x_index, n_x = _grid_index(frame["plate_x"], TAKE_GRID_X)
     z_index, n_z = _grid_index(frame["plate_z"], TAKE_GRID_Z)
 
+    # one surface per (batter stand, pitcher hand); the grid is flattened to x*n_z+z so
+    # np.add.at can accumulate class counts per cell, then reshaped back to (n_x, n_z, 3)
     surfaces, alphas = {}, []
     for stand in ("L", "R"):
         for throws in ("L", "R"):
@@ -184,6 +202,7 @@ def fit_take_surfaces(frame, train_mask):
 def fit_take_count_offsets(surfaces, frame, train_mask, n_iterations=32):
     """
     Per-count multiplicative adjustments to the take surfaces (D5-R1). Returns (4, 3, 3).
+    Axes: balls, strikes, take class (ball, called_strike, hit_by_pitch).
 
     The location surfaces are count-BLIND. They are right on average -- the marginal error is
     +0.00019 -- and wrong in every count, because umpires call the same location differently at
@@ -208,6 +227,8 @@ def fit_take_count_offsets(surfaces, frame, train_mask, n_iterations=32):
     balls = frame["balls"].to_numpy()[rows]
     strikes = frame["strikes"].to_numpy()[rows]
 
+    # rake each count separately: rescale class probabilities by `factor` until the mean
+    # predicted class shares match the observed shares in that count
     offsets = np.ones((N_BALLS, N_STRIKES, len(TAKE_CLASSES)), dtype="float64")
     for b in range(N_BALLS):
         for s in range(N_STRIKES):
@@ -231,6 +252,7 @@ def fit_take_count_offsets(surfaces, frame, train_mask, n_iterations=32):
 def take_probabilities(surfaces, frame, rows, count_offsets=None):
     """
     Look up (n, 3) take-class probabilities for the given row positions.
+    surfaces: from fit_take_surfaces. frame: aligned pitch frame. rows [n]: positions into frame.
     count_offsets: optional (4, 3, 3) multiplicative adjustment from
     `fit_take_count_offsets`; applied then renormalised, so the result is still a distribution.
     """
@@ -240,6 +262,7 @@ def take_probabilities(surfaces, frame, rows, count_offsets=None):
     out = np.empty((len(subset), len(TAKE_CLASSES)), dtype="float64")
     stands = subset["stand"].to_numpy()
     throws = subset["p_throws"].to_numpy()
+    # each row reads from the surface for its (stand, p_throws) cell
     for key, surface in surfaces.items():
         cell = (stands == key[0]) & (throws == key[1])
         if cell.any():
@@ -258,7 +281,9 @@ def fit_contact_split(frame, train_mask):
     """
     klass = frame["description"].map(CONTACT_DESCRIPTION_TO_CLASS)
     cell = train_mask & klass.notna().to_numpy()
+    # frame/train_mask as in fit_take_surfaces
     in_zone = (frame["zone"].to_numpy() <= 9).astype("int64")  # Statcast 1-9 is in-zone
+    # flat cell id = (balls, strikes, in_zone) in row-major order, matching the reshape below
     flat = ((frame["balls"].to_numpy() * N_STRIKES + frame["strikes"].to_numpy()) * 2
             + in_zone)[cell]
 
@@ -271,14 +296,20 @@ def fit_contact_split(frame, train_mask):
 def fit_outcome_table(frame, bins, train_mask, pa_df, n_bins):
     """
     V[ev, la, spray] over {OUT, 1B, 2B, 3B, HR}, as category probabilities.
-    bins: dict of the three quality bin arrays, MASKED off balls in play.
+    frame: aligned pitch frame. bins: dict of the three quality bin arrays ("ev", "la",
+    "spray"), each [N] with MASKED off balls in play. train_mask [N]. pa_df: PA table with
+    `woba_category`. n_bins: bins per axis.
+    Returns (table [n_bins, n_bins, n_bins, 5], n measured balls in play, the unmeasured-share
+    dict from _unmeasured_outcomes, raw joint cell totals [n_bins, n_bins, n_bins]).
     Shrunk hierarchically -- a (ev, la, spray) cell backs off to its (ev, la) marginal,
     which backs off to the global pool -- because the bins are equal-mass marginally and
     not jointly, so the joint cells are far more uneven than their 73.9 average suggests.
     """
+    # only balls in play with all three bins measured can be placed in a V cell
     scored = (bins["ev"] != MASKED) & (bins["la"] != MASKED) & (bins["spray"] != MASKED)
     rows = np.flatnonzero(train_mask & scored)
 
+    # look up each pitch's PA result (woba_category) by (game, PA number)
     outcome = pa_df.drop_duplicates(JOIN_KEYS).set_index(JOIN_KEYS)["woba_category"]
     assert outcome.index.is_unique, "a plate appearance key appears twice in the PA table"
     keys = pd.MultiIndex.from_frame(frame.iloc[rows][JOIN_KEYS])
@@ -287,6 +318,7 @@ def fit_outcome_table(frame, bins, train_mask, pa_df, n_bins):
     joined = klass.notna().to_numpy()
     rows, klass = rows[joined], klass.to_numpy()[joined].astype("int64")
 
+    # count outcomes per joint (ev, la, spray) cell, cell id flattened row-major
     shape = (n_bins, n_bins, n_bins)
     flat = np.ravel_multi_index((bins["ev"][rows], bins["la"][rows], bins["spray"][rows]),
                                 shape)
@@ -297,8 +329,10 @@ def fit_outcome_table(frame, bins, train_mask, pa_df, n_bins):
     marginal = counts.reshape(n_bins, n_bins, n_bins, -1).sum(axis=2)
     marginal = shrink(marginal.reshape(n_bins * n_bins, -1), fit_alpha(marginal.reshape(
         n_bins * n_bins, -1)))
+    # repeat each (ev, la) row once per spray bin so it lines up with the flat joint cells
     marginal = np.repeat(marginal, n_bins, axis=0)
 
+    # joint cells shrink toward their (ev, la) marginal, as in `shrink` but with that pool
     alpha = fit_alpha(counts)
     totals = counts.sum(axis=1, keepdims=True)
     table = (counts + alpha * marginal) / (totals + alpha)
@@ -335,6 +369,7 @@ def _unmeasured_outcomes(frame, train_mask, scored, outcome, n_measured):
     distorts every cell's conditional in order to fix an aggregate level -- imputation by another
     name, which the Phase B missingness rule forbids.
     """
+    # train balls in play that lacked at least one quality bin (the complement of `scored`)
     in_play = frame["description"].to_numpy() == IN_PLAY_DESCRIPTION
     candidates = np.flatnonzero(train_mask & in_play & ~scored)
     keys = pd.MultiIndex.from_frame(frame.iloc[candidates][JOIN_KEYS])
@@ -355,9 +390,14 @@ def _unmeasured_outcomes(frame, train_mask, scored, outcome, n_measured):
 
 
 def woba_points_table(table, weights):
-    """Collapse V's category probabilities to wOBA points under one season's weights."""
+    """
+    Collapse V's category probabilities to wOBA points under one season's weights.
+    table [..., 5]: probabilities over BIP_CLASSES. weights: dict of wOBA weights by key.
+    Returns table.shape[:-1] expected wOBA points. OUT scores 0.
+    """
     from src.data.eval_targets import CATEGORY_WEIGHT_KEY
 
+    # one weight per BIP class, 0 for classes with no weight key (OUT); dot over class axis
     values = np.array([weights.get(CATEGORY_WEIGHT_KEY[name], 0.0)
                        if name in CATEGORY_WEIGHT_KEY else 0.0 for name in BIP_CLASSES])
     return table @ values
@@ -371,9 +411,12 @@ class Repertoire:
     """
 
     def __init__(self, order, starts, pitcher_ids, n_pitchers):
+        # order: frame row indices sorted by cell; starts [n_cells+1]: where each cell begins
+        # in `order`; pitcher_ids: sorted unique pitcher ids (slot = position in this array)
         self.order, self.starts = order, starts
         self.pitcher_ids, self.n_pitchers = pitcher_ids, n_pitchers
 
+    # flat cell id, row-major over (pitcher slot, stand slot 0=L 1=R, balls, strikes)
     def _cell(self, pitcher_slot, stand_slot, balls, strikes):
         return ((pitcher_slot * 2 + stand_slot) * N_BALLS + balls) * N_STRIKES + strikes
 
@@ -388,6 +431,9 @@ class Repertoire:
         Backoff order per docs/phase-model_v1-spec.md §2.3: exact cell, then the pitcher's
         rows at that strike count regardless of balls, then all his rows to that stand.
         Returns (rows, level) so the caller can report how often backoff fired.
+        level 0 = exact cell, 1 = same strikes any balls, 2 = all rows to that stand
+        (sampled with replacement), 3 = pitcher has no rows (empty result).
+        generator: numpy Generator; rows are frame row indices.
         """
         exact = self.rows(pitcher_slot, stand_slot, balls, strikes)
         if len(exact) >= n:
@@ -414,6 +460,7 @@ def build_repertoire(frame, train_mask):
     Excludes intentional balls, which the simulator never generates.
     Returns a Repertoire.
     """
+    # rank pitchers into slots, then sort rows by flat cell id; `starts` marks cell boundaries
     keep = train_mask & ~frame["description"].isin(EXCLUDED_DESCRIPTIONS).to_numpy()
     rows = np.flatnonzero(keep)
 
@@ -438,10 +485,12 @@ def pitcher_weights(pa_df, seasons, repertoire):
     simulated opponent distribution is the one hitters actually face rather than one
     weighted by roster count (2026-08-08).
     """
+    # batters faced (bf) per pitcher in the window, restricted to repertoire pitchers
     window = pa_df[pa_df["season"].isin(seasons)]
     faced = window.groupby(["pitcher", "p_throws"]).size().reset_index(name="bf")
     faced = faced[faced["pitcher"].isin(repertoire.pitcher_ids)]
 
+    # per pitcher hand: slots into repertoire.pitcher_ids and weights summing to 1
     out = {}
     for hand in ("L", "R"):
         side = faced[faced["p_throws"] == hand]

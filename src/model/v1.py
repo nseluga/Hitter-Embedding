@@ -78,6 +78,8 @@ class HitterEmbeddingV1(nn.Module):
     n_hitters: vocabulary size excluding the reserved row; n_context: context width;
     bilinear adds the low-rank interaction term, which is a D.8 arm and stays off.
     forward returns a dict of logits, one entry per factor.
+    split: add the three-class foul / foul_tip / in_play head; spray: keep the spray head
+    (False is the no-spray D.8 arm). Every other argument sets a layer width.
     """
 
     def __init__(self, n_hitters, n_context, embedding_dim=DEFAULT_EMBEDDING_DIM,
@@ -88,6 +90,8 @@ class HitterEmbeddingV1(nn.Module):
         self.n_bins = n_bins
         self.use_split, self.use_spray = split, spray
 
+        # hitter lookup: one learned vector per hitter, plus row 0 for the reserved
+        # "unseen / generic hitter"
         self.embedding = nn.Embedding(n_hitters + 1, embedding_dim,
                                       padding_idx=RESERVED_HITTER_INDEX)
         nn.init.normal_(self.embedding.weight, std=EMBEDDING_INIT_STD)
@@ -96,10 +100,13 @@ class HitterEmbeddingV1(nn.Module):
         with torch.no_grad():
             self.embedding.weight[RESERVED_HITTER_INDEX].zero_()
 
+        # context tower: encodes the per-pitch context features c (n_context wide)
         self.context_tower = nn.Sequential(
             nn.Linear(n_context, context_hidden), nn.ReLU(),
             nn.Linear(context_hidden, context_hidden), nn.ReLU())
 
+        # shared trunk: hitter vector and encoded context concatenated, then two layers
+        # whose output feeds every head
         self.trunk = nn.Sequential(
             nn.Linear(embedding_dim + context_hidden, trunk_hidden), nn.ReLU(),
             nn.Linear(trunk_hidden, trunk_hidden), nn.ReLU(),
@@ -116,6 +123,9 @@ class HitterEmbeddingV1(nn.Module):
         else:
             self.project_hitter = self.project_context = self.interaction = None
 
+        # one head per factor. swing/contact output a single logit; ev/la/spray output logits
+        # over n_bins quality bins. la and spray also take the one-hot of the bin(s) they are
+        # conditioned on, which is why their inputs are wider than the trunk (teacher forcing)
         self.head_swing = nn.Linear(trunk_hidden, 1)
         self.head_contact = nn.Linear(trunk_hidden, 1)
         self.head_ev = nn.Linear(trunk_hidden, n_bins)
@@ -125,23 +135,42 @@ class HitterEmbeddingV1(nn.Module):
         self.head_split = nn.Linear(trunk_hidden, len(SPLIT_CLASSES)) if split else None
 
     def conditioning(self, bins):
-        """One-hot of an observed bin, all zeros where the bin is MASKED."""
+        """
+        One-hot of an observed bin, all zeros where the bin is MASKED.
+        bins [B]: int64 bin index per pitch, MASKED (-1) where unobserved.
+        Returns [B, n_bins] float32.
+        """
+        # clamp keeps MASKED = -1 a legal index for one_hot; the `observed` factor then
+        # zeroes those rows
         observed = (bins != MASKED).unsqueeze(1).to(torch.float32)
         return F.one_hot(bins.clamp(min=0), self.n_bins).to(torch.float32) * observed
 
     def forward(self, hitter, context, ev_bin, la_bin):
+        """
+        hitter [B]: embedding row index per pitch (0 = reserved).
+        context [B, n_context]: context features per pitch.
+        ev_bin [B], la_bin [B]: bins the la / spray heads condition on -- observed bins in
+        training, sampled bins at inference; MASKED where unobserved.
+        Returns dict of logits: swing [B], contact [B], ev [B, n_bins], la [B, n_bins],
+        plus spray [B, n_bins] if enabled and split [B, 3] if enabled.
+        """
         assert hitter.dim() == 1, "hitter must be (B,), one index per pitch"
         assert context.dim() == 2 and context.shape[0] == hitter.shape[0], \
             "context must be (B, n_context) aligned with hitter"
         batch = hitter.shape[0]
 
+        # [B, embedding_dim] hitter vector and [B, context_hidden] context encoding, merged
+        # into one [B, trunk_hidden] representation
         embedded = self.embedding(hitter)
         encoded = self.context_tower(context)
         trunk = self.trunk(torch.cat([embedded, encoded], dim=1))
         if self.interaction is not None:
+            # residual add of the low-rank interaction onto the trunk output
             paired = self.project_hitter(embedded) * self.project_context(encoded)
             trunk = trunk + self.interaction(paired)
 
+        # chain of conditional heads: la sees [trunk | ev one-hot], spray sees
+        # [trunk | ev one-hot | la one-hot]
         ev_onehot = self.conditioning(ev_bin)
         la_onehot = self.conditioning(la_bin)
         outputs = {
@@ -176,6 +205,8 @@ def factor_masks(labels):
     labels: dict of int64 targets carrying MASKED where a factor is undefined.
     Returns one boolean mask per factor.
     """
+    # nesting: contact on swings (its label is MASKED otherwise), ev on balls in play, la
+    # where ev is present too, spray where la is. Every pitch is a swing-factor row.
     swing = torch.ones_like(labels["swing"], dtype=torch.bool)
     contact = labels["contact"] != MASKED
     ev = labels["ev"] != MASKED
@@ -191,18 +222,30 @@ def factor_masks(labels):
 
 
 def _binary_loss(logit, target, mask, rule, pos_weight=None):
-    """pos_weight scales the positive class only, which is §2.2's inverse-frequency arm."""
+    """
+    Summed loss of one binary factor over the rows in `mask`.
+    logit [B], target [B] (0/1, MASKED where undefined), mask [B] bool: rows to score.
+    rule: "log" is binary cross-entropy, "rps" is the squared error of the probability
+    (the Brier score). A batch with no scored rows returns a zero that stays in the graph.
+    pos_weight scales the positive class only, which is §2.2's inverse-frequency arm.
+    """
     if not bool(mask.any()):
         return (logit * 0.0).sum()
     selected, observed = logit[mask], target[mask].to(torch.float32)
     if rule == "log":
         return F.binary_cross_entropy_with_logits(selected, observed, reduction="sum",
                                                   pos_weight=pos_weight)
+    # rps branch: the same squared error, with the positive class scaled when pos_weight is set
     weight = 1.0 if pos_weight is None else torch.where(observed > 0, pos_weight, 1.0)
     return (weight * (torch.sigmoid(selected) - observed) ** 2).sum()
 
 
 def _quality_loss(logits, target, mask, rule):
+    """
+    Summed loss of one multi-class factor (ev, la, spray, split) over the rows in `mask`.
+    logits [B, n_classes], target [B] (class index, MASKED where undefined), mask [B] bool.
+    rule: "log" is cross-entropy, "rps" the ranked probability score over the ordered bins.
+    """
     if not bool(mask.any()):
         return (logits * 0.0).sum()
     selected, observed = logits[mask], target[mask]
@@ -229,6 +272,7 @@ def factorized_loss(outputs, labels, rule="log", weighting="sum", contact_pos_we
     positive class of the contact head, which is §2.2's inverse-frequency item.
     Returned parts are always the RAW per-factor sums so a weighted run and an
     unweighted one stay comparable head by head; only the total carries the weighting.
+    Returns (total scalar tensor, {factor name: summed loss}).
     """
     assert rule in LOSS_RULES, f"unknown loss rule {rule!r}"
     assert weighting in WEIGHTINGS, f"unknown weighting {weighting!r}"
@@ -240,6 +284,7 @@ def factorized_loss(outputs, labels, rule="log", weighting="sum", contact_pos_we
     for name in QUALITY_FACTORS + (SPLIT_FACTOR,):
         if name in outputs:
             parts[name] = _quality_loss(outputs[name], labels[name], masks[name], rule)
+    # "mean": each factor divided by its own scored-row count before summing; "sum": plain sum
     if weighting == "mean":
         total = sum(part / max(int(masks[name].sum()), 1) for name, part in parts.items())
         return total, parts
@@ -261,6 +306,7 @@ def weight_decay_groups(model, weight_decay, exclude=()):
     for name, parameter in model.named_parameters():
         if id(parameter) in excluded:
             continue
+        # biases go in the no-decay group, everything else (weights, embedding) in the decayed one
         (undecayed if name.endswith("bias") else decayed).append(parameter)
     return [{"params": decayed, "weight_decay": weight_decay},
             {"params": undecayed, "weight_decay": 0.0}]

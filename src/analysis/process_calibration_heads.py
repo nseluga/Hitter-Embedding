@@ -39,6 +39,7 @@ from src.data.model_dataset import MASKED
 from src.model import query, query_tables as qt
 from src.model import v1
 
+# Output directory and scoring batch size (rows per forward pass).
 DEFAULT_OUT_DIR = "results/process_calibration"
 DEFAULT_BATCH = 32768
 # heads scored here; the swing head keeps its own artifact from E.6 and is re-scored
@@ -73,6 +74,7 @@ def ensemble_head_probabilities(models, arrays, n_bins, batch=DEFAULT_BATCH):
     Binary heads return (N,); categorical heads return (N, n_classes).
     Conditioned heads see the OBSERVED ev/la bins, matching how training conditions them.
     """
+    # Accumulators: binary heads hold P(positive) per row; categorical heads hold a probability row per class.
     n_rows = len(arrays["hitter"])
     out = {name: np.zeros(n_rows, dtype="float64") for name in BINARY_HEADS}
     widths = {"split": len(v1.SPLIT_CLASSES), "ev": n_bins, "la": n_bins, "spray": n_bins}
@@ -80,6 +82,7 @@ def ensemble_head_probabilities(models, arrays, n_bins, batch=DEFAULT_BATCH):
         out[name] = np.zeros((n_rows, width), dtype="float64")
 
     with torch.no_grad():
+        # Score in batches to bound memory; sum probabilities over models, divide by ensemble size at the end.
         for start in range(0, n_rows, batch):
             stop = min(start + batch, n_rows)
             size = stop - start
@@ -90,6 +93,7 @@ def ensemble_head_probabilities(models, arrays, n_bins, batch=DEFAULT_BATCH):
 
             totals = {}
             for model in models:
+                # Model returns logits per head; observed ev/la bins are fed to the conditioned heads.
                 heads = model(hitter, context, ev_bin, la_bin)
                 for name in BINARY_HEADS:
                     probability = torch.sigmoid(heads[name])
@@ -105,12 +109,14 @@ def ensemble_head_probabilities(models, arrays, n_bins, batch=DEFAULT_BATCH):
                     totals[name] = probability + totals.get(name, 0.0)
 
             for name, total in totals.items():
+                # Ensemble mean of probabilities (not logits), per the module docstring.
                 out[name][start:stop] = (total / len(models)).double().numpy()
     return out
 
 
 def head_masks(arrays):
     """Rows each head is scored on, from `v1.factor_masks` so the nesting cannot drift."""
+    # v1.factor_masks gives the rows each head is trained on (la only where ev is observed, etc.).
     labels = {name: torch.from_numpy(arrays[name].astype("int64"))
               for name in ("swing", "contact", "split", "ev", "la", "spray")}
     return {name: mask.numpy() for name, mask in v1.factor_masks(labels).items()}
@@ -118,6 +124,7 @@ def head_masks(arrays):
 
 def binary_table(frame, observed_column, predicted_column, by, label, head):
     """Observed rate against mean predicted rate for a binary head, grouped by `by`."""
+    # Observed vs mean predicted rate per cell; gap = predicted - observed, relative_gap = gap / observed.
     grouped = frame.groupby(list(by), observed=True)
     out = grouped.agg(n_rows=(observed_column, "size"),
                       observed=(observed_column, "mean"),
@@ -135,6 +142,7 @@ def categorical_table(labels, probabilities, class_names, by_values, by_name, he
     labels: observed class index per row; probabilities: (n_rows, n_classes).
     """
     rows = []
+    # Per cell: observed class frequencies vs the mean predicted probability of each class.
     frame = pd.DataFrame({"cell": by_values, "label": labels})
     for cell, part in frame.groupby("cell", observed=True):
         index = part.index.to_numpy()
@@ -160,6 +168,7 @@ def expected_index_table(labels, probabilities, by_values, by_name, head):
     A distribution can match on average while every class is wrong, so this is reported
     beside the per-class table, never instead of it.
     """
+    # Expected bin index = sum over classes of probability * class position.
     positions = np.arange(probabilities.shape[1])
     predicted = probabilities @ positions
     frame = pd.DataFrame({"cell": by_values, "observed": labels, "predicted": predicted})
@@ -175,6 +184,10 @@ def expected_index_table(labels, probabilities, by_values, by_name, head):
 
 
 def main():
+    """
+    Scores each head's calibration on held-out pitches, grouped overall, by count, by handedness and by two-strike, and writes the CSV/JSON.
+    Inputs are the arm's seed checkpoints and the built tensors for the eval season; output is heads_head_calibration.csv and heads_summary.json.
+    """
     parser = argparse.ArgumentParser(
         description="Phase F.3 -- per-head calibration on real held-out pitches.")
     parser.add_argument("--arm", default="clean_clean_dim64")
@@ -204,6 +217,7 @@ def main():
     print(f"pitches scored: {len(rows)}")
     print(f"quality bins: {n_bins}")
 
+    # Align the pitch dataframe (counts, stands, descriptions) to the tensor rows so groupings can be applied to each scored pitch.
     season = np.load(Path(args.data_dir) / "season.npy", mmap_mode="r")
     pitch_frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets,
                                        np.asarray(season),
@@ -229,6 +243,7 @@ def main():
     for name, mask in masks.items():
         print(f"rows scored, {name}: {int(mask.sum())}")
 
+    # Grouping columns: two-strike flag, balls-strikes count, stand-vs-hand, and a constant for the overall row.
     frame["two_strike"] = (frame["strikes"].to_numpy() == 2).astype("int64")
     frame["count"] = (frame["balls"].astype(str) + "-" + frame["strikes"].astype(str))
     frame["handedness"] = frame["stand"].astype(str) + "v" + frame["p_throws"].astype(str)
@@ -244,6 +259,7 @@ def main():
     print("\n-- decoded sample, split head --")
     print(sample.to_string(index=False))
 
+    # (column, label) pairs: each head's table is built once per grouping.
     groupings = (("all", "overall"), ("count", "count"), ("handedness", "handedness"),
                  ("two_strike", "two_strike"))
     tables = []
@@ -260,6 +276,7 @@ def main():
             table["class"] = "positive"
             tables.append(table)
 
+    # Class labels per categorical head: split classes from v1, quality heads use bin indices.
     class_names = {"split": list(v1.SPLIT_CLASSES),
                    "ev": [f"bin_{i}" for i in range(n_bins)],
                    "la": [f"bin_{i}" for i in range(n_bins)],
@@ -285,6 +302,7 @@ def main():
                    "gap", "relative_gap"]]
     table.to_csv(out_dir / "heads_head_calibration.csv", index=False)
 
+    # Rows used for the JSON summary: overall and two-strike cells.
     overall = table[(table["grouping"] == "overall")]
     two_strike = table[(table["grouping"] == "two_strike")]
     summary = {

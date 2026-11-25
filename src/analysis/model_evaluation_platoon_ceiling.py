@@ -91,6 +91,7 @@ def reliability_from_variances(true_variance, sampling_variance):
 
     Both arguments are variances and must be non-negative; a negative one means an
     upstream decomposition failed and is raised, never clipped.
+    Returns a float in [0, 1]; its square root caps a correlation against the noisy measure.
     """
     assert true_variance >= 0, f"true variance is negative: {true_variance}"
     assert sampling_variance >= 0, f"sampling variance is negative: {sampling_variance}"
@@ -106,6 +107,8 @@ def spearman_brown(half_correlation, length_ratio=2.0):
     of a HALF-length measurement; the season's differential is full length, so the
     split-half r must be stepped up by this before it is comparable to the C.2-derived
     number.
+
+    half_correlation: correlation between the two halves; returns the stepped-up reliability.
     """
     denominator = 1.0 + (length_ratio - 1.0) * half_correlation
     assert denominator != 0, "Spearman-Brown denominator is zero"
@@ -119,6 +122,7 @@ def noise_corrected_variance(observed_variance, mean_sampling_variance):
     NOT clipped at zero. A negative result means the observed spread is smaller than
     the sampling noise alone predicts -- i.e. the quantity is pure noise -- and that is
     a finding to report, not an inconvenience to floor.
+    Both arguments are variances (scalars); returns the signal variance estimate.
     """
     assert observed_variance >= 0, f"observed variance is negative: {observed_variance}"
     assert mean_sampling_variance >= 0, (
@@ -129,7 +133,10 @@ def noise_corrected_variance(observed_variance, mean_sampling_variance):
 # ------------------------------------------------------------------ weighted moments
 
 def weighted_variance(values, weight):
-    """Weighted variance about the weighted mean (population form, matching model_evaluation_eval)."""
+    """
+    Weighted variance about the weighted mean (population form, matching model_evaluation_eval).
+    values, weight: 1-D arrays [N] (N hitters); returns a float.
+    """
     values = np.asarray(values, dtype="float64")
     weight = np.asarray(weight, dtype="float64")
     assert len(values) == len(weight), "values and weights differ in length"
@@ -147,10 +154,14 @@ def between_within_stand(values, weight, stand):
     Same decomposition `model_evaluation_eval.platoon_decomposition` performs; repeated here (rather
     than imported) only because Part 2 needs it inside a bootstrap loop over resampled
     rows. The closure assertion below is what keeps the two honest.
+
+    values, weight, stand: 1-D arrays [N] (N hitters; stand is L or R). Returns a dict
+    with total, between_stand and within_stand variance.
     """
     values = np.asarray(values, dtype="float64")
     weight = np.asarray(weight, dtype="float64")
     stand = np.asarray(stand)
+    # between-stand = weighted variance of the per-stand means around the grand mean
     grand = np.average(values, weights=weight)
     between = 0.0
     for side in np.unique(stand):
@@ -176,10 +187,13 @@ def load_eb_components(path=C2_PATH):
     tau2(vs L) + tau2(vs R) − 2·rho·tau(vs L)·tau(vs R). It is asserted to reproduce
     from the per-side components in the same file, so a silently stale column cannot
     become the ceiling.
+
+    Returns {batter_type: dict of tau2_split, rho and related C.2 components}.
     """
     eb = pd.read_csv(path)
     out = {}
     for batter_type, part in eb.groupby("batter_type"):
+        # each batter_type has one row per pitcher hand (L, R)
         rows = part.set_index("vs_hand")
         tau2_l, tau2_r = float(rows.loc["L", "tau2"]), float(rows.loc["R", "tau2"])
         rho = float(rows.loc["L", "rho"])
@@ -209,6 +223,9 @@ def per_pa_variance_tables(pa_df, season=EVAL_SEASON):
     wOBA is a weighted sum over outcome categories, so its per-PA variance is the
     variance of `woba_points` itself. Deriving it from p(1−p) on a rate would be wrong:
     the outcome is not binary and the weights are not 1.
+
+    pa_df: one row per PA. Returns (by_batter, by_league) tables of PA count n and sample
+    variance var, keyed by (batter, p_throws) and (stand, p_throws) respectively.
     """
     window = pa_df[(pa_df["season"] == season) & pa_df["in_denominator"]]
     assert len(window), f"no denominator plate appearances in {season}"
@@ -237,10 +254,14 @@ def attach_sampling_variance(frame, by_batter, by_league):
     PAs of a heavy-tailed outcome is worse than the league value it would replace. The
     all-league variant is computed alongside as `sampling_var_league` so the choice is
     a reported sensitivity and not a hidden assumption.
+
+    frame: one row per hitter (E.5 platoon frame with denom_L, denom_R, stand). Returns the
+    frame with s2_L, s2_R, sampling_var, sampling_var_league and fell_back_L/R added.
     """
     league = by_league.set_index(["stand", "p_throws"])["var"]
     batter = by_batter.set_index(["batter", "p_throws"])
 
+    # returns (variance used, league fallback value, whether the fallback was used)
     def side_variance(row, side):
         league_value = float(league.loc[(row["stand"], side)])
         key = (row["batter"], side)
@@ -280,12 +301,16 @@ def ceiling_table(frame, eb):
         it differs whenever exposures are skewed and is reported so the skew is visible.
     E[sampling var] is taken under E.5's own harmonic-denominator weights, so the
     ceiling is the ceiling on the number E.5 actually computed, and unweighted as well.
+
+    frame: per-hitter frame with sampling_var; eb: output of load_eb_components.
+    Returns one row per stand (L, R, pooled).
     """
     rows = []
     for label in ("L", "R", "pooled"):
         part = frame if label == "pooled" else frame[frame["stand"] == label]
         assert len(part) > 2, f"too few hitters to characterise {label}"
         weight = part["weight"].to_numpy(dtype="float64")
+        # tau2: true split variance for each hitter's stand; sampling: per-hitter noise variance
         tau2 = np.array([eb[side]["tau2_split"] for side in part["stand"]])
         sampling = part["sampling_var"].to_numpy(dtype="float64")
         mean_tau2_w = float(np.average(tau2, weights=weight))
@@ -352,10 +377,15 @@ def split_half_reliability(frame, pa_df, season=EVAL_SEASON, min_half_pa=10):
     This shares no assumption with the C.2 route: it uses no prior, no rho, and no
     variance component. If the two disagree by more than a factor of 1.5 the caller
     reports both and adopts neither.
+
+    Returns one row per stand (L, R, pooled) with half-split correlations, the stepped-up
+    reliability with a bootstrap CI, and the implied ceiling. Hitters need min_half_pa
+    denominator PAs in each (half, hand) cell.
     """
     window = pa_df[(pa_df["season"] == season) & pa_df["in_denominator"]]
     window = window[window["batter"].isin(frame["batter"])]
     window = window.assign(half=np.where(window["game_pk"].to_numpy() % 2 == 0, "A", "B"))
+    # per hitter: wOBA points and PA count in each (half, pitcher hand) cell, then one row per hitter
     grouped = (window.groupby(["batter", "half", "p_throws"])["woba_points"]
                .agg(points="sum", denom="size").reset_index())
     wide = grouped.pivot_table(index="batter", columns=["half", "p_throws"],
@@ -366,6 +396,7 @@ def split_half_reliability(frame, pa_df, season=EVAL_SEASON, min_half_pa=10):
     assert not missing, f"split-half pivot is missing columns: {missing}"
     wide = wide.dropna()
 
+    # drop hitters thin in any of the four cells
     enough = np.ones(len(wide), dtype=bool)
     for half in ("A", "B"):
         for hand in ("L", "R"):
@@ -373,6 +404,7 @@ def split_half_reliability(frame, pa_df, season=EVAL_SEASON, min_half_pa=10):
     wide = wide[enough]
     assert len(wide) > 10, f"only {len(wide)} hitters survive the split-half exposure floor"
 
+    # platoon differential (wOBA vs L minus vs R) within each half
     delta = {}
     for half in ("A", "B"):
         delta[half] = (wide[("points", half, "L")] / wide[("denom", half, "L")]
@@ -435,6 +467,9 @@ def corrected_stand_share(frame, n_boot=2000, seed=0, ci=(2.5, 97.5)):
     its own because it is a two-cell mean, whose sampling variance is smaller by a factor
     of the cell counts (221 and 324 hitters) and is negligible against the components below.
 
+    frame: per-hitter frame with delta_obs, weight, stand, sampling_var. Returns a dict of
+    corrected and uncorrected shares with a bootstrap CI.
+
     Bootstrap is over ROWS, and the frame is one row per batter, so resampling rows IS
     clustering on batter (the same argument `model_evaluation_eval.paired_platoon_difference` makes).
     """
@@ -444,6 +479,7 @@ def corrected_stand_share(frame, n_boot=2000, seed=0, ci=(2.5, 97.5)):
     stand = frame["stand"].to_numpy()
     sampling = frame["sampling_var"].to_numpy(dtype="float64")
 
+    # variance parts, mean noise variance and noise-corrected total for the rows in `index`
     def statistic(index):
         parts = between_within_stand(values[index], weight[index], stand[index])
         mean_samp = float(np.average(sampling[index], weights=weight[index]))
@@ -457,6 +493,7 @@ def corrected_stand_share(frame, n_boot=2000, seed=0, ci=(2.5, 97.5)):
         "pure sampling noise. Report this rather than clipping.")
     share = parts["between_stand"] / true_total
 
+    # bootstrap hitters; a draw whose corrected variance is non-positive is recorded as NaN
     draws = []
     for _ in range(n_boot):
         index = rng.integers(0, len(frame), len(frame))
@@ -502,6 +539,9 @@ def recovery_by_stand(frame, eb):
         computed inside this 2024 stand group -- purely empirical, no prior.
     A ratio near 1 does not mean the model is right, only that it is not systematically
     under-dispersed; correlation (E.5) is what says whether the spread points anywhere.
+
+    frame: per-hitter frame; eb: output of load_eb_components. Returns one row per stand;
+    the LHB-to-RHB asymmetry ratios are attached in table.attrs.
     """
     rows = []
     for side in ("L", "R"):
@@ -562,6 +602,7 @@ def recovery_by_stand(frame, eb):
 # ------------------------------------------------------------------ driver
 
 def main():
+    """Run E.15 Parts 1-3, check them against the pre-registered expectations, and write ceiling.json and CSVs."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--frame", default=FRAME_PATH)
     parser.add_argument("--eval-targets", default=EVAL_TARGETS_PATH)
@@ -637,6 +678,7 @@ def main():
     print("E.15 Part 3 — recovery of the true within-stand spread")
     recovery = recovery_by_stand(frame, eb)
 
+    # pre-registered expectations (spec §12.5): each with its observed value and a held flag
     expectations = {
         "part1_reliability_near_0.13_L_and_0.06_R": {
             "expected": {"L": 0.13, "R": 0.06},

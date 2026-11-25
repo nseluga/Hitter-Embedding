@@ -242,6 +242,7 @@ def append_ledger(row):
 
 
 def queue(stage, seeds):
+    """Every (config name, extra train.py args, seed) of a stage, in list order."""
     return [(name, extra, seed) for name, extra in STAGES[stage] for seed in range(seeds)]
 
 
@@ -264,12 +265,15 @@ def launch(stage, name, extra, seed, args):
         assert manifest_path.exists() and json.loads(manifest_path.read_text()).get(
             "career_pitchers_excluded"), \
             f"clean stage needs a --career-pitchers build; {manifest_path} was not built with it"
+    # one subprocess per run; stdout and stderr go to the run's log file
     started = time.time()
     with log_path.open("w") as log:
         completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT,
                                    env={**os.environ, "PYTHONPATH": "."})
     seconds = time.time() - started
 
+    # parse train.py's "best val loss X at epoch N; reference Y; checkpoint ..." line by
+    # position; blank strings if the run never printed it
     best_loss, best_epoch, reference = "", "", ""
     for line in log_path.read_text().splitlines():
         if line.startswith("best val loss"):
@@ -312,9 +316,11 @@ def main_argv(argv=None):
 
 
 def main(argv=None):
+    """Queue the stage's unfinished runs and launch them one at a time until done or out of time."""
     args = main_argv(argv)
     seeds = args.seeds or DEFAULT_SEEDS[args.stage]
     done, history = read_ledger()
+    # (config, extra args, seed) triples not yet in the ledger, optionally limited by --configs
     pending = [item for item in queue(args.stage, seeds)
                if (args.stage, item[0], item[2]) not in done
                and (args.configs is None or item[0] in args.configs)]
@@ -360,6 +366,7 @@ def main(argv=None):
         else:
             print(f"    see {LOG_DIR / f'{args.stage}_{name}_s{seed}.log'}")
 
+    # re-read the ledger: counts what is still unfinished after this invocation
     remaining = len([i for i in pending if (args.stage, i[0], i[2]) not in read_ledger()[0]])
     print(f"done for now; {remaining} runs still pending — rerun the same command")
 

@@ -98,10 +98,12 @@ def add_swing_contact_labels(df):
 
 def field_side_angle(df):
     """
+    df: pitch table with hit coordinates `hc_x`, `hc_y` (Statcast units), one row per pitch.
     Raw horizontal launch angle in degrees from hit coordinates, before mirroring.
     0 = up the middle, negative = left field (3B side), positive = right field.
     Null wherever hit coordinates are missing.
     """
+    # angle of the batted ball's landing spot as seen from home plate
     return np.degrees(np.arctan2(
         df["hc_x"] - HOME_PLATE_HC_X,
         HOME_PLATE_HC_Y - df["hc_y"],
@@ -120,6 +122,7 @@ def add_contact_quality_labels(df):
     hands. Within the in-play domain a value may still be null if that specific
     measurement is missing (e.g. an in-play ball with no hit coordinates).
     """
+    # copy so the caller's frame is not mutated
     df = df.copy()
     in_play = df["description"] == IN_PLAY_DESCRIPTION
 
@@ -146,6 +149,7 @@ def derive_labels(df):
     return the labeled frame. Asserts the factorization nesting holds: contact
     is defined only on swings, and any quality label implies a ball in play.
     """
+    # L1 then L2: the quality labels do not depend on the swing/contact columns, but the order matches the §1.2 chain
     df = add_swing_contact_labels(df)
     df = add_contact_quality_labels(df)
 
@@ -164,6 +168,7 @@ def reconcile_labels(df):
     identity that fails to balance rather than as a silently wrong training set.
     Expects a frame already passed through `derive_labels`.
     """
+    # shorthand columns used by the counts and identities below
     swing = df["swing"].astype(bool)
     contact = df["contact"]
     in_play = df["description"] == IN_PLAY_DESCRIPTION
@@ -212,10 +217,12 @@ def decode_sample(df, n=12, seed=0):
 
 
 def _round(value):
+    """Round to 3 decimals for the JSON report; NaN becomes None."""
     return None if pd.isna(value) else round(float(value), 3)
 
 
 def main():
+    """CLI: label the modeling table, reconcile the counts, and write pitch_events_labeled.parquet and label_report.json."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Derive process-head labels for the modeling pitch table.")

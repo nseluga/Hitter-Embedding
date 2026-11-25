@@ -37,6 +37,10 @@ CHANNELS = ("ball", "strike", "hbp", "foul", "bip")
 
 
 def _channel_masks(description, keep):
+    """
+    Boolean masks [n_pitches], one per outcome channel in CHANNELS, from pitch descriptions.
+    `keep` [n_pitches] marks the rows that must be covered by exactly one channel.
+    """
     masks = {
         "ball": np.isin(description, qt.BALL_DESCRIPTIONS),
         "hbp": description == "hit_by_pitch",
@@ -63,12 +67,16 @@ def per_pitcher_chains(frame, keep, min_pitches=200):
 
     Built with one groupby rather than a mask per (pitcher, count): 2,000 pitchers times 12
     counts is 24,000 full scans of a 7.3M-row column, which is an afternoon.
+
+    frame: pitch-level table; keep: bool [n_pitches] of usable train-window pitches.
+    Returns (one row of absorbing rates per pitcher, pitch-count weight per pitcher).
     """
     masks = _channel_masks(frame["description"].to_numpy(), keep)
     sub = frame.loc[keep, ["pitcher", "balls", "strikes"]].copy()
     for name in CHANNELS:
         sub[name] = masks[name][keep].astype("float64")
 
+    # pooled league frequency of each channel at each count (the back-off table)
     pooled_counts = sub.groupby(["balls", "strikes"])[list(CHANNELS)].sum()
     pooled = {name: np.zeros((qt.N_BALLS, qt.N_STRIKES)) for name in CHANNELS}
     for (b, s), row in pooled_counts.iterrows():
@@ -76,11 +84,13 @@ def per_pitcher_chains(frame, keep, min_pitches=200):
         for name in CHANNELS:
             pooled[name][b, s] = row[name] / total
 
+    # per-pitcher frequency of each channel at each count
     grouped = sub.groupby(["pitcher", "balls", "strikes"])[list(CHANNELS)].sum()
     totals = grouped.sum(axis=1)
     shares = grouped.div(totals, axis=0)
     per_pitcher_n = sub.groupby("pitcher").size()
 
+    # one chain per pitcher with enough pitches; empty cells fall back to the pooled rate
     rows, weights = [], []
     for one, n_pitches in per_pitcher_n.items():
         if n_pitches < min_pitches:
@@ -97,6 +107,7 @@ def per_pitcher_chains(frame, keep, min_pitches=200):
 
 
 def main():
+    """Compare observed rates with pooled and per-pitcher chains built from counted frequencies; write structure.csv and summary."""
     parser = argparse.ArgumentParser(
         description="Phase E.10 — structural bias of the independent-pitch count chain.")
     parser.add_argument("--eval-season", type=int, default=2024)
@@ -130,6 +141,7 @@ def main():
                 for key, names in query.ABSORBING_EVENTS.items()}
     observed["bip"] = 1.0 - sum(observed.values())
 
+    # pooled league chain, then the per-pitcher chain averaged with pitch-count weights
     shares = query.handedness_shares(pa_df, seasons)
     pooled = query.absorbing_rates(to_aggregates(league_chain(frame, keep, shares)))
     pooled = {key: float(pooled[key][0, 0]) for key in query.ABSORBING_KEYS}
@@ -138,6 +150,7 @@ def main():
     averaged = {key: float(np.average(per_pitcher[key], weights=weights))
                 for key in query.ABSORBING_KEYS}
 
+    # rates and relative error vs observed for each aggregation
     table = pd.DataFrame([
         {"aggregation": name, **{f"rate_{key}": rates[key] for key in query.ABSORBING_KEYS},
          **{f"relerr_{key}": rates[key] / observed[key] - 1.0

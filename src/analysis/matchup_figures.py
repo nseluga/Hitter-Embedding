@@ -41,18 +41,27 @@ AXES = ("fb_velo", "fb_up", "brk_down", "brk_share")
 
 
 def pct(s, bf):
-    """BF-weighted percentile of each pitcher within hand."""
+    """BF-weighted percentile of each pitcher within hand.
+
+    s [P]: trait per pitcher (NaN allowed); bf [P]: batters faced. Returns [P] in (0, 1]."""
     o = s.dropna().sort_values()  # pitchers missing the trait get NaN and fall in no type
     return (bf.reindex(o.index).cumsum() / bf.reindex(o.index).sum()).reindex(s.index)
 
 
 def load():
+    """Load matchup data for RHP. Returns (I, a, bf, S, lvl, nm, stand, pa_r):
+    I [hitters, pitchers]: double-centered matchup effect (wOBA pts x1000);
+    a [P, traits]: RHP attributes; bf [P]: batters faced; S [hitters, types]:
+    BF-weighted mean effect against each TYPES group; lvl [hitters]: own
+    projected wOBA vs RHP (x1000); nm, stand, pa_r [hitters]: name, batting
+    hand, prior PA vs RHP."""
     z = np.load(RES / "matrix_w00.npz")
     attrs = pd.read_csv(RES / "pitcher_attributes.csv")
     attrs = attrs.merge(pd.read_csv(RES / "pitcher_attributes_extra.csv"), on=["pitcher", "p_throws"], how="left")
     attrs = attrs[attrs.p_throws == "R"].set_index("pitcher")  # one id can appear under both hands
     names = pd.read_csv("data/processed/hitter_names.csv").set_index("batter")["name"]
     hs = pd.read_csv("results/model_visualization/hitter_stats.csv").set_index("batter")
+    # Left- and right-handed batters come from separate matrices vs RHP; stack them into one hitter x pitcher table.
     I_parts, lvl = [], []
     for stand in "LR":
         k = f"{stand}HB_vs_RHP"
@@ -60,6 +69,7 @@ def load():
         I_parts.append(pd.DataFrame(double_center(w, bf) * 1000, index=bat, columns=pit))
         lvl.append(pd.Series(w @ (bf / bf.sum()) * 1000, index=bat))
     I, lvl = pd.concat(I_parts), pd.concat(lvl)  # NaN where a pitcher is absent from a stand group
+    # Percentile each pitcher on the four axes, then average effects over the pitchers that fall in each TYPES range.
     a = attrs.reindex(I.columns).dropna(subset=["fb_velo", "fb_up", "brk_share"])  # brk_down may be NaN
     bf = a["bf"].astype(float)
     P = {ax: pct(a[ax], bf) for ax in AXES}
@@ -68,23 +78,28 @@ def load():
         m = np.logical_and.reduce([(P[ax] >= lo) & (P[ax] <= hi) for ax, (lo, hi) in r.items()])
         ids = a.index[m]
         X, wt = I[ids], bf[ids]
+        # BF-weighted mean over the type's pitchers, skipping NaN (hitter never faced that pitcher) in both numerator and denominator.
         S[t] = (X.fillna(0) @ wt) / (X.notna() @ wt)
     S = pd.DataFrame(S).astype(float)
     lk = lookup_names([b for b in S.index if b not in names.index])
     nm = pd.Series({b: names.get(b, lk.get(b, str(b))) for b in S.index})
+    # Names fall back to a pybaseball lookup, then to the raw id; unknown stand/PA default to "?"/0.
     stand = hs["stand"].reindex(S.index).fillna("?")
     pa_r = hs["prior_pa_R"].reindex(S.index).fillna(0)
     return I, a, bf, S, lvl, nm, stand, pa_r
 
 
 def style(a):
+    """Shared axes look: hide top/right spines, set tick color and size."""
     for s in ("top", "right"):
         a.spines[s].set_visible(False)
     a.tick_params(colors=INK, labelsize=8)
 
 
 def place_labels(a, pts):
-    """Greedy de-overlap: push a label down until its box clears every label already placed."""
+    """Greedy de-overlap: push a label down until its box clears every label already placed.
+
+    pts: list of (x, y, text) in data coordinates; labels are placed top-down, with a leader line when moved."""
     # ponytail: greedy vertical nudge, swap for adjustText if maps get denser
     a.figure.canvas.draw()
     k, placed = a.figure.dpi / 72, []
@@ -120,6 +135,7 @@ LIM = 20  # fixed color range (wOBA pts) so hitters compare on one scale
 
 
 def contrast(S, key):
+    """Per-hitter matchup contrast on one pitcher axis: effect vs the MAPS "high" type minus the "low" type [hitters]."""
     hi, lo, *_ = MAPS[key]
     return S[hi] - S[lo]
 
@@ -133,6 +149,7 @@ def woba_colors(a, lvl, **kw):
 
 
 def label_far(a, x, y, nm, n=28):
+    """Label the n points farthest from the median in rank space (x, y: [hitters]; nm: names)."""
     far = (np.abs(x.rank(pct=True) - .5) + np.abs(y.rank(pct=True) - .5)).sort_values(ascending=False)
     place_labels(a, [(x[b], y[b], nm[b]) for b in far.index[:n]])
 
@@ -143,6 +160,7 @@ HAND_COLORS = {"L": "#2a9d8f", "R": "#e0a030"}  # categorical, kept off red/blue
 def hitter_map(key, S, lvl, nm, pa_r, stand):
     """x = matchup contrast on one pitcher axis, y = hitter's own level vs RHP, color = batter hand."""
     hi, lo, rlab, llab = MAPS[key]
+    # Only hitters with enough prior PA vs RHP (300+) are plotted.
     keep = pa_r >= 300
     x, y = contrast(S, key)[keep], lvl.reindex(S.index)[keep]
     fig, a = plt.subplots(figsize=(10, 7))
@@ -196,8 +214,10 @@ def pair_map(kx, ky, S, lvl, nm, pa_r):
 def smooth2d(e, a, bf, xa, ya, n=30):
     """BF-weighted Gaussian kernel average of one hitter's effects over a 2D pitcher-attribute grid.
     Returns grid axes, smoothed effect, and support (share of peak kernel BF; low = few pitchers nearby)."""
+    # e [P]: one hitter's effect vs each pitcher; a: pitcher attributes; bf [P]: weights. Keep pitchers with all three values.
     ok = (e.notna() & a[xa].notna() & a[ya].notna()).to_numpy()
     x, y, w, v = a[xa].to_numpy()[ok], a[ya].to_numpy()[ok], bf.to_numpy()[ok], e.to_numpy()[ok]
+    # Grid points at the 5th-95th percentile of each attribute; Gaussian kernels with bandwidth .35 x attribute std.
     gx, gy = (np.quantile(q, np.linspace(.05, .95, n)) for q in (x, y))
     Kx = np.exp(-.5 * ((gx[:, None] - x[None]) / (.35 * x.std())) ** 2)
     Ky = np.exp(-.5 * ((gy[:, None] - y[None]) / (.35 * y.std())) ** 2)
@@ -206,7 +226,9 @@ def smooth2d(e, a, bf, xa, ya, n=30):
 
 
 def profiles(xa, ya, I, a, bf, nm, stand, bids=EXAMPLES):
-    """One 2D matchup profile per example hitter: color = effect vs pitchers near that (x, y)."""
+    """One 2D matchup profile per example hitter: color = effect vs pitchers near that (x, y).
+
+    xa, ya: pitcher-attribute column names for the two axes; bids: hitter ids (EXAMPLES)."""
     fig, axs = plt.subplots(2, 3, figsize=(15, 9.5), sharex=True, sharey=True)
     for ax_, b in zip(axs.flat, bids):
         gx, gy, G, sup = smooth2d(I.loc[b, a.index], a, bf, xa, ya)
@@ -235,6 +257,7 @@ def profiles(xa, ya, I, a, bf, nm, stand, bids=EXAMPLES):
 
 
 def main():
+    """Build all profile, hitter-map and pair-map figures, plus matchup_by_type.csv, under results/pitcher_type_query."""
     OUT.mkdir(parents=True, exist_ok=True)
     I, a, bf, S, lvl, nm, stand, pa_r = load()
     S.assign(name=nm, stand=stand, prior_pa_R=pa_r).to_csv(RES / "matchup_by_type.csv")

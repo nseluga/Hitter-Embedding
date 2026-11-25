@@ -42,7 +42,11 @@ GATE_OPPONENTS = ("gbm_full", "eb_bivariate")
 
 
 def load_predictions(path):
-    """The D.5 prediction table, with the claim-1 contract checked before it is scored."""
+    """
+    The D.5 prediction table, with the claim-1 contract checked before it is scored.
+    path: CSV with one row per (batter, season, pitcher hand) and a `pred_woba` column.
+    Returns a DataFrame of just the KEY columns plus `pred_woba`.
+    """
     frame = pd.read_csv(path)
     missing = sorted(set(evaluation.KEY + ["pred_woba"]) - set(frame.columns))
     assert not missing, f"D.5 predictions are missing {missing}"
@@ -53,9 +57,12 @@ def load_predictions(path):
 def compare(frames, name=MODEL_NAME, seed=0):
     """
     Paired RMSE and paired weighted-rank differences against each gate opponent.
+    frames: dict of model name -> eval frame (one row per batter/season/hand); `name` is side A.
+    Returns one row per (opponent, stratum) with both comparisons and the two "favours" flags.
     Sign conventions differ between the two and are recorded per row rather than assumed:
     NEGATIVE rmse_difference favours `name`, POSITIVE rank_difference favours `name`.
     """
+    # Collect one table per gate opponent, stacked at the end.
     tables = []
     for opponent in GATE_OPPONENTS:
         # both helpers already return one row per stratum and do their own slicing, so
@@ -65,6 +72,7 @@ def compare(frames, name=MODEL_NAME, seed=0):
         rank = evaluation.paired_rank_difference(frames[name], frames[opponent], seed=seed)
         merged = rmse.merge(rank, on=["stratum", "n_hitters", "n_batters"],
                             suffixes=("_rmse", "_rank"))
+        # Tag rows with the opponent so the stacked table stays unambiguous.
         merged.insert(0, "opponent", opponent)
         # NEGATIVE rmse_difference favours Phase D; POSITIVE rank_difference does. The
         # gate is the INTERVAL excluding zero, not the point estimate's sign.
@@ -86,6 +94,8 @@ def second_target_table(frames):
 
     Realized wOBA stays PRIMARY: `TARGETS` is ordered so the primary is scored first, and no
     verdict anywhere in this module reads the xwOBA rows.
+
+    frames: dict of model name -> eval frame. Returns one long table: model x target x stratum scores.
     """
     tables = []
     for name, frame in frames.items():
@@ -112,8 +122,10 @@ def debiased_diagnostic(frames, name, seed=0):
     Returns (mean_excess, table).
     """
     frame = frames[name].copy()
+    # Weighted mean of (prediction - observed), weighted by wOBA denominator like the RMSE itself.
     weights = frame["denominator"].to_numpy(dtype=float)
     excess = float(np.average(frame["pred_woba"] - frame["woba"], weights=weights))
+    # Constant shift of every prediction, then re-run the paired test against C.3-full.
     frame["pred_woba"] = frame["pred_woba"] - excess
 
     table = evaluation.paired_rmse_difference(frame, frames["gbm_full"], seed=seed)
@@ -134,14 +146,20 @@ def power_restatement(comparisons, opponent="gbm_full", power=0.80, alpha=0.05):
     Reported for every stratum, including the ones that already resolve. A stratum whose interval
     excludes zero gets a multiplier below 1, which is the honest reading of "already sufficient"
     and is not evidence for anything on its own.
+
+    comparisons: output of `compare`. Returns one row per stratum with the observed z, the batter
+    count multiplier needed to reach `power`, and the implied number of batters.
     """
     from scipy.stats import norm
 
+    # z required at two-sided `alpha` and the target power: the z of a test that would just be detectable.
     z_needed = norm.ppf(1 - alpha / 2) + norm.ppf(power)
     rows = comparisons[comparisons["opponent"] == opponent]
     out = []
     for _, row in rows.iterrows():
+        # Recover the SE from the half-width of the bootstrap interval (normal approximation).
         se = (row["ci_high_rank"] - row["ci_low_rank"]) / 2 / norm.ppf(1 - alpha / 2)
+        # Observed z; the batters multiplier is (z_needed / z)^2 because SE shrinks as 1/sqrt(n).
         z = row["rank_difference"] / se if se else float("nan")
         out.append({"stratum": row["stratum"], "n_batters": int(row["n_batters"]),
                     "rank_difference": row["rank_difference"], "se_rank": se, "z": z,
@@ -160,8 +178,12 @@ def trained_row_spread(frame, vocabulary):
     them into the low-exposure stratum drags that stratum's spread toward a constant and produces
     the shrinkage story the pooled read tells. On trained rows the sign reverses: low-exposure
     hitters spread WIDER than regulars, which is anti-shrinkage and the sharper finding.
+
+    frame: eval frame with `batter`, `stratum`, `pred_woba`. vocabulary: set of batter ids seen in
+    training. Returns one row per stratum with SDs of predicted wOBA for pooled, cold-start and trained rows.
     """
     frame = frame.copy()
+    # True when the hitter had its own embedding row in training; False means the shared cold-start row.
     frame["trained"] = frame["batter"].isin(vocabulary)
     rows = []
     for stratum in evaluation.STRATUM_NAMES:
@@ -182,6 +204,7 @@ def trained_row_spread(frame, vocabulary):
 
 
 def main():
+    # CLI: where the model's predictions live and which season to score.
     parser = argparse.ArgumentParser(description="Score Phase D.5 against the Phase C ladder.")
     parser.add_argument("--predictions", default=str(DEFAULT_PREDICTIONS))
     parser.add_argument("--label", default=MODEL_NAME)
@@ -197,7 +220,9 @@ def main():
                         help="the ONLY way the frozen test season is ever scored")
     args = parser.parse_args()
 
+    # Guard: the frozen test season is only scorable with --final-run.
     evaluation.assert_not_test_season(args.eval_season, final_run=args.final_run)
+    # Rebuild the whole Phase C ladder in-process so every rung and model_v1 share one eval frame.
     pa_df = baseline_ladder_report.load_targets(args.eval_targets)
     params, _, _ = baseline_ladder_report.fit_and_describe(pa_df, args.eval_season, args.seed)
     process_seasons = gbm.season_process(
@@ -208,6 +233,7 @@ def main():
     predictions[args.label] = load_predictions(args.predictions)
     frames, scored, _ = baseline_ladder_report.score_all(pa_df, predictions, args.eval_season)
 
+    # Paired model_v1-vs-gate-opponent comparisons: the actual claim-1 evidence.
     comparisons = compare(frames, name=args.label, seed=args.seed)
 
     out_dir = Path(args.out_dir)
@@ -240,6 +266,7 @@ def main():
     # the DECISIVE one is pre-registered as `low`. Swapping which single stratum is hard-coded
     # would have left a report that still cannot say where a claim holds and where it fails.
     DECISIVE_STRATUM = "low"
+    # Per-stratum gate booleans: RMSE vs C.3-full, and ordering vs both C.2 and C.3-full.
     verdicts = {}
     for stratum in sorted(comparisons["stratum"].unique()):
         gate = comparisons[comparisons["stratum"] == stratum]
@@ -268,6 +295,7 @@ def main():
     print("\nD5-R18(4): rank-gap power against gbm_full -- a null with a factor attached")
     print(power.to_string(index=False, float_format="%.5f"))
 
+    # The training vocabulary comes from the build manifest; without it cold-start rows can't be identified.
     spread = None
     manifest_path = Path(args.manifest)
     if manifest_path.exists():
@@ -280,12 +308,14 @@ def main():
     else:
         print(f"\nD5-R18(1) skipped: no manifest at {manifest_path}")
 
+    # Diagnostic only: where the loss lives once the mean level offset is removed.
     excess, debiased = debiased_diagnostic(frames, args.label, seed=args.seed)
     debiased.to_csv(out_dir / f"model_v1_claim1_debiased_{args.label}.csv", index=False)
     print(f"\ndebiased diagnostic (mean excess {excess:+.5f} removed) -- NOT a fix, see the "
           f"2026-08-08 knob entry")
     print(debiased.to_string(index=False, float_format="%.5f"))
 
+    # Headline gates are read from the pre-registered decisive stratum, then everything is written to one JSON.
     decisive = verdicts[DECISIVE_STRATUM]
     rmse_pass, rank_pass = decisive["rmse_gate_vs_gbm_full"], decisive["ordering_gate_vs_both"]
     print(f"\nRMSE gate vs C.3-full ({DECISIVE_STRATUM}): {'PASS' if rmse_pass else 'not met'}")

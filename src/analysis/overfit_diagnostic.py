@@ -83,6 +83,7 @@ PROCESS_RATE_HEADS = {
 
 
 def _cell(a, b, confound):
+    """Correlation summary for paired per-hitter arrays a, b [n] with confound [n]: raw r, partial r (on confound), bootstrap CI, n."""
     r_raw, _ = paired_pearson(a, b)
     r_partial, lo, hi, n = bootstrap_ci_partial(a, b, confound)
     return {"n": n, "r_raw": r_raw, "r_partial": r_partial, "ci_low": lo, "ci_high": hi}
@@ -102,6 +103,7 @@ def eb_shrink_binomial(x, n, min_k=5.0):
     single pooled pseudo-count, not per-stratum. Upgrade path: fit
     scipy.stats.betabinom per stratum if this pooled k proves too coarse.
     """
+    # Returns (raw rate p, shrunk rate, pseudo-count k), arrays over hitters with n > 0.
     x = np.asarray(x, dtype="float64")
     n = np.asarray(n, dtype="float64")
     mask = n > 0
@@ -109,6 +111,8 @@ def eb_shrink_binomial(x, n, min_k=5.0):
     p = x / n
     p_bar = x.sum() / n.sum()
     n_bar = n.mean()
+    # between-hitter variance = observed spread of rates minus the spread expected from
+    # binomial sampling alone; floored so k stays finite. k = pseudo-count of "league average" attempts
     sample_var = np.average((p - p_bar) ** 2, weights=n)
     expected_sampling_var = np.average(p * (1 - p) / n, weights=n)
     between_var = max(sample_var - expected_sampling_var, 1e-9)
@@ -138,6 +142,11 @@ def test1_process_rate_leak(head_marginals_csv=HEAD_MARGINALS_CSV,
                              hitters_csv=HITTER_STATS_CSV,
                              pitch_events_path=PITCH_EVENTS_PARQUET,
                              eval_season=HELDOUT_SEASON):
+    """
+    Test 1. For swing and contact: correlates the model's per-hitter head marginal with the
+    sampling-noise part of the observed rate (observed minus shrunk), holding the shrunk rate
+    fixed. Returns {n_hitters, <head>: {rate_col, denominator, n, pooled cell, by_stratum cells}}.
+    """
     marginals = pd.read_csv(head_marginals_csv)[["batter"] + list(PROCESS_RATE_HEADS)]
     hitters = pd.read_csv(hitters_csv)[["batter", "stratum", "log_prior_pa"]]
     rates = observed_process_rates(pitch_events_path, eval_season)
@@ -146,16 +155,19 @@ def test1_process_rate_leak(head_marginals_csv=HEAD_MARGINALS_CSV,
 
     out = {"n_hitters": len(merged)}
     for head, spec in PROCESS_RATE_HEADS.items():
+        # x/n columns come from observed_process_rates (swing_x/swing_n, contact_x/contact_n)
         x_col, n_col = f"{head}_x", f"{head}_n"
         valid = merged[n_col].notna() & (merged[n_col] > 0)
         sub = merged[valid]
         p_obs, p_shrunk, k = eb_shrink_binomial(sub[x_col].values, sub[n_col].values)
+        # residual = the part of the observed rate that shrinkage attributes to sampling noise
         residual = p_obs - p_shrunk
 
         model_marginal = sub[head].values.astype("float64")
         cell_pooled = _cell(model_marginal, residual, p_shrunk)
         cell_pooled["k_pseudo_count"] = float(k)
         per_stratum = {}
+        # same test repeated within each exposure stratum (positions index into the arrays above)
         for stratum, idx in sub.groupby("stratum").groups.items():
             pos = sub.index.get_indexer(idx)
             per_stratum[str(stratum)] = _cell(model_marginal[pos], residual[pos], p_shrunk[pos])
@@ -177,6 +189,7 @@ def eb_pooled_estimate(eval_targets_path=EVAL_TARGETS_PARQUET, eval_season=HELDO
     Per-batter EB shrunk wOBA estimate pooled across both pitcher hands,
     weighted by each side's training PA. Returns batter/eb_pooled/train_pa.
     """
+    # guard: refuse the final test season outside a final run
     claim1_eval.assert_not_test_season(eval_season, final_run=False)
     pa_df = pd.read_parquet(eval_targets_path)
     params = eb.fit(pa_df, eval_season)
@@ -184,6 +197,7 @@ def eb_pooled_estimate(eval_targets_path=EVAL_TARGETS_PARQUET, eval_season=HELDO
     shrunk = shrunk_long.pivot(index="batter", columns="p_throws", values="pred_woba").reset_index()
     shrunk = shrunk.rename(columns={"L": "shrunk_L", "R": "shrunk_R"})
 
+    # training PA per side, used to weight the L and R shrunk estimates into one number
     window = eb._fitting_window(pa_df, eval_season, eb.TRAILING_SEASONS)
     pairs = eb.to_pairs(eb.side_observations(window))[["batter", "n_L", "n_R"]]
 
@@ -203,6 +217,8 @@ def test2_shrinkage_slope(hitters, eb_frame):
     """
     OLS slope of level_query on eb_pooled, per stratum + pooled. Slope 1 means
     the model shrinks by the same amount as EB; above 1 means under-shrinkage.
+    hitters: frame with batter, stratum, level_query; eb_frame: output of eb_pooled_estimate.
+    Returns {pooled|stratum: {n, intercept, slope, mean_gap_vs_eb}}.
     """
     merged = hitters.merge(eb_frame, on="batter", how="inner")
 
@@ -236,6 +252,8 @@ def test3_ceiling_normalized_gap(heldout_stats, hitters_csv=HITTER_STATS_CSV,
     median training PA for the in-sample ceiling and median pa_2024 for the
     held-out one, per stratum. If the normalised gap persists where the raw
     gap did, the drop is not explained by target noise alone.
+    heldout_stats: dict stratum -> stats incl. r_partial for the held-out correlation
+    (from level_query_heldout.json). Returns {stratum: ceilings, r_partials, raw and normalized gaps}.
     """
     hitters = pd.read_csv(hitters_csv)
     hitters["train_pa"] = hitters["prior_pa_L"] + hitters["prior_pa_R"]
@@ -256,6 +274,7 @@ def test3_ceiling_normalized_gap(heldout_stats, hitters_csv=HITTER_STATS_CSV,
         )
         in_sample_r_partial = in_sample_cell["r_partial"]
 
+        # reliability ceiling: the highest r a noisy target of this size could show
         train_ceiling = float(np.sqrt(train_pa / (train_pa + n_star)))
         held_ceiling = float(np.sqrt(held_pa / (held_pa + n_star)))
         cell = {
@@ -288,6 +307,7 @@ def _season_eq_2024_pitch_events(axis_screen):
     retrained or reloaded -- only the label side changes, same correction the
     level query got one tier up.
     """
+    # swap in a loader that keeps only the held-out season, restoring the original on exit
     original = axis_screen.load_pitch_events
 
     def held_out_loader(batters):
@@ -319,6 +339,7 @@ def test4_contrast_probes_heldout(axis_screen_json=AXIS_SCREEN_JSON):
     """
     from results.embedding_structure import axis_screen as axscreen
 
+    # committed in-sample scores to compare against; frozen embedding is reloaded as-is
     in_sample = json.loads(Path(axis_screen_json).read_text())["candidates"]
 
     emb, hitters, _ = axscreen.es.load_hitters(
@@ -326,6 +347,7 @@ def test4_contrast_probes_heldout(axis_screen_json=AXIS_SCREEN_JSON):
         axscreen.es.HITTER_STATS_PATH, axscreen.es.NAMES_PATH)
     normalized, _ = axscreen.es.unit_normalize(emb)
 
+    # contrast values are rebuilt from held-out pitches while the embedding stays fixed
     with _season_eq_2024_pitch_events(axscreen):
         contrasts = axscreen.build_contrasts(hitters)
 
@@ -351,6 +373,7 @@ def test4_contrast_probes_heldout(axis_screen_json=AXIS_SCREEN_JSON):
 
 
 def main():
+    """Runs tests 1-4 and writes their results to overfit_diagnostic.json in --out-dir."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out-dir", default="results/overfit_diagnostic")
     parser.add_argument("--eval-targets", default=EVAL_TARGETS_PARQUET)

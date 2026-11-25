@@ -79,29 +79,36 @@ def extra_attributes(pitches, seasons):
 
 
 def quantize(w):
+    """Map wOBA values (clipped to [LO, HI]) to little-endian uint16 0..65535 so the matrix ships compactly to the browser."""
     return np.round((np.clip(w, LO, HI) - LO) / (HI - LO) * 65535).astype("<u2")
 
 
 def dequantize(q):
+    """Inverse of quantize: uint16 codes back to wOBA floats (to within quantization step)."""
     return q.astype(float) / 65535 * (HI - LO) + LO
 
 
 def double_center(w, bf):
     """Matchup effect: w minus hitter's BF-weighted avg minus pitcher's avg over hitters, plus grand mean."""
+    # w [H, P]: H hitters x P pitchers; bf [P]: pitcher BF weights (so p sums to 1).
+    # r [H]: hitter's BF-weighted average over pitchers; c [P]: pitcher's mean over hitters.
     p = bf / bf.sum()
     r, c = w @ p, w.mean(0)
     return w - r[:, None] - c[None, :] + c @ p
 
 
 def _b64(a):
+    """Base64 text of an array's raw bytes (row-major), for embedding in JSON."""
     return base64.b64encode(np.ascontiguousarray(a).tobytes()).decode()
 
 
 def _r(x, d=3):
+    """Round to d places, with NaN becoming None (JSON null)."""
     return None if pd.isna(x) else round(float(x), d)
 
 
 def lookup_names(ids):
+    """{MLBAM id: "First Last"} via pybaseball; returns {} if the lookup fails (names are cosmetic)."""
     try:
         from pybaseball import playerid_reverse_lookup
         lk = playerid_reverse_lookup(list(ids), key_type="mlbam")
@@ -112,6 +119,8 @@ def lookup_names(ids):
 
 
 def build():
+    """Assemble the explorer payload: per-handedness-group quantized W matrices, hitter and pitcher records, and metadata. Returns a JSON-ready dict."""
+    # Inputs: precomputed matrices and pitcher attributes; the extra traits are recomputed from train-season pitches here.
     z = np.load(RES / "matrix_w00.npz")
     attrs = pd.read_csv(RES / "pitcher_attributes.csv")
     seasons = train_seasons()
@@ -121,6 +130,7 @@ def build():
     hnames = pd.read_csv("data/processed/hitter_names.csv").set_index("batter")["name"]
     hs = pd.read_csv("results/model_visualization/hitter_stats.csv").set_index("batter")
 
+    # One entry per batter-hand vs pitcher-hand group; each stores batter ids, pitcher ids, BF weights, and the quantized [hitters, pitchers] matrix.
     groups, bats, pits = {}, set(), {"R": set(), "L": set()}
     for g in GROUPS:
         bat, pit, bf, w = (z[f"{g}__{k}"] for k in ("batter", "pitcher", "bf_weight", "w00"))
@@ -128,12 +138,15 @@ def build():
         groups[g] = dict(batters=bat.tolist(), pitchers=pit.tolist(), bf=bf.tolist(),
                          shape=list(w.shape), w=_b64(quantize(w)))
         bats |= set(bat.tolist())
+        # g[-3] is the pitcher hand letter in names like "LHB_vs_RHP".
         pits[g[-3]] |= set(pit.tolist())
 
+    # Look up names only for ids lacking a name in hitter_names.csv, plus all pitchers.
     missing = [b for b in bats if b not in hnames.index]
     all_pit = pits["R"] | pits["L"]
     lk = lookup_names(missing + sorted(all_pit))
 
+    # Hitter records: name, stand, three scouting stats, and prior PA vs each hand (zero/None when no stats row).
     hitters = {}
     for b in sorted(bats):
         row = hs.loc[b] if b in hs.index else None

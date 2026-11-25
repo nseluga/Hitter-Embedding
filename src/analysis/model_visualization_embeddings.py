@@ -52,6 +52,7 @@ def bootstrap_ci(values, statistic, n_boot=N_BOOT, seed=BOOT_SEED):
     `values` (an array or tuple of same-length arrays) with replacement.
     Returns (point_estimate, lo, hi) at the 95% level.
     """
+    # a tuple lets paired arrays (e.g. x and y) be resampled with the SAME row indices
     rng = np.random.default_rng(seed)
     arrays = values if isinstance(values, tuple) else (values,)
     n = len(arrays[0])
@@ -75,6 +76,7 @@ def check_provenance(checkpoint_dir, arm, out_dir, log_arm=None):
     `log_arm` names the log files when they differ from the checkpoint arm;
     it defaults to `arm`, which is the case for every build.
     """
+    # log line looks like "best val loss 0.1234 at epoch 17"; groups = (loss, epoch)
     log_arm = log_arm or arm
     pattern = re.compile(r"best val loss ([\d.]+) at epoch (\d+)")
     embeddings = load_seed_embeddings(checkpoint_dir, arm, seeds=SEEDS)
@@ -86,6 +88,7 @@ def check_provenance(checkpoint_dir, arm, out_dir, log_arm=None):
         assert match, f"no 'best val loss' line found in {log_path}"
         log_val_loss, log_epoch = float(match.group(1)), int(match.group(2))
 
+        # read the epoch/val_loss the checkpoint itself recorded, to compare with the log
         ckpt_path = Path(checkpoint_dir) / f"{arm}_s{seed}.pt"
         import torch
         ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
@@ -110,6 +113,10 @@ def procrustes_align(source, target):
     """
     Rotates `source` onto `target` (both n x d, row-matched, mean-centered)
     with the orthogonal Procrustes solution. Returns the aligned source.
+    Needed because each seed's embedding axes are arbitrary (a rotation of the
+    same geometry is an equally good solution), so seeds are only comparable
+    after rotating them into a common frame.
+    source, target [n, d]: n hitters, d embedding dims. Returns [n, d].
     """
     source_c = source - source.mean(axis=0)
     target_c = target - target.mean(axis=0)
@@ -118,7 +125,7 @@ def procrustes_align(source, target):
 
 
 def row_cosine(a, b):
-    """Row-wise cosine similarity between two same-shape matrices."""
+    """Row-wise cosine similarity between two same-shape matrices a, b [n, d]; returns [n]."""
     a_norm = a / np.linalg.norm(a, axis=1, keepdims=True)
     b_norm = b / np.linalg.norm(b, axis=1, keepdims=True)
     return np.sum(a_norm * b_norm, axis=1)
@@ -131,14 +138,20 @@ def seed_stability(embeddings, hitters, out_dir):
     seed, also computes a row-shuffled null: the same aligned rows with hitter
     identity permuted, so the null has the real alignment's geometry but no
     correspondence to seed 0's hitters.
+    embeddings: dict seed -> [1763, d] (row 0 = cold-start). hitters: per-hitter
+    table. Writes seed_stability.csv and seed_stability_summary.json to out_dir.
+    Returns (per-hitter table with mean cosine real/null, summary dict). The gate
+    passes when the bootstrap CI of (median real - median null) excludes zero.
     """
     rng = np.random.default_rng(BOOT_SEED)
+    # columns of real_cos/null_cos are seeds 1-4; rows are hitters
     seed0_rows = embeddings[0][1:]
     real_cos = np.zeros((len(seed0_rows), 4))
     null_cos = np.zeros((len(seed0_rows), 4))
     seed0_centered = seed0_rows - seed0_rows.mean(axis=0)
 
     for j, seed in enumerate((1, 2, 3, 4)):
+        # compare against the centered seed 0, since the aligned rows are centered too
         aligned = procrustes_align(embeddings[seed][1:], seed0_rows)
         real_cos[:, j] = row_cosine(aligned, seed0_centered)
         shuffled = aligned[rng.permutation(len(aligned))]
@@ -149,6 +162,7 @@ def seed_stability(embeddings, hitters, out_dir):
     stability["mean_cosine_null"] = null_cos.mean(axis=1)
     stability.to_csv(f"{out_dir}/seed_stability.csv", index=False)
 
+    # gate: bootstrap CI on the difference of medians must exclude zero
     real_flat, null_flat = real_cos.mean(axis=1), null_cos.mean(axis=1)
     diff, lo, hi = bootstrap_ci((real_flat, null_flat),
                                 lambda r, n: float(np.median(r) - np.median(n)))
@@ -168,6 +182,11 @@ def seed_stability(embeddings, hitters, out_dir):
 
 
 def fig_seed_stability(stability, embeddings, hitters, seed0_pca, path):
+    """
+    Saves a 2x3 figure to `path`: histogram of real vs shuffled-null cosines,
+    then one panel per seed showing its Procrustes-aligned hitters in seed 0's
+    PC1/PC2 plane, coloured by batting side. If seeds agree, the panels look alike.
+    """
     fig = plt.figure(figsize=(13, 6))
     ax_hist = fig.add_subplot(2, 3, 1)
     ax_hist.hist(stability["mean_cosine_real"], bins=30, alpha=0.6, label="real", color="#4c8dff")
@@ -176,6 +195,7 @@ def fig_seed_stability(stability, embeddings, hitters, seed0_pca, path):
     ax_hist.set_title("seed stability: real vs null")
     ax_hist.legend(fontsize=8)
 
+    # project every seed through seed 0's fitted PCA so panels share axes
     seed0_rows = embeddings[0][1:]
     for j, seed in enumerate(SEEDS):
         ax = fig.add_subplot(2, 3, j + 2)
@@ -203,6 +223,9 @@ def compute_coordinates(embeddings, hitters, out_dir):
     PCA (all 32 components) and 2-D t-SNE on seed 0's trained rows (1..1762,
     mean-centered). Cold-start row 0 is projected through the fitted PCA for
     V.6 but never fit on, since it is one shared vector for many hitters.
+    embeddings: dict with key 0 -> [n_rows, d] matrix. hitters: per-hitter table.
+    Writes embedding_coords.csv and pca_explained_variance.csv to out_dir.
+    Returns (hitters + pc1..pc5 + tsne1/tsne2 table, fitted PCA, seed-0 rows).
     """
     seed0_rows = embeddings[0][1:]
     centered = seed0_rows - seed0_rows.mean(axis=0)
@@ -210,6 +233,7 @@ def compute_coordinates(embeddings, hitters, out_dir):
     pca = PCA(n_components=32, random_state=BOOT_SEED)
     pcs = pca.fit_transform(centered)
 
+    # t-SNE is for a 2-D picture only; PCA init makes the layout reproducible
     tsne = TSNE(n_components=2, perplexity=30, random_state=BOOT_SEED, init="pca")
     tsne_coords = tsne.fit_transform(centered)
 
@@ -231,6 +255,7 @@ def compute_coordinates(embeddings, hitters, out_dir):
 
 
 def label_anchors(ax, coords, hitters, x_col, y_col):
+    """Circles and names the anchor hitters (ANCHORS in model_visualization_stats) on `ax` at (x_col, y_col)."""
     anchors = coords[coords["batter"].isin(ANCHOR_IDS)]
     for _, row in anchors.iterrows():
         ax.scatter([row[x_col]], [row[y_col]], s=40, facecolors="none", edgecolors="black", linewidths=1.2)
@@ -243,6 +268,9 @@ def stand_separability(coords_2d, stand):
     """
     Out-of-fold 5-fold logistic regression accuracy of `stand` from 2-D
     coordinates, with a hitter-level bootstrap interval on accuracy.
+    coords_2d [n, 2]: hitters in a 2-D map; stand: Series of L/R/S labels.
+    Passes if the CI lower bound is above 0.5. Note 0.5 is not the majority-class
+    rate, so this is a weak bar if one batting side dominates.
     """
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=BOOT_SEED)
     oof_pred = cross_val_predict(LogisticRegression(max_iter=1000), coords_2d, stand, cv=cv)
@@ -253,6 +281,7 @@ def stand_separability(coords_2d, stand):
 
 
 def fig_stand_map(coords, path):
+    """Saves side-by-side PCA and t-SNE scatters of hitters coloured by batting side (L/R/S), anchors labelled."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
     for ax, (x_col, y_col, title) in zip(
         axes, [("pc1", "pc2", "PCA (pc1, pc2)"), ("tsne1", "tsne2", "t-SNE")]
@@ -273,6 +302,11 @@ def fig_stand_map(coords, path):
 # --------------------------------------------------------------------- V.2 / V.6
 
 def exposure_loadings(coords, norms, log_prior_pa):
+    """
+    Bootstrap correlation of log prior PA (exposure) with |PC1| and with the
+    embedding L2 norm. coords: table with pc1; norms, log_prior_pa: [n hitters].
+    PC1's sign is arbitrary, hence |r| there. Returns dict of r, CI95, passes.
+    """
     pc1_r, pc1_lo, pc1_hi = bootstrap_ci(
         (coords["pc1"].values, log_prior_pa.values),
         lambda p, e: float(abs(np.corrcoef(p, e)[0, 1])))
@@ -290,6 +324,11 @@ def exposure_loadings(coords, norms, log_prior_pa):
 
 
 def fig_exposure_map(coords, norms, log_prior_pa, cold_start_pc, path):
+    """
+    Saves two panels: PCA map coloured by mean log prior PA per hex cell with
+    the cold-start row 0 starred (cold_start_pc = its (pc1, pc2)), and embedding
+    norm vs log prior PA with a binned median line.
+    """
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
     hb = axes[0].hexbin(coords["pc1"], coords["pc2"], C=log_prior_pa,
                         reduce_C_function=np.mean, gridsize=35, cmap="viridis")
@@ -300,6 +339,7 @@ def fig_exposure_map(coords, norms, log_prior_pa, cold_start_pc, path):
     axes[0].set_xlabel("pc1"); axes[0].set_ylabel("pc2")
     fig.colorbar(hb, ax=axes[0], label="mean log prior PA per cell")
 
+    # binned median of norm across 15 equal-width exposure bins, to show the trend
     order = np.argsort(log_prior_pa.values)
     x_sorted, y_sorted = log_prior_pa.values[order], norms[order]
     bins = np.linspace(x_sorted.min(), x_sorted.max(), 16)
@@ -321,6 +361,12 @@ def fig_exposure_map(coords, norms, log_prior_pa, cold_start_pc, path):
 
 
 def cold_start_summary(embeddings, hitters):
+    """
+    How far the shared cold-start vector (row 0) sits from the hitter cloud.
+    Measures its distance to the centroid (PA-weighted and unweighted) and
+    z-scores it against the hitters' own distances to that centroid.
+    Returns {"weighted"|"unweighted": distance stats and z_score}.
+    """
     seed0_rows = embeddings[0][1:]
     row0 = embeddings[0][0]
     weights = hitters["log_prior_pa"].values
@@ -345,12 +391,15 @@ def dimension_usage(matrix):
     normalized eigenvalues), and participation ratio ((sum lambda)^2 / sum
     lambda^2). Both collapse to the raw dimension count under isotropic
     variance and to 1 when all variance sits on one direction.
+    matrix [n, d]: n hitters, d embedding dims.
+    Returns (per_dim_variance [d], eigenvalues [min(n,d)], effective_rank, participation_ratio).
     """
     centered = matrix - matrix.mean(axis=0)
     per_dim_variance = centered.var(axis=0, ddof=1)
     pca = PCA(n_components=min(matrix.shape), random_state=BOOT_SEED)
     pca.fit(centered)
     eigenvalues = pca.explained_variance_
+    # eigenvalue shares act as a probability distribution; drop ~0 shares to avoid log(0)
     p = eigenvalues / eigenvalues.sum()
     p_nonzero = p[p > 1e-12]
     entropy = -np.sum(p_nonzero * np.log(p_nonzero))
@@ -374,11 +423,13 @@ def load_hitters(hitter_stats_path, names_path, n_trained_rows):
             + ", ".join(missing) + ". Build against a synthetic stand-in for testing; "
             "re-run once these land."
         )
+    # merge on both keys so a stale names table with shifted embedding_index cannot silently misalign
     stats = pd.read_csv(hitter_stats_path)
     names = pd.read_csv(names_path)[["batter", "embedding_index", "name", "stand"]]
     hitters = stats.merge(names, on=["batter", "embedding_index"], suffixes=("", "_names"))
     hitters = hitters.sort_values("embedding_index").reset_index(drop=True)
 
+    # row 0 is the cold-start vector, so hitters must occupy exactly rows 1..n-1
     expected = set(range(1, n_trained_rows))
     got = set(hitters["embedding_index"])
     assert got == expected, (
@@ -391,6 +442,7 @@ def load_hitters(hitter_stats_path, names_path, n_trained_rows):
 # --------------------------------------------------------------------- main
 
 def main():
+    """Runs V.11 (provenance, seed stability), then V.1, V.2/V.6 and V.7 on one seed, writing figures, CSVs and JSONs to --out-dir."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     parser.add_argument("--seed-index", type=int, default=0,
@@ -415,6 +467,7 @@ def main():
     # seed 0 is always V.11's alignment reference regardless of --seed-index,
     # which only selects which seed drives the coordinate-based figures
     primary = embeddings[args.seed_index]
+    # hitter_stats.csv is expected in out_dir (built by a separate step)
     hitters = load_hitters(f"{args.out_dir}/hitter_stats.csv", args.names, primary.shape[0])
 
     print("V.11(b): Procrustes alignment and seed stability")
@@ -438,6 +491,7 @@ def main():
     fig_stand_map(coords, f"{args.out_dir}/fig_stand_map.png")
 
     print("V.2/V.6: exposure map, cold start")
+    # embedding L2 norm per hitter, compared against exposure (log prior PA)
     norms = np.linalg.norm(seed0_rows, axis=1)
     loadings = exposure_loadings(coords, norms, hitters["log_prior_pa"])
     with open(f"{args.out_dir}/exposure_loadings.json", "w") as f:
@@ -447,6 +501,7 @@ def main():
     with open(f"{args.out_dir}/cold_start.json", "w") as f:
         json.dump(cold_start, f, indent=2)
 
+    # place the cold-start vector in the PCA map using the same centering as the hitters
     row0_centered = primary[0] - seed0_rows.mean(axis=0)
     row0_pc = pca.transform(row0_centered.reshape(1, -1))[0, :2]
     fig_exposure_map(coords, norms, hitters["log_prior_pa"], row0_pc, f"{args.out_dir}/fig_exposure_map.png")

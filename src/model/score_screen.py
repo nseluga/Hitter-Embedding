@@ -31,6 +31,8 @@ from src.analysis import claim1_eval as evaluation
 from src.model import loader, train
 from src.model.v1 import HitterEmbeddingV1
 
+# The screen is 2 objectives ("log" = log loss, "rps" = ranked probability score)
+# x 2 seeds = 4 checkpoints, named screen_<arm>_s<seed>.pt
 SCREEN_ARMS = ("log", "rps")
 SCREEN_SEEDS = (0, 1)
 OUTPUT_NAME = "screen_scores.csv"
@@ -49,12 +51,17 @@ def load_checkpoint(path, tensors, manifest):
     embedding dimension and the bilinear toggle both vary across arms, and a filename
     disagreeing with the weights would load a mis-shaped state dict or, worse, a
     correctly-shaped one belonging to a different arm.
+    path: checkpoint file. tensors/manifest: from loader.load_tensors, used only for
+    input sizes. Returns (model, saved, args): the model with weights loaded, the raw
+    checkpoint dict, and the training args as a Namespace.
     """
     # weights_only=False: the invfreq arm stores a real tensor inside its args dict
     saved = torch.load(path, map_location="cpu", weights_only=False)
     args = argparse.Namespace(**saved["args"])
     evaluation.assert_not_test_season(args.eval_season)
 
+    # sizes that depend on the data (hitters, context width, quality bins) come from the
+    # built dataset; the rest from the checkpoint args
     model = HitterEmbeddingV1(manifest["n_hitters"], tensors["context"].shape[1],
                               embedding_dim=args.embedding_dim,
                               n_bins=manifest["n_quality_bins"],
@@ -66,7 +73,8 @@ def load_checkpoint(path, tensors, manifest):
 def score(checkpoint_dir=None, data_dir=None):
     """
     Score every screen checkpoint on its validation season under the canonical
-    objective. Returns one dict per checkpoint. The built table is ~1.7 GB resident,
+    objective. checkpoint_dir/data_dir default to train.CHECKPOINT_DIR / train.DATA_DIR.
+    Returns one dict per checkpoint (arm, seed, epoch, own_objective, reference). The built table is ~1.7 GB resident,
     so tensors are read once and shared across all four.
     """
     checkpoint_dir = Path(checkpoint_dir or train.CHECKPOINT_DIR)
@@ -79,6 +87,7 @@ def score(checkpoint_dir=None, data_dir=None):
             path = checkpoint_dir / f"screen_{arm}_s{seed}.pt"
             assert path.exists(), f"missing screen checkpoint {path}"
             model, saved, args = load_checkpoint(path, tensors, manifest)
+            # one eval pass (optimizer and scheduler slots None); [0] is the mean loss
             reference = train.run_epoch(model, tensors, indices[args.eval_split],
                                         None, None, args,
                                         objective=train.CANONICAL)[0]
@@ -86,6 +95,7 @@ def score(checkpoint_dir=None, data_dir=None):
                          "own_objective": round(saved["val_loss"], 5),
                          "reference": round(reference, 5)})
 
+    # self-check: the log arm must reproduce its ledger value exactly
     for row in rows:
         expected = LEDGER_LOG_REFERENCE.get(row["seed"]) if row["arm"] == "log" else None
         assert expected is None or row["reference"] == expected, \
@@ -95,6 +105,7 @@ def score(checkpoint_dir=None, data_dir=None):
 
 
 def main():
+    """Score the screen, write screen_scores.csv under train.OUT_DIR, and print a summary."""
     rows = score()
     out_path = Path(train.OUT_DIR) / OUTPUT_NAME
     out_path.parent.mkdir(parents=True, exist_ok=True)

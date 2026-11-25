@@ -47,7 +47,12 @@ def paired_rows(repertoire, slots, stand_slot, n_exact, generator):
     Per (pitcher, count): the composition's 6 drawn rows, and `n_exact` rows from the
     pitcher's OWN cell with backoff disabled. Pitchers missing any exact cell are dropped,
     so every comparison is within-pitcher and no cell is compared against a substitute.
+
+    repertoire: per-pitcher pitch table; slots: pitcher slot ids [P]; stand_slot: 0 (L) or
+    1 (R). Returns (drawn [P', 12, 6], exact [P', 12, n_exact], keep [P] bool): P' kept
+    pitchers, 12 counts in query.COUNT_STATES order, entries are pitch-frame row indices.
     """
+    # per pitcher: for every count, the composition's backed-off draw and a draw from his exact cell
     drawn, exact, keep = [], [], []
     for slot in slots:
         cells_drawn, cells_exact, ok = [], [], True
@@ -71,11 +76,17 @@ def score_take_mass(models, context_memmap, hitter_rows, pitch_rows, batch=32768
     """
     Mean take mass (1 - p_swing) over `hitter_rows`, per pitch row. Probabilities are
     averaged across the ensemble before the mean, matching `query.expected_woba`.
+
+    models: ensemble of loaded seeds; context_memmap [N, C]: context features of the whole
+    table; hitter_rows: embedding-row ids of the panel hitters; pitch_rows: int array of
+    pitch-frame row indices (any shape). Returns take mass with the shape of pitch_rows.
     """
+    # score each distinct pitch once, then scatter back to the original shape via `inverse`
     unique, inverse = np.unique(pitch_rows.reshape(-1), return_inverse=True)
     context = torch.from_numpy(np.ascontiguousarray(context_memmap[unique]))
     total = np.zeros(len(unique), dtype="float64")
     with torch.no_grad():
+        # for each panel hitter, score every distinct pitch; hitter effect is averaged out at the end
         for hitter_row in hitter_rows:
             hitter = torch.full((len(unique),), int(hitter_row), dtype=torch.int64)
             out = np.zeros(len(unique), dtype="float64")
@@ -95,6 +106,7 @@ def score_take_mass(models, context_memmap, hitter_rows, pitch_rows, batch=32768
 
 
 def main():
+    """Measure the take-mass gap between drawn and exact pitch rows, price it through the league chain, and write E.9 outputs."""
     parser = argparse.ArgumentParser(
         description="Phase E.9 — take-mass shift from the resampled pitch mix.")
     parser.add_argument("--arm", default="clean_clean_dim64")
@@ -137,6 +149,7 @@ def main():
     hitter_rows = [trained[int(q * (len(trained) - 1))]
                    for q in np.linspace(0.1, 0.9, args.n_hitters)]
 
+    # for each (pitcher hand, batter stand): pair drawn vs exact rows for the top pitchers by weight
     generator = np.random.default_rng(args.seed)
     rows = []
     for hand, (slots, probability) in sorted(pool.items()):
@@ -145,6 +158,7 @@ def main():
             stand_slot = 1 if stand == "R" else 0
             drawn, exact, keep = paired_rows(repertoire, np.asarray(slots)[order],
                                              stand_slot, N_EXACT, generator)
+            # pitcher weights renormalised over the pitchers that survived pairing
             weight = probability[order][keep]
             weight = weight / weight.sum()
             take_drawn = score_take_mass(models, context_memmap, hitter_rows, drawn)
@@ -159,10 +173,12 @@ def main():
             print(f"  {hand}HP vs {stand}HB: {keep.sum()} pitchers paired")
 
     table = pd.DataFrame(rows)
+    # gap = take mass on drawn pitches minus on the pitchers' own exact-cell pitches
     table["take_mass_gap"] = table["take_mass_drawn"] - table["take_mass_exact"]
     table["share"] = [shares[(row.stand, row.p_throws)] for row in table.itertuples()]
     table.to_csv(out_dir / "take_mass_take_mass.csv", index=False)
 
+    # collapse to one row per count, weighted by handedness share
     by_count = table.groupby(["balls", "strikes"]).apply(
         lambda part: pd.Series({
             name: float(np.average(part[name], weights=part["share"]))
@@ -192,6 +208,7 @@ def main():
             chain["strike"][b, s] - called) / swing
     after = query.absorbing_rates(to_aggregates(shifted))
 
+    # the walk change from channel 2 alone, then summed with E.8's channel 1 against the residual excess
     channel_2 = float(after["bb"][0, 0] - base["bb"][0, 0])
     channel_1 = json.loads((out_dir / "draw_price_draw_price_summary.json").read_text())
     residual = channel_1["residual_walk_excess"]

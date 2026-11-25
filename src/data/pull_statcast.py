@@ -53,6 +53,7 @@ def pull_one_season(season: int) -> pd.DataFrame:
     with all Statcast columns retained (no pruning — dropped columns can't be
     recovered without a re-pull).
     """
+    # one request spanning the whole window; the loop below retries it as a unit
     start = f"{season}-{SEASON_START}"
     end = f"{season}-{SEASON_END}"
     for attempt in range(1, MAX_RETRIES + 1):
@@ -93,6 +94,7 @@ def write_manifest(snapshot_dir: Path, snapshot_date: str, seasons_meta: list[di
 
 
 def main() -> None:
+    """CLI: pull each requested season (resuming past ones already on disk) and write the snapshot manifest."""
     parser = argparse.ArgumentParser(description="Pull Statcast into a versioned parquet snapshot.")
     parser.add_argument("--snapshot-date", default=date.today().isoformat(), help="Snapshot stamp (default: today).")
     parser.add_argument("--seasons", type=int, nargs="+", default=DEFAULT_SEASONS, help="Seasons to pull.")
@@ -102,6 +104,7 @@ def main() -> None:
     snapshot_dir = Path(args.out_dir) / f"snapshot_{args.snapshot_date}"
     snapshot_dir.mkdir(parents=True, exist_ok=True)
 
+    # per-season summaries for the manifest; `columns` ends as the last season's column list
     seasons_meta: list[dict] = []
     columns: list[str] = []
 

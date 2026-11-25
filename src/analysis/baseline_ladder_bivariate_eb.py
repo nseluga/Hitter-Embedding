@@ -144,11 +144,14 @@ def batter_types(window):
     Classify each batter as L, R, or S (switch) from the stands he actually used.
     window: PA-level rows. Returns a frame of batter/batter_type.
     """
+    # PA count per batter x stand (rows: batter; columns: L / R)
     counts = window.groupby(["batter", "stand"]).size().unstack(fill_value=0)
+    # a batter who never used one stand has no column for it; add it as zeros
     for stand in SIDES:
         if stand not in counts.columns:
             counts[stand] = 0
     total = counts["L"] + counts["R"]
+    # switch hitter = meaningful share of PA from the minority stand; otherwise the majority stand
     minority_share = counts[["L", "R"]].min(axis=1) / total
     majority = counts[["L", "R"]].idxmax(axis=1)
     batter_type = np.where(minority_share >= SWITCH_MIN_MINORITY_SHARE, "S", majority)
@@ -160,6 +163,7 @@ def side_observations(window):
     One row per (batter, pitcher hand): his window wOBA and PA vs that hand.
     window: denominator-only PA rows carrying batter_type.
     """
+    # x = mean wOBA points over those PA, n = PA count
     grouped = window.groupby(["batter", "batter_type", "p_throws"], observed=True)
     out = grouped.agg(x=("woba_points", "mean"), n=("woba_points", "size")).reset_index()
     return out
@@ -170,10 +174,12 @@ def to_pairs(side_obs):
     Pivot side observations to one row per batter with both sides side by side.
     Returns batter/batter_type/x_L/n_L/x_R/n_R; sides with no PA get x=nan, n=0.
     """
+    # columns become x_L, n_L, x_R, n_R after flattening the (value, hand) MultiIndex
     wide = side_obs.pivot_table(index=["batter", "batter_type"], columns="p_throws",
                                 values=["x", "n"], observed=True)
     wide.columns = [f"{value}_{hand}" for value, hand in wide.columns]
     wide = wide.reset_index()
+    # guarantee all four columns exist; a missing side is "no evidence" (x=nan, n=0)
     for hand in SIDES:
         for value, fill in (("x", np.nan), ("n", 0.0)):
             column = f"{value}_{hand}"
@@ -192,6 +198,7 @@ def cross_side_covariance(pairs):
     based on PA correlates with talent (Brown 2008, remark 3b) and would bias it.
     Returns nan if under 2 usable pairs.
     """
+    # only hitters with an observed mean on both sides can enter a covariance
     usable = pairs[np.isfinite(pairs["x_L"]) & np.isfinite(pairs["x_R"])]
     if len(usable) < 2:
         return np.nan
@@ -205,12 +212,15 @@ def sufficient_stats(window, min_pair_pa=MIN_PAIR_PA):
     BOTH hands, so mu, tau^2 and the covariance are all fitted on the same population
     and Sigma is internally consistent. window: denominator-only rows with batter_type.
     """
+    # per hand: hitter_stats gives n / mean / ss (within-hitter sum of squares) per batter
     frames = []
     for hand in SIDES:
         side = window[window["p_throws"] == hand]
         stats = hitter_stats(side.assign(_key=side["batter"]), "_key", "woba_points")
+        # hitter_stats returns rows in sorted-key order, so re-attach batter ids the same way
         stats["batter"] = sorted(side["batter"].unique())
         frames.append(stats.set_index("batter").add_suffix(f"_{hand}"))
+    # inner join = hitters seen against both hands; columns get _L / _R suffixes
     wide = frames[0].join(frames[1], how="inner").reset_index()
     types = window[["batter", "batter_type"]].drop_duplicates()
     wide = wide.merge(types, on="batter", how="left")
@@ -224,21 +234,26 @@ def fit_from_stats(stats, rho_min_pa=RHO_MIN_PA):
     The diagonal uses every hitter; the covariance uses only those with rho_min_pa PA
     on both sides (see RHO_MIN_PA).
     """
+    # one independent (mu, Sigma, sigma^2) fit per batter type
     params = {}
     for batter_type in BATTER_TYPES:
         type_stats = stats[stats["batter_type"] == batter_type]
         if len(type_stats) < 2:
             continue
+        # per-hand dicts keyed "L"/"R": league mean, between-hitter variance, within-PA variance
         mu, tau2, sigma2 = {}, {}, {}
         for hand in SIDES:
+            # per-hand view of the stats table with generic column names for variance_components
             columns = {f"n_{hand}": "n", f"mean_{hand}": "mean", f"ss_{hand}": "ss"}
             side = type_stats[list(columns)].rename(columns=columns)
             # PA-weighted grand mean is the cell's league wOBA
             mu[hand] = float((side["n"] * side["mean"]).sum() / side["n"].sum())
+            # ANOVA split of observed variance into between-hitter (signal) and within-PA (noise)
             signal_var, noise_var = variance_components(side)
             tau2[hand] = float(signal_var)
             sigma2[hand] = float(noise_var)
 
+        # durable-hitter subset used only for the covariance (see RHO_MIN_PA)
         resolved = type_stats[(type_stats["n_L"] >= rho_min_pa) & (type_stats["n_R"] >= rho_min_pa)]
         covariance = cross_side_covariance(
             resolved.rename(columns={"mean_L": "x_L", "mean_R": "x_R"}))
@@ -283,14 +298,17 @@ def bootstrap_rho(pa_df, eval_season, n_seasons=TRAILING_SEASONS, min_pair_pa=MI
     point = {t: p["rho"] for t, p in fit_from_stats(stats, rho_min_pa).items()}
     rng = np.random.default_rng(seed)
 
+    # per-type lists of rho (and clip flags) across bootstrap resamples
     draws = {t: [] for t in point}
     bounded = {t: [] for t in point}
     for _ in range(n_boot):
+        # resample hitters with replacement, then refit everything on the resample
         sample = stats.iloc[rng.integers(0, len(stats), len(stats))]
         for batter_type, record in fit_from_stats(sample, rho_min_pa).items():
             if batter_type in draws:
                 draws[batter_type].append(record["rho"])
                 bounded[batter_type].append(record["rho_at_bound"])
+    # percentile interval of the resampled rho per batter type
     return {t: (point[t], float(np.percentile(d, ci[0])), float(np.percentile(d, ci[1])),
                 float(np.mean(bounded[t])))
             for t, d in draws.items() if d}
@@ -305,9 +323,11 @@ def _assemble(batter_type, mu, tau2, sigma2, covariance, n_hitters, n_rho_hitter
     and is NOT an estimate. Anything derived from it must refuse to produce a number
     rather than print the bound as though it were a result.
     """
+    # rho = Cov(theta_L, theta_R) / (tau_L * tau_R); nan if a variance is non-positive
     tau_product = np.sqrt(tau2["L"] * tau2["R"])
     rho_raw = float(covariance / tau_product) if tau_product > 0 else np.nan
     rho = float(np.clip(rho_raw, -RHO_CLIP, RHO_CLIP)) if np.isfinite(rho_raw) else 0.0
+    # mu, tau2, sigma2 are 2-vectors ordered [L, R] (vs LHP, vs RHP)
     return {
         "batter_type": batter_type,
         "n_hitters": int(n_hitters),
@@ -325,6 +345,7 @@ def _assemble(batter_type, mu, tau2, sigma2, covariance, n_hitters, n_rho_hitter
 
 def sigma_matrix(tau2, rho):
     """Between-hitter covariance matrix from the two variances and their correlation."""
+    # 2x2 [[tau2_L, cov], [cov, tau2_R]]; the eigenvalue check below enforces PSD
     off_diagonal = rho * np.sqrt(tau2[0] * tau2[1])
     matrix = np.array([[tau2[0], off_diagonal], [off_diagonal, tau2[1]]], dtype=float)
     eigenvalues = np.linalg.eigvalsh(matrix)
@@ -335,7 +356,8 @@ def sigma_matrix(tau2, rho):
 def posterior_mean(x, n_pa, mu, matrix, sigma2):
     """
     Empirical-Bayes posterior mean (BLUP) for every hitter at once.
-    x: (N,2) observed side-specific wOBA, nan allowed where n_pa is 0.
+    Per hitter this is mu + Sigma (Sigma + V)^-1 (x - mu), V = diag(sigma^2 / n_pa).
+    x: (N,2) observed side-specific wOBA, nan allowed where n_pa is 0; axis 1 is [vs LHP, vs RHP].
     n_pa: (N,2) PA vs each hand. mu: (2,) or (N,2) -- per-row lets a caller override the
     shrinkage target for individual rows (debut_mu in `predict`). matrix: (2,2) Sigma.
     sigma2: (2,). Returns (N,2) shrunk estimates.
@@ -353,11 +375,13 @@ def posterior_mean(x, n_pa, mu, matrix, sigma2):
     sampling_var = np.where(observed, sigma2[None, :] / np.maximum(n_pa, 1.0), ZERO_PA_VARIANCE)
     residual = np.where(observed, np.nan_to_num(x) - mu, 0.0)
 
+    # per-hitter 2x2 covariance of the observed means: Sigma plus diagonal sampling noise
     n_rows = len(x)
     total = np.broadcast_to(matrix, (n_rows, 2, 2)).copy()
     total[:, 0, 0] += sampling_var[:, 0]
     total[:, 1, 1] += sampling_var[:, 1]
 
+    # (Sigma + V)^-1 (x - mu) for every hitter in one batched solve; then map back through Sigma
     weighted = np.linalg.solve(total, residual[:, :, None])[:, :, 0]
     out = mu + weighted @ matrix
     assert np.isfinite(out).all(), "posterior mean produced non-finite values"
@@ -393,6 +417,7 @@ def matching_debut_mu(stats):
     {"L": value, "R": value, "S": value}; "S" is the combined-stand mean (see
     `cold_start_prior_eval`'s module docstring, which reasons the match out).
     """
+    # "low" = low-exposure stratum, the group a debut hitter belongs to
     low = stats[stats["stratum"] == "low"]
     by_stand = low.groupby("stand")["woba_level"].mean().to_dict()
     combined = float(low["woba_level"].mean())
@@ -431,6 +456,7 @@ def predict(pa_df, eval_season, params=None, n_seasons=TRAILING_SEASONS, rho_ove
     Returns batter/season/p_throws/pred_woba, ready for claim1_eval.
     """
     params = params or fit(pa_df, eval_season, n_seasons)
+    # rebuild the same trailing window used for fitting, to get each hitter's observed side means
     hitters_only = drop_pitcher_batters(pa_df)
     window = trailing_window(hitters_only, eval_season, n_seasons)
     window = window[window["in_denominator"]]
@@ -450,6 +476,7 @@ def predict(pa_df, eval_season, params=None, n_seasons=TRAILING_SEASONS, rho_ove
     known["batter_type"] = known["batter_type"].fillna(known["debut_type"]).fillna("R")
     known[["n_L", "n_R"]] = known[["n_L", "n_R"]].fillna(0.0)
 
+    # shrink each batter type with its own parameters; an unseen type falls back to the largest fitted type
     predictions = []
     for batter_type, group in known.groupby("batter_type"):
         record = params.get(batter_type) or params[max(params, key=lambda t: params[t]["n_hitters"])]
@@ -468,6 +495,7 @@ def predict(pa_df, eval_season, params=None, n_seasons=TRAILING_SEASONS, rho_ove
         predictions.append(pd.DataFrame({"batter": group["batter"].to_numpy(),
                                          "L": shrunk[:, 0], "R": shrunk[:, 1]}))
 
+    # wide (L, R columns) -> one row per (batter, p_throws), then keep only active hitter-hands
     long = pd.concat(predictions, ignore_index=True).melt(
         id_vars="batter", var_name="p_throws", value_name="pred_woba")
     out = targets.merge(long, on=["batter", "p_throws"], how="left")

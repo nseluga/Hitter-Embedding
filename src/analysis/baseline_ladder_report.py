@@ -66,14 +66,17 @@ NO_INFO_BUCKETS = ((0, 0.0),)
 
 
 def load_targets(path):
+    """Read the PA-level eval-target parquet (one row per plate appearance)."""
     return pd.read_parquet(path)
 
 
 def fit_and_describe(pa_df, eval_season, seed):
     """Fit the C.2 prior and return (params, parameter table, rho CIs)."""
+    # point fit, then a hitter-resampling bootstrap for the CI on the side-to-side correlation rho
     params = eb.fit(pa_df, eval_season)
     rho_ci = eb.bootstrap_rho(pa_df, eval_season, seed=seed)
 
+    # one table row per (batter type, pitcher hand); rho columns repeat across a type's two hands
     rows = []
     for batter_type, record in params.items():
         n_star_split, tau2_split = eb.implied_split_constant(record)
@@ -106,7 +109,10 @@ def fit_and_describe(pa_df, eval_season, seed):
 
 def build_predictions(pa_df, eval_season, params, process_seasons, seed=0,
                      debut_mu=None):
-    """Every Phase C baseline, plus the two reference rows, on one eval frame."""
+    """
+    Every Phase C baseline, plus the two reference rows, on one eval frame.
+    Returns ({name: predictions frame with batter/season/p_throws/pred_woba}, {feature_set: (fitted GBM, n_rounds)}).
+    """
     predictions = {
         # `debut_mu` (on by default since 2026-09-04) is the EB counterpart of the model's
         # cold-start prior: without it the ladder scores zero-prior-PA hitters at the global
@@ -141,6 +147,7 @@ def build_predictions(pa_df, eval_season, params, process_seasons, seed=0,
 
 def score_all(pa_df, predictions, eval_season):
     """Claim-1 metrics for every model, plus skill scores against the no-info reference."""
+    # per model: join predictions to realized wOBA, assign exposure strata, score per stratum
     frames, scores = {}, []
     for name, prediction in predictions.items():
         frame, coverage = evaluation.build_eval_frame(pa_df, prediction, eval_season)
@@ -150,6 +157,7 @@ def score_all(pa_df, predictions, eval_season):
         scores.append(table)
     scored = pd.concat(scores, ignore_index=True)
 
+    # skill = how far each model's RMSE sits below the no-information RMSE in the same stratum
     reference = scored[scored["model"] == "no_info_league_average"].set_index("stratum")["model_rmse"]
     scored["skill_vs_no_info"] = [
         evaluation.skill_score(row["model_rmse"], reference[row["stratum"]])
@@ -167,6 +175,7 @@ def shuffle_null_table(pa_df, process_seasons, reference_frame, eval_season, see
     and scores each against the same reference, giving the real margin a null to
     be judged against rather than an eyeballed "that looks big".
     """
+    # each null model is compared to the reference exactly as the real model was, so margins are comparable
     nulls = gbm.shuffle_null(pa_df, process_seasons, eval_season)
     differences = []
     for null_seed, prediction in nulls.items():
@@ -175,6 +184,7 @@ def shuffle_null_table(pa_df, process_seasons, reference_frame, eval_season, see
         table["null_seed"] = null_seed
         differences.append(table)
     stacked = pd.concat(differences, ignore_index=True)
+    # a null fit "beats real" when its RMSE difference is as negative as (or more than) the real one
     real = real_differences.set_index("stratum")["rmse_difference"]
     stacked["beats_real"] = [row["rmse_difference"] <= real.get(row["stratum"], -np.inf)
                              for _, row in stacked.iterrows()]
@@ -205,6 +215,7 @@ def min_eval_pa_sensitivity(pa_df, predictions, eval_season, seed,
     and the oracle share (how much of the RMSE margin is level rather than ordering),
     which is the quantity most exposed to the filter.
     """
+    # for each threshold: rebuild eval frames from fixed predictions, then compare GBM (full) vs EB per stratum
     rows = []
     for threshold in thresholds:
         frames = {name: evaluation.build_eval_frame(pa_df, prediction, eval_season,
@@ -213,12 +224,14 @@ def min_eval_pa_sensitivity(pa_df, predictions, eval_season, seed,
         gbm, eb = frames["gbm_full"], frames["eb_bivariate"]
         rmse = evaluation.paired_rmse_difference(gbm, eb, seed=seed).set_index("stratum")
         rank = evaluation.paired_rank_difference(gbm, eb, seed=seed).set_index("stratum")
+        # same comparison after both models are level-corrected with held-out actuals (see oracle_debias)
         oracle = evaluation.paired_rmse_difference(oracle_debias(gbm), oracle_debias(eb),
                                                   seed=seed).set_index("stratum")
         bias = prediction_bias({k: frames[k] for k in ("gbm_full", "eb_bivariate")})
         bias = bias.set_index(["model", "stratum"])["bias"]
 
         for stratum in rmse.index:
+            # oracle_share_level = fraction of the RMSE margin that disappears once level bias is removed
             reported, debiased = rmse.loc[stratum, "rmse_difference"], oracle.loc[stratum, "rmse_difference"]
             rows.append({
                 "min_eval_pa": threshold,
@@ -249,6 +262,7 @@ def rank_paired_table(frames, comparisons, seed):
     matters most in the low stratum, where the thesis is graded and where the gap
     between any two models sits inside its own resampling interval.
     """
+    # comparisons: {label: (model_a, model_b)}; frames: {model name: eval frame}
     tables = []
     for label, (name_a, name_b) in comparisons.items():
         table = evaluation.paired_rank_difference(frames[name_a], frames[name_b], seed=seed)
@@ -265,6 +279,7 @@ def oracle_debias(frame):
     separate a model's level error from its ordering, so the C.2/C.3 comparison
     can say how much of the margin is each.
     """
+    # subtract each stratum's PA-weighted (pred - actual) mean from that stratum's predictions
     out = frame.copy()
     for stratum in evaluation.STRATUM_NAMES:
         mask = out["stratum"] == stratum
@@ -326,15 +341,18 @@ def decode_sample(frames, pa_df, eval_season, n_each=2, seed=0):
     join and alignment bugs where every column is individually well formed but
     describes the wrong hitter.
     """
+    # start from the EB frame's hitter rows, then add one prediction column per model
     base = frames["eb_bivariate"][evaluation.KEY + ["prior_pa", "stratum", "pa", "woba"]].copy()
     for name, frame in frames.items():
         base = base.merge(frame[evaluation.KEY + ["pred_woba"]].rename(columns={"pred_woba": name}),
                           on=evaluation.KEY, how="left")
 
+    # attach each hitter's trailing-window wOBA / PA per hand, the raw inputs behind the predictions
     window = eb._fitting_window(pa_df, eval_season, eb.TRAILING_SEASONS)
     pairs = eb.to_pairs(eb.side_observations(window))
     base = base.merge(pairs, on="batter", how="left")
 
+    # always include zero-prior-PA hitters, plus n_each random hitters from every stratum
     rng = np.random.default_rng(seed)
     picks = [base[base["prior_pa"] == 0]]
     for stratum in evaluation.STRATUM_NAMES:
@@ -367,6 +385,7 @@ def main():
     evaluation.assert_not_test_season(args.eval_season, final_run=args.final_run)
     pa_df = load_targets(args.eval_targets)
 
+    # C.2 prior fit and its rho bootstrap
     params, parameter_table, rho_ci = fit_and_describe(pa_df, args.eval_season, args.seed)
     print("fitted C.2 prior")
     print(parameter_table.drop(columns=["tau2", "rho_unclipped"]).to_string(index=False, float_format="%.5f"))
@@ -379,6 +398,7 @@ def main():
         print(f"  type {batter_type}: rho {point:.3f} 95% CI [{low:.3f}, {high:.3f}] "
               f"vs Book-implied {book:.3f} -> {verdict}  [{at_bound:.0%} of resamples at bound]")
 
+    # per-season process counts for the GBM, from the labeled pitch table (only the needed columns)
     process_seasons = gbm.season_process(
         pd.read_parquet(args.pitch_events, columns=PITCH_COLUMNS))
     debut_mu = None if args.no_debut_prior else eb.debut_mu_from_stats(args.hitter_stats)
@@ -390,6 +410,7 @@ def main():
         print(f"C.3 [{feature_set}]: {n_rounds} boosting rounds "
               f"(early-stopped on target season {args.eval_season - 1})")
 
+    # score every model on the same eval frame, then run the paired head-to-heads below
     frames, scored, coverage = score_all(pa_df, predictions, args.eval_season)
     print("\nclaim-1 scores")
     print(scored.to_string(index=False, float_format="%.4f"))
@@ -489,6 +510,7 @@ def main():
     print("\ndecode check: real hitters, inputs and every model's prediction")
     print(decoded.to_string(index=False, float_format="%.4f"))
 
+    # write every table printed above, plus the coverage record, to the output directory
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     parameter_table.to_csv(out_dir / "eb_prior_parameters.csv", index=False)

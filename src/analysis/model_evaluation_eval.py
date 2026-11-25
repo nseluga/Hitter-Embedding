@@ -46,14 +46,20 @@ def per_group_absorbing(pa_df, seasons):
     Observed absorbing-state shares per (batter, p_throws) over `seasons`, restricted to
     the wOBA denominator, plus that group's denominator count.
 
+    pa_df: one row per plate appearance (columns batter, p_throws, season, events,
+    in_denominator). seasons: iterable of season ints. Returns one row per
+    (batter, p_throws) with columns bb, k, hbp, bip (shares summing to 1) and denominator.
+
     Uses `query.ABSORBING_EVENTS` and takes `bip` as the remainder, exactly as
     `query.observed_absorbing_rates` does, so a new Statcast event string cannot fall out
     of one side of a comparison and not the other.
     """
+    # keep only PAs in the requested seasons that count toward wOBA
     window = pa_df[np.isin(pa_df["season"].to_numpy(), seasons)
                    & pa_df["in_denominator"].to_numpy()]
     assert len(window), f"no plate appearances in the denominator for seasons {seasons}"
     events = window["events"].to_numpy()
+    # one 0/1 indicator column per absorbing state; bip is whatever bb/k/hbp did not claim
     out = window[["batter", "p_throws"]].copy()
     named = np.zeros(len(window), dtype=bool)
     for key in ("bb", "k", "hbp"):
@@ -61,6 +67,7 @@ def per_group_absorbing(pa_df, seasons):
         out[key] = flag.astype("float64")
         named |= flag
     out["bip"] = (~named).astype("float64")
+    # sum indicators per group, then divide by group PA count to get shares
     grouped = out.groupby(["batter", "p_throws"], as_index=False).agg(
         **{key: (key, "sum") for key in query.ABSORBING_KEYS}, denominator=("bb", "size"))
     for key in query.ABSORBING_KEYS:
@@ -69,7 +76,10 @@ def per_group_absorbing(pa_df, seasons):
 
 
 def weighted_average_rates(frame, weight_column, columns):
-    """PA-weighted mean of each named column. Returns a plain dict."""
+    """
+    PA-weighted mean of each named column. Returns a plain dict {column: float}.
+    frame: one row per group; weight_column: name of the weight column; columns: names to average.
+    """
     weight = frame[weight_column].to_numpy(dtype="float64")
     assert weight.sum() > 0, "total weight is zero"
     return {column: float(np.average(frame[column].to_numpy(dtype="float64"), weights=weight))
@@ -79,6 +89,7 @@ def weighted_average_rates(frame, weight_column, columns):
 def weighted_ols(x, y, weight):
     """
     Weighted least squares of y on x with an intercept. Returns (intercept, slope, se_slope).
+    x, y, weight: 1-D arrays [N] (N groups); weight is typically the group PA count.
 
     The standard error is the heteroskedasticity-robust (HC0) sandwich form, because the
     residual variance here is structurally non-constant: a group's observed rate is a mean
@@ -87,6 +98,7 @@ def weighted_ols(x, y, weight):
     """
     x, y, weight = (np.asarray(v, dtype="float64") for v in (x, y, weight))
     assert x.shape == y.shape == weight.shape, "shape mismatch"
+    # WLS is OLS after scaling each row of the design and of y by sqrt(weight)
     design = np.column_stack([np.ones_like(x), x])
     root = np.sqrt(weight)
     beta, *_ = np.linalg.lstsq(design * root[:, None], y * root, rcond=None)
@@ -115,6 +127,8 @@ def matched_population(predictions, pa_df, manifest, eval_season):
     That identity is the proof this measures a population difference and not a code
     difference, and it is asserted here rather than left to a test.
     """
+    # predictions: one row per (batter, p_throws) with rate_<state> and pred_woba columns
+    # from Phase D.5; returns (table of the 2x2 population rows, per-state verdict dict).
     train_seasons = manifest["train_seasons"]
     trained = trained_batters(manifest)
 
@@ -128,12 +142,14 @@ def matched_population(predictions, pa_df, manifest, eval_season):
                                       [f"rate_{key}" for key in query.ABSORBING_KEYS])
     modelled = {key: modelled[f"rate_{key}"] for key in query.ABSORBING_KEYS}
 
+    # build the observed side twice (train window, eval window), each as pooled-all-PA and matched
     rows = []
     for window_name, seasons in (("train", train_seasons), ("eval", [eval_season])):
         pooled, n_pooled = query.observed_absorbing_rates(pa_df, seasons)
         rows.append({"window": window_name, "population": "pooled_all", "n_pa": n_pooled,
                      "n_groups": np.nan, **pooled})
 
+        # matched: per-hitter observed rates for the same hitters, weighted by eval-season PA
         groups = per_group_absorbing(pa_df, seasons)
         matched = groups.merge(scored[["batter", "p_throws", "pa"]],
                                on=["batter", "p_throws"], how="inner")
@@ -153,6 +169,7 @@ def matched_population(predictions, pa_df, manifest, eval_season):
         assert abs(pooled_train[key] - reference[key]) < 1e-12, \
             f"E.1's pooled path does not reproduce observed_absorbing_rates on {key}"
 
+    # per absorbing state, compare the modelled rate to every observed row and test against tolerance
     verdict = {}
     for key in query.ABSORBING_KEYS:
         entry = {"modelled": modelled[key], "tolerance": query.FIDELITY_TOLERANCE[key]}
@@ -192,6 +209,8 @@ def contamination(predictions, pa_df, manifest, eval_season, key="bb"):
         b = 1 + [slope_naive * var(o) + var(e)] / var(t)
 
     and b is the number the spec's decision rests on. Both are returned.
+
+    key: one of the absorbing states (bb/k/hbp/bip). Returns a flat dict of scalars.
     """
     trained = trained_batters(manifest)
     observed = per_group_absorbing(pa_df, [eval_season])
@@ -199,12 +218,14 @@ def contamination(predictions, pa_df, manifest, eval_season, key="bb"):
     frame = frame[frame["batter"].isin(trained)].copy()
     assert len(frame), "no trained hitter survived the observed-rate join"
 
+    # err = modelled rate minus observed rate; o = observed rate; weight = group PA count
     frame["err"] = frame[f"rate_{key}"] - frame[key]
     weight = frame["denominator"].to_numpy(dtype="float64")
     o = frame[key].to_numpy(dtype="float64")
 
     intercept, slope, se = weighted_ols(o, frame["err"].to_numpy(), weight)
 
+    # variance decomposition: observed = true + sampling noise (binomial p(1-p)/n per group)
     var_o = float(np.average((o - np.average(o, weights=weight)) ** 2, weights=weight))
     var_e = float(np.average(o * (1.0 - o) / np.maximum(weight, 1.0), weights=weight))
     var_t = var_o - var_e
@@ -250,10 +271,15 @@ def level_closure(predictions, pa_df, manifest, eval_season):
     value effect being everything they cannot, which is `V`, the contact-quality table.
     Reported over the matched population (E.1), so the level gap and the rate errors are
     measured on the same hitters.
+
+    Returns a dict of the modelled/observed rates and per-state values, the rate and value
+    effects per state, and the share of the level gap the rates explain.
     """
+    # wOBA linear weights for this season (wBB, wHBP, ...)
     weights = eval_targets.load_weights()[str(eval_season)]
     trained = trained_batters(manifest)
 
+    # realized wOBA per hitter-by-pitcher-hand group, pitchers-as-batters dropped
     actual = eval_targets.aggregate(eval_targets.drop_pitcher_batters(pa_df),
                                     by=tuple(claim1_eval.KEY))
     actual = actual[actual["season"] == eval_season]
@@ -267,18 +293,21 @@ def level_closure(predictions, pa_df, manifest, eval_season):
     assert len(frame), "no trained hitter survived the level-closure join"
 
     weight = frame["denominator"].to_numpy(dtype="float64")
+    # PA-weighted mean over the matched groups
     avg = lambda column: float(np.average(np.asarray(column, dtype="float64"), weights=weight))
 
     rate_m = {key: avg(frame[f"rate_{key}"]) for key in query.ABSORBING_KEYS}
     rate_o = {key: avg(frame[key]) for key in query.ABSORBING_KEYS}
     woba_m, woba_o = avg(frame["pred_woba"]), avg(frame["woba"])
 
+    # solve for the contact (bip) value: whatever wOBA remains after the fixed-value states
     fixed = {"bb": weights["wBB"], "hbp": weights["wHBP"], "k": 0.0}
     residual_m = woba_m - sum(fixed[key] * rate_m[key] for key in fixed)
     residual_o = woba_o - sum(fixed[key] * rate_o[key] for key in fixed)
     value_m = {**fixed, "bip": residual_m / rate_m["bip"]}
     value_o = {**fixed, "bip": residual_o / rate_o["bip"]}
 
+    # Oaxaca split of the level gap into rate and value effects (see docstring)
     rate_effect = {key: (rate_m[key] - rate_o[key]) * value_o[key]
                    for key in query.ABSORBING_KEYS}
     value_effect = {key: rate_m[key] * (value_m[key] - value_o[key])
@@ -311,6 +340,9 @@ def calibration(eval_frame, n_bins=10):
     number would be tuned on the metric it is meant to validate (phase-model_v1-spec.md §9).
     A slope below 1 means the predicted spread is too narrow for the realized spread; it is
     reported, and nothing is adjusted to fix it.
+
+    eval_frame: one row per hitter with pred_woba, woba, denominator (PA weight) and stratum.
+    Returns (per-stratum regression table, decile reliability table).
     """
     rows, reliability = [], []
     for name in list(claim1_eval.STRATUM_NAMES) + ["all"]:
@@ -320,6 +352,7 @@ def calibration(eval_frame, n_bins=10):
                          "intercept": float("nan"), "slope": float("nan"),
                          "slope_se": float("nan")})
             continue
+        # regress realized on predicted wOBA; slope < 1 means predictions are too spread out
         weight = part["denominator"].to_numpy(dtype="float64")
         intercept, slope, se = weighted_ols(part["pred_woba"], part["woba"], weight)
         rows.append({"stratum": name, "n_hitters": int(len(part)),
@@ -369,6 +402,8 @@ def platoon_frame(pa_df, predictions, eval_season, min_eval_pa=claim1_eval.MIN_E
     plate-appearance scale: a difference is only as precise as its scarcer side, and the
     arithmetic mean would let a 600/10 split masquerade as a well-measured hitter.
     Stratum is likewise assigned on the MINIMUM of the two sides' prior exposure (spec §7).
+
+    Returns (frame, route_a) where route_a maps stand -> league L-minus-R wOBA differential.
     """
     pa_df = eval_targets.drop_pitcher_batters(pa_df)
     actual = eval_targets.aggregate(pa_df, by=tuple(claim1_eval.KEY))
@@ -383,14 +418,17 @@ def platoon_frame(pa_df, predictions, eval_season, min_eval_pa=claim1_eval.MIN_E
              .merge(prior, on=["batter", "p_throws"], how="left"))
     frame["prior_pa"] = frame["prior_pa"].fillna(0.0)
 
+    # one row per batter, one column per (metric, pitcher hand); dropna keeps only hitters seen vs both
     wide = frame.pivot(index="batter", columns="p_throws",
                        values=["woba", "pred_woba", "denominator", "prior_pa"])
     wide = wide.dropna()
     assert len(wide), "no hitter is scorable against both hands"
 
+    # the hitter's batting side: most common `stand` value in the eval season
     stand = (pa_df[pa_df["season"] == eval_season].groupby("batter")["stand"]
              .agg(lambda values: values.mode().iat[0]))
 
+    # differential = wOBA vs LHP minus wOBA vs RHP; denom_* are the per-side PA counts
     out = pd.DataFrame({
         "batter": wide.index,
         "delta_obs": wide[("woba", "L")] - wide[("woba", "R")],
@@ -416,7 +454,11 @@ def platoon_frame(pa_df, predictions, eval_season, min_eval_pa=claim1_eval.MIN_E
 
 
 def score_platoon(frame, prediction_column):
-    """PA-weighted RMSE and weighted rank correlation of a differential, per stratum."""
+    """
+    PA-weighted RMSE and weighted rank correlation of a differential, per stratum.
+    frame: output of platoon_frame; prediction_column: delta_pred or delta_route_a.
+    Returns one row per stratum (plus "all") scoring that column against delta_obs.
+    """
     rows = []
     for name in list(claim1_eval.STRATUM_NAMES) + ["all"]:
         part = frame if name == "all" else frame[frame["stratum"] == name]
@@ -456,10 +498,13 @@ def platoon_decomposition(frame):
     within-stand part. Route A's within-stand variance is zero by construction and is
     reported as the reference the model's number is read against.
 
+    frame: output of platoon_frame. Returns a dict of variance splits per differential.
+
     The within-stand rank correlation is also returned and is flagged POST-HOC: it was added
     after E.5's pre-registered table was read, so it is a description of where the model's
     signal sits and is not evidence for or against the pre-registered claim.
     """
+    # for each differential: total weighted variance = between-stand (variance of stand means) + within
     weight = frame["weight"].to_numpy(dtype="float64")
     out = {}
     for column in ("delta_obs", "delta_pred", "delta_route_a"):
@@ -492,6 +537,9 @@ def paired_platoon_difference(frame, n_boot=2000, seed=0, ci=(2.5, 97.5)):
     One row per hitter here, so the batter clustering claim-1 needs is automatic: resampling
     rows and resampling batters are the same operation on this frame. Negative RMSE
     difference and positive rank difference both favour the model.
+
+    frame: output of platoon_frame. Returns one row per stratum with point differences and
+    percentile CIs (ci, in percent) from n_boot resamples.
     """
     rng = np.random.default_rng(seed)
     rows = []
@@ -504,6 +552,7 @@ def paired_platoon_difference(frame, n_boot=2000, seed=0, ci=(2.5, 97.5)):
         obs = part["delta_obs"].to_numpy()
         model, route = part["delta_pred"].to_numpy(), part["delta_route_a"].to_numpy()
 
+        # (RMSE difference, rank-correlation difference) of model vs Route A on the rows in `index`
         def metrics(index):
             w, a = weight[index], obs[index]
             return (claim1_eval.pa_weighted_rmse(a, model[index], w)
@@ -511,6 +560,7 @@ def paired_platoon_difference(frame, n_boot=2000, seed=0, ci=(2.5, 97.5)):
                     claim1_eval.weighted_rank_correlation(a, model[index], w)
                     - claim1_eval.weighted_rank_correlation(a, route[index], w))
 
+        # point estimate on the full sample, then bootstrap draws resampling hitters with replacement
         base_rmse, base_rank = metrics(np.arange(len(part)))
         draws = np.array([metrics(rng.integers(0, len(part), len(part)))
                           for _ in range(n_boot)])
@@ -532,6 +582,7 @@ def paired_platoon_difference(frame, n_boot=2000, seed=0, ci=(2.5, 97.5)):
 # ---------------------------------------------------------------- driver
 
 def main():
+    """Run E.1-E.5 in order and write CSV tables plus model_evaluation_report.json to --out-dir."""
     parser = argparse.ArgumentParser(description="Phase E — validation and evaluation.")
     parser.add_argument("--arm", default=DEFAULT_ARM)
     parser.add_argument("--eval-season", type=int, default=2024)

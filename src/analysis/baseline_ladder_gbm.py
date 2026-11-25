@@ -138,6 +138,7 @@ def season_outcome(pa_df):
     label him by whichever hand he happened to face more (almost always RHP) and
     silently turn every switch hitter into a right-handed batter.
     """
+    # only PA that count in the wOBA denominator carry a score
     scored = pa_df[pa_df["in_denominator"]]
     return scored.groupby(KEY, as_index=False).agg(
         woba_points=("woba_points", "sum"),
@@ -154,6 +155,7 @@ def season_process(pitch_df):
     window sum, so a hitter's window rate is the pooled rate, not a mean of
     seasonal rates (which would weight a 20-PA season like a 600-PA one).
     """
+    # drop intentional balls (see PITCH_GROUPS), then bucket each pitch into fastball / breaking / offspeed / other
     df = pitch_df[pitch_df["pitch_type"] != "IN"].copy()
     group = pd.Series("other", index=df.index)
     for name, codes in PITCH_GROUPS.items():
@@ -164,10 +166,12 @@ def season_process(pitch_df):
     df["swing"] = df["swing"].astype(bool)
     assert df.loc[df["swing"], "contact"].notna().all(), "a swing carries no contact label"
     df["whiff"] = df["swing"] & (df["contact"].fillna(1).astype(int) == 0)
+    # per-pitch boolean flags that the aggregation below sums into counts
     df["two_strike"] = df["strikes"] == 2
     df["in_play"] = df["ev"].notna()
     df["hard_hit"] = df["ev"] >= HARD_HIT_EV
 
+    # named aggregations: column -> (source column, reducer); all sums/counts, no rates yet
     agg = {
         "pitches": ("swing", "size"),
         "swings": ("swing", "sum"),
@@ -182,10 +186,12 @@ def season_process(pitch_df):
     }
     out = df.groupby(KEY, as_index=False).agg(**agg)
 
+    # two-strike-only swing/whiff counts, joined back (hitters with none get NaN, zero-filled below)
     two = df[df["two_strike"]].groupby(KEY, as_index=False).agg(
         two_strike_swings=("swing", "sum"), two_strike_whiffs=("whiff", "sum"))
     out = out.merge(two, on=KEY, how="left")
 
+    # the same counts per pitch group (swings, whiffs, balls in play, EV sum)
     for name in PITCH_GROUPS:
         part = df[df["pitch_group"] == name]
         by_group = part.groupby(KEY, as_index=False).agg(**{
@@ -196,6 +202,7 @@ def season_process(pitch_df):
         })
         out = out.merge(by_group, on=KEY, how="left")
 
+    # a missing slice means zero events, not unknown, so counts are zero-filled
     count_columns = [c for c in out.columns if c not in KEY]
     out[count_columns] = out[count_columns].fillna(0.0).astype(float)
     return out
@@ -207,11 +214,13 @@ def season_process(pitch_df):
 
 def _window_sum(season_table, target_season, n_seasons, keys):
     """Sum a season-level count table over [target_season - n_seasons, target_season)."""
+    # keep seasons in [target_season - n_seasons, target_season); the target season itself is excluded
     first = target_season - n_seasons
     window = season_table[(season_table["season"] >= first)
                           & (season_table["season"] < target_season)]
     assert window.empty or window["season"].max() < target_season, \
         f"feature window leaked target season {target_season}"
+    # sum every numeric count column; stand is a label and season is the window axis
     value_columns = [c for c in window.columns
                      if c not in ("season", "stand") and c not in keys]
     return window.groupby(keys, as_index=False)[value_columns].sum()
@@ -230,8 +239,10 @@ def window_features(groups, outcome_seasons, process_seasons, target_season,
     Build one feature row per (batter, p_throws) in `groups`, from seasons
     strictly before target_season.
     groups: frame with batter/p_throws needing a projection.
+    outcome_seasons / process_seasons: season-level count tables from `season_outcome` / `season_process`.
     Returns `groups` plus every column in FEATURE_SETS["full"].
     """
+    # window sums per (batter, pitcher hand); rates are computed from these sums further down
     outcome = _window_sum(outcome_seasons, target_season, n_seasons, ["batter", "p_throws"])
     process = _window_sum(process_seasons, target_season, n_seasons, ["batter", "p_throws"])
 
@@ -239,6 +250,7 @@ def window_features(groups, outcome_seasons, process_seasons, target_season,
     frame = frame.merge(outcome, on=["batter", "p_throws"], how="left")
 
     # opposite-side outcome: the same table joined on the flipped hand
+    # (row for pitcher hand L receives this batter's PA / wOBA points vs R, and vice versa)
     opposite = outcome.copy()
     opposite["p_throws"] = opposite["p_throws"].map({"L": "R", "R": "L"})
     frame = frame.merge(opposite.rename(columns={"woba_points": "opp_points", "pa": "opp_pa"}),
@@ -250,11 +262,13 @@ def window_features(groups, outcome_seasons, process_seasons, target_season,
     hand = window_stand.groupby("batter")["stand"].agg(lambda s: set(s)).rename("stands")
     seasons_seen = window_stand.groupby("batter")["season"].nunique().rename("seasons_seen")
     frame = frame.merge(hand, on="batter", how="left").merge(seasons_seen, on="batter", how="left")
+    # bats_switch: used both stands in the window; bats_left: used only L; neither flag = right-handed or no history
     stands = frame["stands"].apply(lambda s: s if isinstance(s, set) else set())
     frame["bats_switch"] = stands.apply(lambda s: float(len(s) > 1))
     frame["bats_left"] = stands.apply(lambda s: float(s == {"L"}))
     frame = frame.drop(columns=["stands"])
 
+    # outcome features: own side = same pitcher hand as the target row; no PA -> own_woba NaN (never 0)
     frame["own_pa"] = frame["pa"].fillna(0.0)
     frame["opp_pa"] = frame["opp_pa"].fillna(0.0)
     frame["total_pa"] = frame["own_pa"] + frame["opp_pa"]
@@ -263,6 +277,7 @@ def window_features(groups, outcome_seasons, process_seasons, target_season,
     frame["vs_lhp"] = (frame["p_throws"] == "L").astype(float)
     frame["seasons_seen"] = frame["seasons_seen"].fillna(0.0)
 
+    # process features: rates derived from the window sums; NaN where the denominator is 0
     frame = frame.merge(process, on=["batter", "p_throws"], how="left")
     frame["own_pitches"] = frame["pitches"].fillna(0.0)
     frame["bbip"] = frame["bbip"].fillna(0.0)
@@ -311,10 +326,12 @@ def build_row_set(pa_df, outcome_seasons, process_seasons, target_season,
     assert len(active) > 0, f"no PA in season {target_season}"
     groups = active[["batter", "p_throws"]].drop_duplicates()
 
+    # features for every active group, built only from seasons before target_season
     rows = window_features(groups, outcome_seasons, process_seasons, target_season, n_seasons)
     rows.insert(1, "season", target_season)
 
     if with_target:
+        # attach the target season's observed wOBA (points / PA) and PA, the training label and its weight
         observed = outcome_seasons[outcome_seasons["season"] == target_season]
         rows = rows.merge(observed[KEY + ["woba_points", "pa"]], on=KEY, how="inner")
         rows["target_woba"] = rows["woba_points"] / rows["pa"]
@@ -333,6 +350,7 @@ def build_training_frame(pa_df, outcome_seasons, process_seasons, eval_season,
                      if min_target_season <= s < eval_season)
     assert seasons, f"no training target seasons before {eval_season}"
 
+    # one row set per target season, stacked into a single training table
     frames = [build_row_set(pa_df, outcome_seasons, process_seasons, season, n_seasons)
               for season in seasons]
     stacked = pd.concat(frames, ignore_index=True)
@@ -343,6 +361,7 @@ def build_training_frame(pa_df, outcome_seasons, process_seasons, eval_season,
 
 
 def _matrix(rows, feature_set):
+    """Feature matrix [N, F] for the chosen feature set: N hitter-hand rows, F columns of FEATURE_SETS[feature_set]."""
     columns = FEATURE_SETS[feature_set]
     matrix = rows[columns].astype(float)
     assert matrix.shape == (len(rows), len(columns)), \
@@ -379,6 +398,7 @@ def fit(training, feature_set="full", inner_val_season=None, seed=0,
     settings = dict(PARAMS if params is None else params)
     settings["random_state"] = seed
 
+    # stage 1: early stopping on the held-out latest season picks the number of boosting rounds
     if n_rounds is None:
         inner_train = training[training["season"] < inner_val_season]
         inner_val = training[training["season"] == inner_val_season]
@@ -421,6 +441,7 @@ def predict(pa_df, process_seasons, eval_season, feature_set="full", seed=0,
                                     eval_season, n_seasons)
     model, n_rounds = fit(training, feature_set=feature_set, seed=seed)
 
+    # feature rows for the evaluated season (no target: it must not be read)
     rows = build_row_set(pa_df, outcome_seasons, process_seasons, eval_season,
                          n_seasons, with_target=False)
     rows["pred_woba"] = model.predict(_matrix(rows, feature_set))
@@ -445,6 +466,7 @@ def shuffled_training(training, seed):
     that has nothing to do with the link being broken. A null that hands the null
     model a free advantage is not a null. The assertion below is the guard.
     """
+    # one row permutation applied to both columns, so each (target, PA) pair moves as a unit
     order = np.random.default_rng(seed).permutation(len(training))
     shuffled = training.copy()
     shuffled[["target_woba", "pa"]] = training[["target_woba", "pa"]].to_numpy()[order]
@@ -471,6 +493,7 @@ def shuffle_null(pa_df, process_seasons, eval_season, feature_set="full", seeds=
     rows = build_row_set(pa_df, outcome_seasons, process_seasons, eval_season,
                          n_seasons, with_target=False)
 
+    # one shuffled-label model per seed, all scored on the same real eval-season features
     out = {}
     for seed in seeds:
         model, _ = fit(shuffled_training(training, seed), feature_set=feature_set, seed=seed)
@@ -484,6 +507,7 @@ def feature_importance(model, feature_set="full"):
     """Gain importance, reported for interpretation only — it is in-sample and
     biased toward high-cardinality splits (same caveat B.2 records). The
     outcome-vs-full comparison, not this table, is the evidence."""
+    # XGBoost omits never-used features from the score dict, so those get gain 0
     gains = model.get_booster().get_score(importance_type="gain")
     columns = FEATURE_SETS[feature_set]
     return (pd.DataFrame({"feature": columns,

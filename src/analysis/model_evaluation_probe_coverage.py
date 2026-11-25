@@ -120,7 +120,8 @@ N_BOOT = 2000
 def load_seed_embeddings(checkpoint_dir, arm, seeds=SEEDS):
     """
     The frozen hitter embedding matrix from each seed's checkpoint, as a dict
-    {seed: array of shape (n_rows, dim)}.
+    {seed: array of shape (n_rows, dim)}: n_rows embedding rows (row 0 = cold start), dim
+    embedding width.
 
     Reads the tensor and nothing else — no model is constructed and no forward pass is
     run, so there is no eval-mode hazard here. Row 0 is the reserved cold-start row and
@@ -149,6 +150,8 @@ def batter_stands(pa_df, eval_season, n_seasons=TRAILING_SEASONS):
     it decodes was grouped. Hitters with no trailing-window PA (debuts) are typed off the
     eval season, which is the same static-roster-attribute exception `eb.predict`
     documents — handedness is never an outcome.
+
+    Returns one row per batter with `batter_type` in L / R / S.
     """
     hitters_only = drop_pitcher_batters(pa_df)
     window = trailing_window(hitters_only, eval_season, n_seasons)
@@ -158,6 +161,7 @@ def batter_stands(pa_df, eval_season, n_seasons=TRAILING_SEASONS):
     active = hitters_only[hitters_only["season"] == eval_season]
     debut = baseline_ladder_bivariate_eb.batter_types(active[active["in_denominator"]])
     debut = debut.rename(columns={"batter_type": "debut_type"})
+    # trailing-window type wins; debut-season type fills hitters with no trailing PA
     merged = debut.merge(types, on="batter", how="outer")
     merged["batter_type"] = merged["batter_type"].fillna(merged["debut_type"])
     assert merged["batter_type"].notna().all(), "a hitter could not be typed L/R/S"
@@ -183,6 +187,7 @@ def eb_posterior_split(pa_df, eval_season):
     """
     predictions = baseline_ladder_bivariate_eb.predict(pa_df, eval_season)
     assert set(predictions["p_throws"]) <= {"L", "R"}, "unexpected pitcher hand in C.2 output"
+    # one row per batter, columns = pitcher hand (L, R)
     wide = predictions.pivot(index="batter", columns="p_throws", values="pred_woba")
     # a hitter projected against only one hand has no split to decode
     wide = wide.dropna(subset=["L", "R"])
@@ -200,6 +205,9 @@ def probe_frame(pa_df, manifest, eval_season):
     rows run 1..n_hitters and row 0 is reserved (`reserved_hitter_index`). A hitter absent
     from the vocabulary is scored on row 0 at query time, so "in the vocabulary" is exactly
     "has his own vector" and is the inclusion rule.
+
+    Returns (frame of trained hitters with batter, true_split, batter_type, row; counts dict
+    of how many hitters were probed and how many cold-start hitters were excluded).
     """
     vocabulary = {int(batter): int(row) for batter, row in manifest["vocabulary"].items()}
     assert 0 not in set(vocabulary.values()), \
@@ -209,6 +217,7 @@ def probe_frame(pa_df, manifest, eval_season):
     target = target.merge(batter_stands(pa_df, eval_season), on="batter", how="left")
     assert target["batter_type"].notna().all(), "stand lookup lost a hitter"
 
+    # keep only hitters with their own embedding row
     n_all = len(target)
     target["row"] = target["batter"].map(vocabulary)
     trained = target[target["row"].notna()].copy()
@@ -229,6 +238,9 @@ def out_of_fold_decode(features, target, groups, n_folds=N_FOLDS, alphas=RIDGE_A
     guarantee explicit and stays correct if a caller ever passes a per-(batter, hand) frame.
     Standardization and the penalty search both live inside the fold, so no fold's fit sees
     its own held-out rows.
+
+    features [N, D]: N hitters, D embedding dims; target [N]: decode target; groups [N]:
+    batter ids for GroupKFold. Returns predictions [N], each from a model that never saw it.
     """
     features, target = np.asarray(features, dtype="float64"), np.asarray(target, dtype="float64")
     assert features.ndim == 2 and target.ndim == 1, "features must be 2-D, target 1-D"
@@ -236,6 +248,7 @@ def out_of_fold_decode(features, target, groups, n_folds=N_FOLDS, alphas=RIDGE_A
         f"shape mismatch: {features.shape} {target.shape} {len(groups)}"
     assert len(features) >= n_folds * 2, "too few hitters to cross-validate"
 
+    # each fold: fit scaler + ridge on the other folds, predict the held-out fold
     predicted = np.full(len(target), np.nan)
     for train_index, test_index in GroupKFold(n_splits=n_folds).split(features, target, groups):
         model = make_pipeline(StandardScaler(), RidgeCV(alphas=alphas))
@@ -266,6 +279,9 @@ def probe_group(frame, embeddings, seeds=SEEDS, n_boot=N_BOOT, seed=0, ci=(2.5, 
     both correlations on the already-out-of-fold predictions of every seed, and averages
     across seeds inside each draw, so the interval is on the seed-averaged statistic that
     is reported.
+
+    frame: probe_frame rows (true_split, row, batter); embeddings: {seed: [n_rows, D]}.
+    Returns a dict of seed-averaged Pearson/Spearman with bootstrap CIs and per-seed values.
     """
     rng = np.random.default_rng(seed)
     target = frame["true_split"].to_numpy(dtype="float64")
@@ -274,6 +290,7 @@ def probe_group(frame, embeddings, seeds=SEEDS, n_boot=N_BOOT, seed=0, ci=(2.5, 
     rows = frame["row"].to_numpy()
     groups = frame["batter"].to_numpy()
 
+    # out-of-fold decode of the target from each seed's own embedding rows
     per_seed = {}
     for s in seeds:
         matrix = embeddings[s]
@@ -283,9 +300,11 @@ def probe_group(frame, embeddings, seeds=SEEDS, n_boot=N_BOOT, seed=0, ci=(2.5, 
         per_seed[s] = out_of_fold_decode(features, target, groups)
     assert len(per_seed) == len(seeds), "a seed produced no decode"
 
+    # stacked [n_seeds, N] out-of-fold predictions; point [n_seeds, 2] = (Pearson, Spearman) per seed
     stacked = np.vstack([per_seed[s] for s in seeds])
     point = np.array([_correlations(target, stacked[i]) for i in range(len(seeds))])
 
+    # bootstrap over hitters; each draw averages the per-seed correlations
     draws = np.empty((n_boot, 2))
     n = len(frame)
     for b in range(n_boot):
@@ -319,6 +338,9 @@ def run_probe(pa_df, manifest, embeddings, eval_season, n_boot=N_BOOT, seed=0, a
     decode near zero, tracking E.5's 54%-against-18% recovered-spread asymmetry. "Decodes"
     is read here as: the seed-averaged Pearson CI excludes the null's upper CI bound, which
     is the only reading that survives the finite-sample ceiling the null measures.
+
+    Returns a nested dict: per stand group {real, null, decodes_above_null}, plus sources
+    and the pre-registered expectation verdict.
     """
     frame, counts = probe_frame(pa_df, manifest, eval_season)
 
@@ -327,12 +349,14 @@ def run_probe(pa_df, manifest, embeddings, eval_season, n_boot=N_BOOT, seed=0, a
     assert isinstance(embeddings, dict) and len(embeddings) == len(SEEDS), \
         "the probe decodes per seed; it must be handed one embedding matrix per seed"
 
+    # decode pooled and within each batting-side group big enough to cross-validate
     groups = {"pooled": frame}
     for stand in ("L", "R", "S"):
         part = frame[frame["batter_type"] == stand]
         if len(part) >= N_FOLDS * 2:
             groups[stand] = part
 
+    # real decode and permuted-target null per group; "decodes" = real CI floor above null CI ceiling
     results = {}
     for name, part in groups.items():
         real = probe_group(part, embeddings, n_boot=n_boot, seed=seed, shuffle=False)
@@ -340,6 +364,7 @@ def run_probe(pa_df, manifest, embeddings, eval_season, n_boot=N_BOOT, seed=0, a
         beats = bool(real["pearson_ci_low"] > null["pearson_ci_high"])
         results[name] = {"real": real, "null": null, "decodes_above_null": beats}
 
+    # compare the L/R outcomes with the pre-registered pattern
     lhb = results.get("L", {}).get("decodes_above_null")
     rhb = results.get("R", {}).get("decodes_above_null")
     if lhb is None or rhb is None:
@@ -394,9 +419,13 @@ def ensemble_frame(pa_df, seed_predictions, manifest, eval_season):
 
     `cold_start` marks a group whose batter has no vocabulary row and is therefore scored
     on the shared reserved embedding (architecture §243's 42.7% caveat).
+
+    seed_predictions: {seed: DataFrame of per-group pred_woba}. Returns (frame, coverage)
+    with pred_woba (ensemble mean), seed_sd, noise_var and cold_start per scored group.
     """
     key = claim1_eval.KEY
     assert len(seed_predictions) >= 2, "a seed spread needs at least two seeds"
+    # inner-join the per-seed predictions into one wide table, one pred_s<seed> column each
     stacked = None
     for seed, table in sorted(seed_predictions.items()):
         assert set(key + ["pred_woba"]).issubset(table.columns), f"seed {seed} is missing columns"
@@ -408,6 +437,7 @@ def ensemble_frame(pa_df, seed_predictions, manifest, eval_season):
         assert len(stacked) == len(table), \
             f"seed {seed} does not cover the same rows as the others ({len(table)} vs {len(stacked)})"
 
+    # ensemble mean and across-seed spread per group
     values = stacked[seed_columns].to_numpy(dtype="float64")
     assert np.isfinite(values).all(), "a per-seed prediction is non-finite"
     stacked["pred_woba"] = values.mean(axis=1)
@@ -432,8 +462,11 @@ def wilson_interval(successes, n, level=0.95):
     Wilson score interval on a binomial rate. Preferred over the Wald form because the
     empirical coverage rates here sit near 0 and 1, where Wald intervals leave the unit
     interval and would report a coverage bound above 100%.
+
+    successes: groups covered; n: groups total; level: confidence. Returns (low, high).
     """
     assert 0 <= successes <= n and n > 0, f"invalid binomial input {successes}/{n}"
+    # standard Wilson score formula
     z = stats.norm.ppf(0.5 + level / 2)
     phat = successes / n
     centre = (phat + z * z / (2 * n)) / (1 + z * z / n)
@@ -449,6 +482,9 @@ def covered(frame, z, widen):
     widen=True  -> width is sqrt(seed_sd^2 + noise_var), the seed spread convolved with the
                    TARGET's own sampling noise (report (b), the fair test), because the
                    observed wOBA the interval must cover is itself a finite-PA mean.
+
+    frame: one row per scored group (woba, pred_woba, seed_sd, noise_var); z: normal
+    quantile. Returns bool array [n_groups]: observed wOBA falls inside the interval.
     """
     sd = frame["seed_sd"].to_numpy(dtype="float64")
     if widen:
@@ -458,7 +494,11 @@ def covered(frame, z, widen):
 
 
 def coverage_rows(frame, label, levels=Z_BY_LEVEL):
-    """One reliability-diagram row per (nominal level, interval kind) for one slice."""
+    """
+    One reliability-diagram row per (nominal level, interval kind) for one slice.
+    frame: rows of the slice; label: slice name; levels: {nominal coverage: z}. Each row
+    carries empirical coverage, its Wilson CI, gap to nominal, and mean interval half-width.
+    """
     rows = []
     for nominal, z in sorted(levels.items()):
         for kind, widen in (("seed_only", False), ("seed_plus_target_noise", True)):
@@ -493,6 +533,7 @@ def run_coverage(frame):
     empirical-Bayes prior. It is judged on the FAIR interval (b): under-coverage on the raw
     interval alone would partly be the answer key's noise, which is not the ensemble's fault.
     """
+    # rows per exposure stratum, then pooled
     rows = []
     for name in claim1_eval.STRATUM_NAMES:
         part = frame[frame["stratum"] == name]
@@ -500,6 +541,7 @@ def run_coverage(frame):
             rows += coverage_rows(part, name)
     rows += coverage_rows(frame, "all")
 
+    # split the low stratum by cold-start vs trained hitters (the standing caveat)
     low = frame[frame["stratum"] == "low"]
     for flag, label in ((True, "low_cold_start"), (False, "low_trained")):
         part = low[low["cold_start"] == flag]
@@ -507,6 +549,7 @@ def run_coverage(frame):
             rows += coverage_rows(part, label)
     table = pd.DataFrame(rows)
 
+    # verdict: too narrow if the fair interval's upper CI bound is below nominal at every level
     fair = table[(table["slice"] == "low") & (table["interval"] == "seed_plus_target_noise")]
     assert len(fair) == len(Z_BY_LEVEL), "the low stratum lost a nominal level"
     too_narrow = bool((fair["ci_high"] < fair["nominal"]).all())
@@ -560,6 +603,7 @@ ASSUMPTIONS = [
 
 
 def main():
+    """Run E.14 part 1 (probe) and part 2 (interval coverage); write coverage.csv, coverage.json and coverage_probe.json."""
     parser = argparse.ArgumentParser(
         description="Phase E.14 — the §5.1 probe and the ensemble interval coverage.")
     parser.add_argument("--arm", default=DEFAULT_ARM)

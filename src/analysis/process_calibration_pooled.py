@@ -51,6 +51,7 @@ def pooling_weights(pa_df, eval_season):
     Prior side-specific denominator PA per (batter, hand), normalized within batter.
     Prior, not eval-season: the weight must be information a forecaster already has.
     """
+    # Prior-season PA by (batter, hand), the information a forecaster has before the eval season.
     prior = claim1_eval.prior_exposure(pa_df, eval_season)
     total = prior.groupby("batter")["prior_pa"].transform("sum")
     # a hitter with no prior record against either hand gets an even split rather than a
@@ -62,6 +63,7 @@ def pooling_weights(pa_df, eval_season):
 
 def pool_predictions(predictions, weights, eval_season):
     """One pred_woba per batter, the prior-exposure-weighted mean of the two side forecasts."""
+    # Attach each hand's weight; a missing weight falls back to 0.5 (equal split).
     merged = predictions.merge(weights, on=["batter", "p_throws"], how="left")
     merged["weight"] = merged["weight"].fillna(0.5)
     merged["weighted"] = merged["pred_woba"] * merged["weight"]
@@ -74,6 +76,10 @@ def pool_predictions(predictions, weights, eval_season):
 
 
 def main():
+    """
+    Re-scores the claim-1 metric after pooling each hitter's two side forecasts into one, using the unchanged `claim1_eval.evaluate`.
+    Writes pooled_scores.csv and pooled_summary.json.
+    """
     parser = argparse.ArgumentParser(
         description="Phase F.5 -- claim-1 metric with handedness pooled away.")
     parser.add_argument("--arm", default="clean_clean_dim64")
@@ -96,6 +102,7 @@ def main():
 
     model_predictions = pd.read_csv(args.model_predictions)
     model_predictions = model_predictions[model_predictions["season"] == args.eval_season]
+    # Predictions to pool: the model plus the cheap-to-rebuild baselines (see COVERAGE SHORTCUT in the module docstring).
     rungs = {
         "model_v1": model_predictions,
         "trailing_raw": trailing_predict(pa_df, args.eval_season, variant="raw"),
@@ -104,6 +111,7 @@ def main():
                                              buckets=NO_INFO_BUCKETS),
     }
 
+    # Collapse the hand column to one value so the referee scores one row per (batter, season).
     pooled_pa = pa_df.copy()
     pooled_pa["p_throws"] = POOLED_HAND
 
@@ -113,11 +121,13 @@ def main():
         scored, coverage = claim1_eval.evaluate(pooled_pa, pooled, args.eval_season)
         scored.insert(0, "model", name)
         rows.append(scored)
+        # The no-information rung is the reference for the skill score.
         if name == "no_info_league_average":
             reference_rmse = dict(zip(scored["stratum"], scored["pa_weighted_rmse"]))
 
     table = pd.concat(rows, ignore_index=True)
     table["stratum_basis"] = "pooled_prior_pa"
+    # Skill = improvement in PA-weighted RMSE over the no-information rung, per stratum.
     table["skill_vs_no_info"] = [
         claim1_eval.skill_score(row["pa_weighted_rmse"], reference_rmse.get(row["stratum"]))
         for _, row in table.iterrows()]

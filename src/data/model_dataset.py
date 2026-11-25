@@ -84,6 +84,7 @@ ABLATION_BLOCK = ("release_extension", "release_pos_y", "release_pos_z",
 # context deliberately excludes but the label needs
 SPLIT_DESCRIPTION_TO_CLASS = {"foul": 0, "foul_tip": 1, "hit_into_play": 2}
 
+# columns read from the labeled pitch parquet: ids, labels, and every raw field the vectorizer uses
 SOURCE_COLUMNS = (["batter", "season", "swing", "contact", "description"]
                   + list(QUALITY_DIMENSIONS)
                   + context_features.STANDARDIZED
@@ -97,6 +98,7 @@ def vectorizer_columns(field, names):
     field: a raw Statcast column; names: the vectorizer's ordered feature names.
     A circular field contributes sin/cos, an optional field also a missingness flag.
     """
+    # every name a raw field can expand to; only those present in `names` are kept
     produced = [field, f"{field}_sin", f"{field}_cos", f"{field}_missing"]
     return [name for name in names if name in produced]
 
@@ -107,6 +109,7 @@ def select_columns(names, drop=DROPPED_FEATURES, include_block=True):
     drop: raw fields removed outright; include_block: whether B.2's flagged five are in.
     Returns (indices, kept_names) so the choice is recorded alongside the tensor.
     """
+    # collect the column names to remove, then keep the rest in their original order
     excluded = set()
     for field in drop:
         excluded.update(vectorizer_columns(field, names))
@@ -131,6 +134,7 @@ def drop_pitcher_at_bats(pitch_df, excluded):
     """
     if not excluded:
         return pitch_df
+    # match each pitch's (season, batter) against the exclusion set
     keys = pd.MultiIndex.from_arrays([pitch_df["season"], pitch_df["batter"]])
     return pitch_df[~keys.isin(excluded)]
 
@@ -157,7 +161,10 @@ def build_vocabulary(pitch_df, train_seasons):
 
 
 def hitter_indices(pitch_df, vocabulary):
-    """Embedding index per pitch; batters outside the vocabulary get the reserved row."""
+    """
+    Embedding index per pitch; batters outside the vocabulary get the reserved row.
+    Returns int64 [len(pitch_df)]: row of the hitter embedding table for each pitch.
+    """
     return (pitch_df["batter"].map(vocabulary)
             .fillna(RESERVED_HITTER_INDEX).to_numpy(dtype="int64"))
 
@@ -206,9 +213,13 @@ DP_MAX_DISTINCT = 2048
 
 
 def placeholder_mask(pitch_df):
-    """Rows carrying a Statcast (launch_angle, launch_speed) placeholder pair (D5-R17)."""
+    """
+    Rows carrying a Statcast (launch_angle, launch_speed) placeholder pair (D5-R17).
+    Returns bool [len(pitch_df)]: True where (la, ev) equals a PLACEHOLDER_PAIRS entry exactly.
+    """
     la = pitch_df["la"].to_numpy(dtype="float64")
     ev = pitch_df["ev"].to_numpy(dtype="float64")
+    # a row is flagged only if BOTH members of a pair match; see the D5-R17 note above
     mask = np.zeros(len(pitch_df), dtype=bool)
     for angle, speed in PLACEHOLDER_PAIRS:
         mask |= (la == angle) & (ev == speed)
@@ -245,8 +256,10 @@ def _top_decile_edges(values, n_bins, tail_share=TAIL_SHARE, tail_bins=TAIL_BINS
     Equal mass alone cannot narrow the tail -- 24 equal-mass bins give a 15.1 mph top EV bin
     and 32 still give 14.3 at 2.4x the chain enumeration -- so only unequal mass can.
     """
+    # body gets the remaining bins over the lowest (1 - tail_share) of the mass; the tail is split finely
     body_bins = n_bins - tail_bins
     assert body_bins >= 2, f"{n_bins} bins with {tail_bins} in the tail leaves too few"
+    # quantile levels: body levels end at the tail boundary, tail levels fall strictly inside the top share
     body = np.linspace(0.0, 1.0 - tail_share, body_bins + 1)[1:]
     tail = np.linspace(1.0 - tail_share, 1.0, tail_bins + 1)[1:-1]
     return np.quantile(values, np.concatenate([body, tail]))
@@ -288,6 +301,7 @@ def _variance_min_edges(values, target, n_bins):
     a uniform grid of that many levels first -- the partition stays exact at the snapped resolution,
     and the two dimensions Statcast actually reports pass through untouched.
     """
+    # values [N]: feature per ball in play; target [N]: realized wOBA per ball; returns n_bins-1 edges
     values = _snap_for_dp(values)
     order = np.argsort(values, kind="stable")
     unique, start = np.unique(values[order], return_index=True)
@@ -300,6 +314,7 @@ def _variance_min_edges(values, target, n_bins):
     count = np.diff(bounds).astype("float64")
     total = np.add.reduceat(sorted_target, start)
     total_sq = np.add.reduceat(sorted_target ** 2, start)
+    # cumulative count, sum and sum of squares over distinct values, so any interval's cost is O(1)
     c = np.concatenate([[0.0], np.cumsum(count)])
     s = np.concatenate([[0.0], np.cumsum(total)])
     q = np.concatenate([[0.0], np.cumsum(total_sq)])
@@ -312,7 +327,8 @@ def _variance_min_edges(values, target, n_bins):
             out = (q[j] - q[i]) - np.where(n > 0, run ** 2 / np.where(n > 0, n, 1.0), 0.0)
         return np.where(n > 0, out, np.inf)
 
-    # dp[j] = best cost partitioning the first j groups into the bins placed so far
+    # dp[j] = best cost partitioning the first j groups into the bins placed so far;
+    # back[k, j] records where bin k starts so the cut points can be recovered afterwards
     dp = cost(0, np.arange(m + 1))
     dp[0] = 0.0
     back = np.zeros((n_bins, m + 1), dtype="int64")
@@ -345,11 +361,13 @@ def fit_bin_edges(pitch_df, train_seasons, n_bins=DEFAULT_QUALITY_BINS,
     drop_placeholders: excludes D5-R17's Statcast placeholder pairs from the edge computation.
     """
     assert scheme in BIN_SCHEMES, f"unknown bin scheme {scheme!r}"
+    # keep [len(pitch_df)] bool: train-season rows, minus placeholders when requested
     # .to_numpy() can hand back a read-only view, and this mask is narrowed in place below
     keep = np.array(pitch_df["season"].isin(train_seasons).to_numpy(), dtype=bool)
     if drop_placeholders:
         keep &= ~placeholder_mask(pitch_df)
 
+    # each dimension is binned independently with the chosen scheme, then checked for strict monotonicity
     edges = {}
     for dimension in QUALITY_DIMENSIONS:
         values = pitch_df[dimension].to_numpy(dtype="float64")
@@ -383,6 +401,7 @@ def joint_cell_variance(pitch_df, train_seasons, edges, target, n_bins=DEFAULT_Q
     cell off to its (ev, la) marginal, and the backoff has to be re-fit if the new edges push
     top cells below the regime it was fitted in.
     """
+    # target [len(pitch_df)]: realized wOBA points per pitch; edges: {dimension: n_bins-1 interior edges}
     values = {d: pitch_df[d].to_numpy(dtype="float64") for d in QUALITY_DIMENSIONS}
     target = np.asarray(target, dtype="float64")
     usable = np.array(pitch_df["season"].isin(train_seasons).to_numpy(), dtype=bool)
@@ -390,15 +409,18 @@ def joint_cell_variance(pitch_df, train_seasons, edges, target, n_bins=DEFAULT_Q
     for value in values.values():
         usable &= np.isfinite(value)
 
+    # bin each ball per dimension, then flatten (ev_bin, la_bin, spray_bin) to one cell id in [0, n_bins**3)
     bins = {d: assign_bins(values[d][usable], edges[d]) for d in QUALITY_DIMENSIONS}
     flat = np.ravel_multi_index((bins["ev"], bins["la"], bins["spray"]),
                                 (n_bins, n_bins, n_bins))
+    # per-cell count, sum and sum of squares of the target give each cell's variance without a groupby
     scored = target[usable]
     size = n_bins ** 3
     count = np.bincount(flat, minlength=size).astype("float64")
     total = np.bincount(flat, weights=scored, minlength=size)
     total_sq = np.bincount(flat, weights=scored ** 2, minlength=size)
 
+    # within = summed squared deviation from each occupied cell's mean; grand = same around the overall mean
     occupied = count > 0
     within = (total_sq[occupied] - total[occupied] ** 2 / count[occupied]).sum()
     grand = total_sq.sum() - total.sum() ** 2 / count.sum()
@@ -423,7 +445,10 @@ def joint_cell_variance(pitch_df, train_seasons, edges, target, n_bins=DEFAULT_Q
 
 
 def assign_bins(values, edges):
-    """Bin index per value against interior edges; non-finite values return MASKED."""
+    """
+    Bin index per value against interior edges; non-finite values return MASKED.
+    values [N]; edges: n_bins-1 ascending interior cut points. Returns int64 [N] in [0, n_bins-1].
+    """
     values = np.asarray(values, dtype="float64")
     assigned = np.searchsorted(np.asarray(edges, dtype="float64"), values, side="right")
     return np.where(np.isfinite(values), assigned, MASKED).astype("int64")
@@ -437,6 +462,7 @@ def encode_labels(pitch_df, edges):
     """
     swing = pitch_df["swing"].to_numpy(dtype="int64")
     contact = pitch_df["contact"]
+    # contact is nullable (NA off swings); NA becomes MASKED, never 0, which is a real class
     labels = {
         "swing": swing,
         "contact": np.where(contact.isna(), MASKED,
@@ -467,6 +493,7 @@ def encode_labels(pitch_df, edges):
         assert not (labels["split"][labels["contact"] == 1] == MASKED).any(), \
             "a contact event carries no split label"
 
+    # final nesting checks: contact only on swings, quality bins only on contact
     assert set(np.unique(swing)) <= {0, 1}, "swing is not binary"
     assert not (labels["contact"][swing == 0] != MASKED).any(), \
         "contact is defined on a non-swing, violating the §1.2 nesting"
@@ -486,6 +513,7 @@ def build(pitch_df, train_seasons=None, n_bins=DEFAULT_QUALITY_BINS,
     (arrays, manifest), where arrays holds context/hitter/season plus the labels,
     and manifest records every frozen quantity so a rebuild is checkable.
     """
+    # drop pitcher at-bats first, so the vocabulary, edges and rows all see the same population
     config = config or load_splits()
     n_source = len(pitch_df)
     pitch_df = drop_pitcher_at_bats(pitch_df, excluded_batters or set())
@@ -494,9 +522,11 @@ def build(pitch_df, train_seasons=None, n_bins=DEFAULT_QUALITY_BINS,
     assert not set(train_seasons) & set(config["split"]["test"]), \
         "the frozen test season cannot fit the vocabulary, bins, or standardization"
 
+    # reuse the committed Phase B vectorizer fit, checking it never saw non-train seasons
     params = params or context_features.load_params(VECTORIZER_PARAMS_PATH)
     assert set(params.fit_seasons) <= set(config["split"]["train"]), \
         "the context vectorizer was fit outside the frozen train seasons"
+    # matrix [N, D_full]: full context vector per pitch; indices pick the columns Phase D keeps
     matrix, names = context_features.transform(pitch_df, params)
     indices, kept = select_columns(names, include_block=include_block)
 
@@ -506,6 +536,8 @@ def build(pitch_df, train_seasons=None, n_bins=DEFAULT_QUALITY_BINS,
     # ponytail: dense float32 context, ~29 of 44 columns one-hot. Roughly 1.3 GB over
     # the full table, which fits; switch to categorical index columns embedded in the
     # model if memory ever binds.
+    # arrays, all length N pitches: context [N, len(kept)] float32, hitter [N] embedding row,
+    # season [N], plus label arrays from encode_labels (swing, contact, split, ev, la, spray; MASKED = -1)
     arrays = {
         "context": matrix[:, indices],
         "hitter": hitter_indices(pitch_df, vocabulary),
@@ -559,6 +591,7 @@ def load(out_dir, mmap_mode="r"):
 
 
 def main():
+    """CLI: build the Phase D tensors from the labeled pitch table and write them with a manifest."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Build the Phase D pitch tensors.")
@@ -576,6 +609,7 @@ def main():
                              "not just per-season primarily_pitchers")
     args = parser.parse_args()
 
+    # the PA table is used only to identify pitcher-batters to exclude
     pa_df = pd.read_parquet(args.eval_targets)
     pitch_df = pd.read_parquet(args.pitch_events, columns=sorted(set(SOURCE_COLUMNS)))
     excluded = primarily_pitchers(pa_df)

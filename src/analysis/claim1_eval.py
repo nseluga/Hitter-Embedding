@@ -150,10 +150,12 @@ def prior_exposure(pa_df, eval_season):
     pa_df: the PA-level eval-target table; eval_season: the season being projected.
     Returns one row per (batter, p_throws) with prior_pa.
     """
+    # only seasons before the evaluated one: what a forecaster could have known
     prior = pa_df[pa_df["season"] < eval_season]
     assert len(prior) > 0, f"no seasons before {eval_season} in the PA table"
     assert prior["season"].max() < eval_season, "prior exposure leaked the evaluated season"
 
+    # in_denominator is boolean, so its sum is the count of denominator PA per (batter, hand)
     out = (
         prior.groupby(["batter", "p_throws"], as_index=False)["in_denominator"]
         .sum()
@@ -171,9 +173,11 @@ def sampling_noise(pa_df, eval_season):
     answer key contributes, not error the model made; no model can reduce it.
     Returns one row per (batter, p_throws) with noise_var.
     """
+    # eval-season denominator PA only: these are the PA that make up the observed wOBA
     scored = pa_df[(pa_df["season"] == eval_season) & pa_df["in_denominator"]]
     assert len(scored) > 0, f"no scorable PA in season {eval_season}"
 
+    # variance of a mean = per-PA variance of wOBA points / number of PA
     grouped = scored.groupby(["batter", "p_throws"])["woba_points"]
     out = pd.DataFrame({"n": grouped.size(), "within_var": grouped.var(ddof=1)}).reset_index()
     out["noise_var"] = out["within_var"] / out["n"]
@@ -184,10 +188,11 @@ def assign_stratum(prior_pa, boundaries=STRATUM_BOUNDARIES):
     """
     Bucket prior side-specific PA into the low/medium/high exposure strata.
     prior_pa: a Series of PA counts. Returns a Series of stratum labels.
-    Boundaries are half-open: low < b0 <= medium < feature_screening <= high.
+    Boundaries are half-open: low < b0 <= medium < b1 <= high, with (b0, b1) = boundaries.
     """
     low_cut, high_cut = boundaries
     assert low_cut < high_cut, "stratum boundaries must be increasing"
+    # right=False makes each bin [left, right), matching the half-open rule above
     edges = [-np.inf, low_cut, high_cut, np.inf]
     return pd.cut(prior_pa, bins=edges, labels=list(STRATUM_NAMES), right=False)
 
@@ -213,6 +218,7 @@ def build_eval_frame(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
         "predictions must cover exactly the evaluated season"
     assert not predictions.duplicated(KEY).any(), "predictions contain duplicate (batter, season, hand) rows"
 
+    # observed wOBA, PA and denominator per (batter, season, hand), restricted to the evaluated season
     actuals = aggregate(pa_df, by=tuple(KEY))
     actuals = actuals[actuals["season"] == eval_season]
     n_actual_groups = len(actuals)
@@ -241,6 +247,7 @@ def build_eval_frame(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
     scorable = actuals[actuals["denominator"] >= min_eval_pa]
     dropped = actuals[actuals["denominator"] < min_eval_pa]
 
+    # inner join: a scorable group the model made no prediction for is counted, not imputed
     frame = scorable.merge(predictions[KEY + ["pred_woba"]], on=KEY, how="inner")
     n_unpredicted = len(scorable) - len(frame)
 
@@ -250,6 +257,7 @@ def build_eval_frame(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
     assert frame["pred_woba"].notna().all(), "predictions contain nulls"
     assert np.isfinite(frame["pred_woba"]).all(), "predictions contain non-finite values"
 
+    # accounting of every group lost along the way, reported next to the metrics
     coverage = {
         "eval_season": int(eval_season),
         "actual_groups": int(n_actual_groups),
@@ -277,6 +285,7 @@ def stratum_coverage(scorable, dropped):
     baseline carries. Reporting one aggregate drop count hides all of that (§6:
     a coverage shortcut is stated where the result is stated).
     """
+    # per stratum: counts kept/dropped and the mean realized wOBA of each side of the cut
     out = {}
     for name in STRATUM_NAMES:
         kept, cut = scorable[scorable["stratum"] == name], dropped[dropped["stratum"] == name]
@@ -294,6 +303,7 @@ def stratum_coverage(scorable, dropped):
 def pa_weighted_rmse(actual, predicted, pa):
     """
     Root mean squared error weighting each hitter-hand group by its held-out PA.
+    actual, predicted, pa: equal-length arrays, one entry per hitter-hand group.
     Callers pass the wOBA DENOMINATOR, not total PA — that is the count wOBA is a
     mean over, so it is the one that sets the observation's precision (see the
     module docstring's "WHICH PA").
@@ -306,7 +316,11 @@ def pa_weighted_rmse(actual, predicted, pa):
 
 
 def rank_correlation(actual, predicted):
-    """Spearman rank correlation between predicted and observed wOBA. Unweighted."""
+    """
+    Spearman rank correlation between predicted and observed wOBA. Unweighted.
+    actual, predicted: equal-length arrays, one entry per hitter-hand group. nan if undefined
+    (under 3 groups, or either side constant).
+    """
     actual, predicted = pd.Series(np.asarray(actual)), pd.Series(np.asarray(predicted))
     assert len(actual) == len(predicted), "shape mismatch"
     if len(actual) < 3 or actual.nunique() < 2 or predicted.nunique() < 2:
@@ -334,6 +348,7 @@ def weighted_ranks(values, weights):
     biased: under independent inputs this estimator centres on zero at weight
     spreads from equal through 10000:1, at n = 30 and n = 380.
     """
+    # one row per unit; per-distinct-value weight totals drive the rank formula above
     frame = pd.DataFrame({"value": np.asarray(values), "weight": np.asarray(weights, dtype=float)})
     assert (frame["weight"] > 0).all(), "weighted ranks need strictly positive weights"
     by_value = frame.groupby("value")["weight"]
@@ -346,9 +361,11 @@ def weighted_ranks(values, weights):
 
 def weighted_pearson(x, y, weights):
     """Pearson correlation with observation weights, using weighted means and moments."""
+    # weights normalized to sum 1, so weighted means and variances are plain sums
     x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
     weight = np.asarray(weights, dtype=float) / np.sum(weights)
     x_centered, y_centered = x - np.sum(weight * x), y - np.sum(weight * y)
+    # product of weighted variances; zero means one input is constant and r is undefined
     spread = np.sum(weight * x_centered ** 2) * np.sum(weight * y_centered ** 2)
     if spread <= 0:
         return float("nan")
@@ -405,6 +422,7 @@ def score(eval_frame, target="woba"):
         f"the eval frame carries no {actual_column!r} column -- rebuild the PA table with "
         f"eval_targets.py")
 
+    # one row per exposure stratum, then one pooled row ("all")
     rows = []
     for name in list(STRATUM_NAMES) + ["all"]:
         part = eval_frame if name == "all" else eval_frame[eval_frame["stratum"] == name]
@@ -419,6 +437,7 @@ def score(eval_frame, target="woba"):
                          "pa_weighted_rmse": float("nan"), "rank_corr": float("nan"),
                          "rank_corr_weighted": float("nan")})
             continue
+        # calibration (RMSE) and ordering (rank) metrics, weighted by the target's own denominator
         actual, weight = part[actual_column], part[weight_column]
         rmse = pa_weighted_rmse(actual, part["pred_woba"], weight)
         # the noise floor is the sampling variance of REALIZED wOBA; it does not describe
@@ -458,6 +477,7 @@ def achievable_floor(eval_frame):
     """
     assert "xwoba" in eval_frame.columns, (
         "the eval frame carries no 'xwoba' column -- rebuild the PA table with eval_targets.py")
+    # per stratum (and pooled), over groups that have an xwOBA and a positive xwOBA denominator
     rows = []
     for name in list(STRATUM_NAMES) + ["all"]:
         part = eval_frame if name == "all" else eval_frame[eval_frame["stratum"] == name]
@@ -479,7 +499,10 @@ def achievable_floor(eval_frame):
 
 
 def noise_floor(part):
-    """PA-weighted irreducible RMSE contributed by noise in the held-out target."""
+    """
+    PA-weighted irreducible RMSE contributed by noise in the held-out target.
+    part: eval-frame rows (one per hitter-hand) carrying `denominator` and `noise_var`.
+    """
     weight = part["denominator"].astype(float)
     return float(np.sqrt((weight * part["noise_var"]).sum() / weight.sum()))
 
@@ -506,6 +529,7 @@ def batter_clusters(part):
 
     Returns a list of index arrays, one per batter, for `_resample`.
     """
+    # integer code per batter; sort row positions by code, then split wherever the code changes
     codes = pd.factorize(np.asarray(part["batter"]))[0]
     order = np.argsort(codes, kind="stable")
     return np.split(order, np.flatnonzero(np.diff(codes[order])) + 1)
@@ -513,12 +537,14 @@ def batter_clusters(part):
 
 def _resample(clusters, rng):
     """One bootstrap replicate: draw batters with replacement, keep all their rows."""
+    # cluster indices drawn with replacement; concatenating gives the resampled row positions
     picks = rng.integers(0, len(clusters), len(clusters))
     return np.concatenate([clusters[i] for i in picks])
 
 
 def _paired_setup(frame_a, frame_b, seed):
     """Shared preamble for the paired comparisons: merge, verify alignment, seed."""
+    # one row per group with both models' predictions as pred_woba_a / pred_woba_b
     merged = frame_a.merge(frame_b[KEY + ["pred_woba"]], on=KEY, suffixes=("_a", "_b"))
     assert len(merged) == len(frame_a) == len(frame_b), \
         "paired comparison requires both models to score exactly the same groups"
@@ -546,11 +572,13 @@ def paired_rmse_difference(frame_a, frame_b, n_boot=2000, seed=0, ci=(2.5, 97.5)
         part = merged if name == "all" else merged[merged["stratum"] == name]
         if len(part) < 3:
             continue
+        # squared error per group for each model; `weighted` is the PA-weighted RMSE over row positions idx
         actual, pa = part["woba"].to_numpy(), part["denominator"].to_numpy(dtype=float)
         error_a = (part["pred_woba_a"].to_numpy() - actual) ** 2
         error_b = (part["pred_woba_b"].to_numpy() - actual) ** 2
         weighted = lambda err, idx: float(np.sqrt(np.sum(pa[idx] * err[idx]) / pa[idx].sum()))
 
+        # bootstrap: resample batters, recompute RMSE(A) - RMSE(B) on each replicate
         clusters = batter_clusters(part)
         full = np.arange(len(part))
         draws = [weighted(error_a, i) - weighted(error_b, i)
@@ -609,11 +637,13 @@ def paired_rank_difference(frame_a, frame_b, n_boot=2000, seed=0, ci=(2.5, 97.5)
         pred_a, pred_b = part["pred_woba_a"].to_numpy(), part["pred_woba_b"].to_numpy()
         weight = part["denominator"].to_numpy(dtype=float)
 
+        # rank coefficient of one model's predictions over the row positions `rows` (default: all)
         def coefficient(predicted, rows=slice(None)):
             if weighted:
                 return weighted_rank_correlation(actual[rows], predicted[rows], weight[rows])
             return rank_correlation(actual[rows], predicted[rows])
 
+        # bootstrap over batters: rank_a - rank_b per replicate (non-finite replicates dropped below)
         clusters = batter_clusters(part)
         draws = np.array([
             coefficient(pred_a, i) - coefficient(pred_b, i)
@@ -660,6 +690,7 @@ def evaluate(pa_df, predictions, eval_season, min_eval_pa=MIN_EVAL_PA,
     Returns (metrics_table, coverage_dict). Coverage must be reported alongside
     the metrics — a scored subset presented alone reads as full coverage.
     """
+    # build the eval frame (join, strata, filter), then score it; coverage rides along
     frame, coverage = build_eval_frame(pa_df, predictions, eval_season, min_eval_pa, boundaries)
     return score(frame), coverage
 
@@ -674,6 +705,7 @@ def assert_not_test_season(eval_season, config=None, final_run=False):
     the guard instead would leave nothing between an exploratory re-run and spending
     the season, which is the failure it exists to prevent.
     """
+    # the frozen split config lists the held-out test season(s); a final run skips the check below
     config = config or load_splits()
     test_seasons = config["split"]["test"]
     if final_run:

@@ -72,6 +72,8 @@ def build_subset(platoon_frame_path, anchor_ids, n_other, seed):
     platoon frame) plus `n_other` more, drawn stratified over stand x stratum with
     `np.random.default_rng(seed)`. Returns (subset DataFrame, anchors present, anchors missing).
     """
+    # anchors are fixed; the remaining slots are spread evenly across stand x stratum cells
+    # so the subset covers every hitter type (the first `extra` cells get one extra pick)
     frame = pd.read_csv(platoon_frame_path)
     present = set(frame["batter"].astype(int))
     anchors_present = [b for b in anchor_ids if b in present]
@@ -107,7 +109,11 @@ def parse_dims(spec):
 
 
 def build_pass_list(dims):
-    """Base pass, one pass per selected dim, plus the dim-0 linearity check if dim 0 is selected."""
+    """
+    Ordered (pass_id, dim, eps) list of query runs: the unperturbed base pass, one pass per
+    selected dim, plus the dim-0 linearity check (perturbed by 2x eps) if dim 0 is selected.
+    eps is a placeholder here; run_gradient fills it in.
+    """
     passes = [(BASE_PASS, None, 0.0)]
     passes += [(f"dim{d}", d, None) for d in dims]  # eps filled in by the caller
     if 0 in dims:
@@ -120,6 +126,8 @@ def perturb_embedding(model, dim, eps):
     Add `eps` to embedding column `dim` for every TRAINED row (row 0, cold start, untouched).
     Returns the exact pre-perturbation tensor, to be restored via `restore_embedding`.
     """
+    # shift one embedding coordinate for all hitters at once, so one query pass
+    # measures the effect of that coordinate on every hitter in the subset
     weight = model.embedding.weight
     saved = weight.detach().clone()
     with torch.no_grad():
@@ -158,6 +166,13 @@ def pending_passes(raw_path, all_pass_ids):
 
 
 def run_gradient(out_dir, n_pitchers, dims, passes_filter, resume, smoke):
+    """
+    Stage 1 (slow). For a stratified hitter subset, scores the L and R pred_woba through the
+    real query path once at the base embedding table and once per perturbed dimension, and
+    appends rows (pass_id, dim, eps, batter, p_throws, pred_woba) to platoon_gradient_raw.csv.
+    passes_filter: optional list of pass ids to run; resume skips passes already in the CSV;
+    smoke runs a tiny version (2 anchors, 8 pitchers, dims 0-1). Returns (raw csv path, eps).
+    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     raw_path = out_dir / "platoon_gradient_raw.csv"
@@ -185,10 +200,13 @@ def run_gradient(out_dir, n_pitchers, dims, passes_filter, resume, smoke):
     model = models[0]
     assert not model.training, "embedding.eval() was not applied by load_ensemble"
 
+    # step size = a quarter of the typical per-dim spread of the trained embeddings, small
+    # enough for a local slope but large enough to rise above float noise
     base_weight = model.embedding.weight.detach()
     eps = float(0.25 * base_weight[1:].std(0).mean())
     print(f"eps = {eps:.6f}")
 
+    # base pass has eps 0; the linearity check uses 2*eps; every dim pass uses eps
     all_passes = build_pass_list(dims)
     eps_of = {BASE_PASS: 0.0, LINEARITY_PASS: 2 * eps}
     all_passes = [(pass_id, dim, eps_of.get(pass_id, eps)) for pass_id, dim, _ in all_passes]
@@ -200,6 +218,8 @@ def run_gradient(out_dir, n_pitchers, dims, passes_filter, resume, smoke):
     if resume and len(todo) < len(all_passes):
         print(f"resume: {len(all_passes) - len(todo)} pass(es) already complete, skipping")
 
+    # per pass: perturb the table, query, restore, and append rows (the file is
+    # appended per pass so a crashed ~2h run can resume)
     for pass_id, dim, pass_eps in todo:
         saved = perturb_embedding(model, dim, pass_eps) if dim is not None and pass_eps != 0.0 else None
         started = time.monotonic()
@@ -228,7 +248,7 @@ def finite_difference_gradient(gap_pass, gap_base, eps):
 
 
 def gap_by_batter(raw, pass_id):
-    """pred_woba(L) - pred_woba(R) per batter for one pass, as a batter-indexed Series."""
+    """pred_woba(L) - pred_woba(R) per batter for one pass_id of the raw frame, as a batter-indexed Series (the "L-R gap")."""
     rows = raw[raw["pass_id"] == pass_id]
     wide = rows.pivot(index="batter", columns="p_throws", values="pred_woba")
     return wide["L"] - wide["R"]
@@ -237,7 +257,8 @@ def gap_by_batter(raw, pass_id):
 def compute_gradient_table(raw, dims=None):
     """
     Per-hitter, per-dim gradient g[k] = (gap_k - gap_0) / eps_k. Dims absent from `raw`
-    come back all-NaN. Returns a DataFrame (batter, dim, gradient).
+    come back all-NaN. Returns a DataFrame (batter, dim, gradient): how much each embedding
+    coordinate moves that hitter's L-R gap per unit change.
     """
     dims = range(N_DIMS) if dims is None else dims
     gap_base = gap_by_batter(raw, BASE_PASS)
@@ -293,6 +314,9 @@ def ridge_direction(pa_df, manifest, embedding):
     trained["row"] = trained["row"].astype(int)
     assert (trained["row"] > 0).all(), "a trained hitter mapped to the reserved row"
 
+    # features [n hitters, N_DIMS] = embedding rows; ridge on standardized features, so
+    # the coefficients are mapped back to raw embedding units (coef / scale) to be comparable
+    # with the finite-difference gradient, which is in raw units
     features = embedding[trained["row"].to_numpy()]
     pipeline = make_pipeline(StandardScaler(), RidgeCV(alphas=RIDGE_ALPHAS))
     pipeline.fit(features, trained["true_split"].to_numpy())
@@ -310,12 +334,19 @@ def cosine_finite(a, b):
 
 
 def direction_analysis(raw, pa_df, manifest, embedding, out_dir):
-    """(a): g_bar, g_bar_L/R, the ridge vector, and their bootstrapped cosine."""
+    """
+    (a): g_bar (per-dim gradient averaged over subset hitters; _L/_R = left-/right-handed
+    batters only), the E.14 ridge vector, and the bootstrapped cosine between g_bar and the
+    ridge vector (bootstrap resamples hitters). Writes platoon_direction.csv,
+    platoon_gradient.csv and the direction figure. embedding [n_rows, N_DIMS].
+    Returns (g_bar [N_DIMS], summary dict); verdict = cosine > 0 with CI lower bound > 0.
+    """
     gradient_long = compute_gradient_table(raw)
     # stand comes from the subset file written alongside the raw CSV
     subset = pd.read_csv(out_dir / "platoon_gradient_subset.csv")
     gradient_long = gradient_long.merge(subset[["batter", "stand", "stratum"]], on="batter", how="left")
 
+    # matrix [n hitters, N_DIMS]: gradient of each hitter's L-R gap w.r.t. each dim
     matrix = gradient_long.pivot(index="batter", columns="dim", values="gradient").reindex(columns=range(N_DIMS))
     g_bar = np.nanmean(matrix.to_numpy(), axis=0)
     stand_of = subset.set_index("batter")["stand"]
@@ -346,6 +377,7 @@ def direction_analysis(raw, pa_df, manifest, embedding, out_dir):
 
 
 def plot_direction(g_bar, ridge_w, cosine, out_path):
+    """Saves per-dim bar charts of g_bar and the ridge weight, each scaled to unit norm so shape (not scale) is compared."""
     def unit(v):
         mask = np.isfinite(v)
         out = np.zeros_like(v)
@@ -369,7 +401,7 @@ def plot_direction(g_bar, ridge_w, cosine, out_path):
 # --------------------------------------------------------------------- projection
 
 def partial_correlation(x, y, z):
-    """Pearson r between x and y after removing their linear dependence on z."""
+    """Pearson r between x and y after removing their linear dependence on z (x, y, z: [n] arrays)."""
     x, y, z = (np.asarray(v, dtype="float64") for v in (x, y, z))
 
     def residual(a):
@@ -388,6 +420,7 @@ def load_projection_frame(embedding, g_bar):
     gradient direction, which is defined L-R. Switch-hitters ("S") have no fixed
     orientation and are dropped.
     """
+    # unit direction; dims with no gradient (NaN) contribute nothing to the projection
     mask = np.isfinite(g_bar)
     unit = g_bar.copy()
     unit[mask] = g_bar[mask] / np.linalg.norm(g_bar[mask])
@@ -407,6 +440,8 @@ def load_projection_frame(embedding, g_bar):
         print(f"dropping {n_no_split} hitter(s) with no obs_platoon_diff (all in the low stratum)")
     stats = stats[stats["obs_platoon_diff"].notna()].copy()
 
+    # proj = each hitter's embedding row dotted with the unit direction, i.e. how far
+    # along the platoon direction that hitter sits
     stats["obs_lr"] = np.where(stats["stand"] == "L", -stats["obs_platoon_diff"], stats["obs_platoon_diff"])
     stats["proj"] = embedding[stats["embedding_index"].to_numpy()] @ unit
     frame = stats.merge(names, on="batter", how="left")
@@ -415,6 +450,12 @@ def load_projection_frame(embedding, g_bar):
 
 
 def projection_analysis(embedding, g_bar, out_dir):
+    """
+    (b): correlates each hitter's projection on g_bar with observed training-season L-R wOBA,
+    partialled on log prior PA, per exposure stratum and pooled, with bootstrap CIs.
+    Writes platoon_projection.csv and the figure. Returns (frame, correlations by stratum,
+    verdict); verdict is judged on the "high" stratum only (positive partial r, CI above 0).
+    """
     frame = load_projection_frame(embedding, g_bar)
     frame.to_csv(out_dir / "platoon_projection.csv", index=False)
 
@@ -442,6 +483,7 @@ def projection_analysis(embedding, g_bar, out_dir):
 
 
 def plot_projection(frame, out_path):
+    """Saves scatter panels (low/medium/high/pooled stratum) of projection on g_bar vs observed L-R wOBA, anchors highlighted and named."""
     fig, axes = plt.subplots(1, 4, figsize=(18, 4.5), dpi=130, sharey=True)
     panels = [("low", frame[frame["stratum"] == "low"]),
              ("medium", frame[frame["stratum"] == "medium"]),
@@ -470,6 +512,11 @@ def spread_verdict(sd_low, sd_high, ci_low_of_diff):
 
 
 def spread_analysis(frame, out_dir):
+    """
+    (c): compares the SD of the projection across exposure strata with bootstrap CIs, and
+    bootstraps the high-minus-low SD gap (each group resampled independently).
+    Returns dict of per-stratum SD (point, CI), the gap's CI, and the verdict.
+    """
     by_stratum = {s: g["proj"].to_numpy() for s, g in frame.groupby("stratum")}
     rng = np.random.default_rng(BOOT_SEED)
 
@@ -494,6 +541,7 @@ def spread_analysis(frame, out_dir):
 
 
 def plot_spread(by_stratum, out_path):
+    """Saves boxplots of the projection by exposure stratum (low/medium/high)."""
     fig, ax = plt.subplots(figsize=(6, 4.5), dpi=130)
     order = ["low", "medium", "high"]
     ax.boxplot([by_stratum[s] for s in order if s in by_stratum],
@@ -508,6 +556,10 @@ def plot_spread(by_stratum, out_path):
 # --------------------------------------------------------------------- CLI
 
 def run_analyse(raw_path, out_dir):
+    """
+    Stage 2 (fast). Reads the raw gradient CSV from `run_gradient` and runs (a) direction,
+    (b) projection and (c) spread analyses, writing figures, CSVs and platoon_projection.json.
+    """
     out_dir = Path(out_dir)
     raw = pd.read_csv(raw_path)
     present_dims = sorted(int(d) for d in raw.loc[raw["dim"] >= 0, "dim"].unique())
@@ -531,6 +583,7 @@ def run_analyse(raw_path, out_dir):
 
 def configure(args):
     """Repoint the module at another build/arm (e.g. the clean-refit model). Defaults = canonical."""
+    # rebinds module globals so every function sees the chosen build; these must stay consistent (see ARM comment)
     global DEFAULT_DATA_DIR, ARM, PLATOON_FRAME, HITTER_STATS, N_DIMS
     DEFAULT_DATA_DIR, ARM = args.data_dir, args.arm
     PLATOON_FRAME, HITTER_STATS, N_DIMS = args.platoon_frame, args.hitter_stats, args.n_dims
@@ -558,6 +611,7 @@ def main():
     analyse.add_argument("--raw", required=True)
     analyse.add_argument("--out-dir", required=True)
 
+    # two stages: `gradient` writes the raw file, `analyse` reads it
     args = parser.parse_args()
     configure(args)
     if args.stage == "gradient":

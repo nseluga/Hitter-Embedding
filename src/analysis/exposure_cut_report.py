@@ -41,12 +41,18 @@ DEFAULT_EVAL_SEASON = 2025  # sealed test season -- population count only, never
 
 
 def pitch_pa_correlation(labeled, pa_df, max_train_season):
-    """Per-hitter (pitches, PA) vs LHP on train seasons: Pearson r and the pitches/PA ratio."""
+    """Per-hitter (pitches, PA) vs LHP on train seasons: Pearson r and the pitches/PA ratio.
+
+    labeled: pitch-level frame (one row per pitch); pa_df: PA-level eval-targets
+    frame (one row per PA). Returns (r, pitches-per-PA ratio, n hitters in both)."""
+    # Pitch count per batter: one row per pitch thrown by a left-hander in train seasons.
     pitches = (labeled[(labeled["season"] <= max_train_season) & (labeled["p_throws"] == "L")]
                .groupby("batter").size().rename("pitches"))
+    # PA count per batter: same filter, restricted to PAs that count in the wOBA denominator.
     pa = (pa_df[(pa_df["season"] <= max_train_season) & (pa_df["p_throws"] == "L")
                 & pa_df["in_denominator"]]
           .groupby("batter").size().rename("pa"))
+    # Inner join keeps hitters present in both counts, so r and the ratio use the same population.
     matched = pd.concat([pitches, pa], axis=1, join="inner")
     r = float(np.corrcoef(matched["pitches"], matched["pa"])[0, 1])
     ratio = float(matched["pitches"].sum() / matched["pa"].sum())
@@ -54,7 +60,10 @@ def pitch_pa_correlation(labeled, pa_df, max_train_season):
 
 
 def pitch_unit_stabilization(labeled, max_train_season, seed):
-    """Independent pitch-unit n*: swing rate vs LHP through the variance-components estimator."""
+    """Independent pitch-unit n*: swing rate vs LHP through the variance-components estimator.
+
+    Returns (n* point estimate in pitches, CI low, CI high, n hitters). n* is
+    the exposure at which the metric's reliability reaches threshold 0.5."""
     pop = labeled[(labeled["season"] <= max_train_season) & (labeled["p_throws"] == "L")]
     stats = stab.hitter_stats(pop, "batter", "swing")
     point, lo, hi = stab.stabilization_ci(stats, threshold=0.5, seed=seed)
@@ -62,11 +71,15 @@ def pitch_unit_stabilization(labeled, max_train_season, seed):
 
 
 def population_table(pa_df, eval_season, boundaries=evaluation.STRATUM_BOUNDARIES):
-    """2025 platoon-frame population by prior-PA-vs-LHP band -- count only, not scored."""
+    """2025 platoon-frame population by prior-PA-vs-LHP band -- count only, not scored.
+
+    boundaries: prior-PA cut points between strata (see claim1_eval). Returns a
+    dict of counts: n_hitters, n_above_low_cut, by_stratum."""
     pa_df = drop_pitcher_batters(pa_df)
     actuals = aggregate(pa_df, by=("batter", "season", "p_throws"))
     actuals = actuals[(actuals["season"] == eval_season) & (actuals["p_throws"] == "L")]
 
+    # Prior exposure uses only seasons before eval_season; hitters with no history get 0 PA (lowest stratum).
     prior = evaluation.prior_exposure(pa_df, eval_season)
     prior = prior[prior["p_throws"] == "L"][["batter", "prior_pa"]]
     frame = actuals[["batter"]].merge(prior, on="batter", how="left")
@@ -83,6 +96,7 @@ def population_table(pa_df, eval_season, boundaries=evaluation.STRATUM_BOUNDARIE
 
 
 def main():
+    """CLI: print the three exposure checks and write exposure_cut_report.json/.csv to --out-dir."""
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -103,6 +117,7 @@ def main():
     print(f"pitches-vs-PA (LHP, train<={args.max_train_season}): r={r:.4f}, "
           f"ratio={ratio:.3f} pitches/PA, n={n_matched} hitters")
 
+    # Convert the PA-based n* to pitches with the measured ratio, then see if the independent pitch-unit CI contains it.
     point, lo, hi, n_hitters = pitch_unit_stabilization(labeled, args.max_train_season, args.seed)
     predicted_pitches = evaluation.STABILIZATION_N_STAR * ratio
     agree = np.isfinite(point) and lo <= predicted_pitches <= hi

@@ -35,8 +35,13 @@ ACTIVE_DAYS, HEAVY_PITCHES = 30, 25
 
 
 def raw(season, cols):
+    """
+    Load one season of regular-season Statcast pitches. Returns a pitch-level frame with extra columns `fld` (fielding team), `bat` (batting team) and datetime `game_date`.
+    season: int year; cols: Statcast columns to read (game_type, home_team, away_team, inning_topbot must be among them).
+    """
     d = pd.read_parquet(f"{RAW}/season={season}.parquet", columns=cols)
     d = d[d.game_type == "R"].copy()
+    # Top of an inning means the away team bats and the home team fields; the reverse in the bottom.
     d["fld"] = d.home_team.where(d.inning_topbot == "Top", d.away_team)
     d["bat"] = d.away_team.where(d.inning_topbot == "Top", d.home_team)
     d["game_date"] = pd.to_datetime(d.game_date)
@@ -44,11 +49,17 @@ def raw(season, cols):
 
 
 def starter_bf_per_start(pitcher):
+    """
+    Average batters faced per start for one pitcher over the training seasons 2015-2024.
+    pitcher: Statcast pitcher id. Returns (batters faced per start, number of starts). A start is a game in which he threw the first pitch of his team's fielding half.
+    """
     bf = starts = 0
     for season in range(2015, 2025):
         d = raw(season, ["game_pk", "game_type", "inning_topbot", "pitcher", "at_bat_number",
                          "home_team", "away_team", "game_date"])
+        # First pitcher to appear for each (game, fielding team) = that team's starter.
         first = d.sort_values("at_bat_number").groupby(["game_pk", "fld"]).pitcher.first()
+        # Batters faced by this pitcher per game (distinct at_bat_number).
         mine = d[d.pitcher == pitcher].groupby(["game_pk", "fld"]).at_bat_number.nunique()
         started = [first.get(k) == pitcher for k in mine.index]
         bf, starts = bf + int(mine[started].sum()), starts + int(sum(started))
@@ -56,19 +67,29 @@ def starter_bf_per_start(pitcher):
 
 
 def staff_weights():
+    """
+    Builds the opposing staff's expected batter-faced weights for the game, plus the hitter pool.
+    Returns (weights: Series pitcher id -> expected batters faced, pitcher names, pitcher hands, hitters available for TEAM, hitters who started the game, meta dict of the conventions applied).
+    """
     d = raw(2025, ["game_pk", "game_type", "inning_topbot", "pitcher", "batter", "at_bat_number",
                    "pitch_number", "home_team", "away_team", "game_date", "player_name", "p_throws"])
+    # One row per pitcher appearance: pitches thrown, batters faced, first plate appearance, name.
     app = (d.groupby(["game_pk", "game_date", "fld", "pitcher"])
            .agg(pitches=("pitch_number", "size"), bf=("at_bat_number", "nunique"),
                 first_ab=("at_bat_number", "min"), name=("player_name", "first")).reset_index())
+    # Mark the appearance that opened each team's half of the game as the starter.
     app["starter"] = app.groupby(["game_pk", "fld"]).first_ab.transform("min") == app.first_ab
+    # Only OPP appearances strictly before the game date count toward the staff.
     before = app[(app.fld == OPP) & (app.game_date < GAME_DATE)]
     relief = before[~before.starter]
+    # Active-roster proxy: relievers who also pitched in the last ACTIVE_DAYS days.
     recent = set(relief[relief.game_date >= GAME_DATE - pd.Timedelta(days=ACTIVE_DAYS)].pitcher)
     pen = relief[relief.pitcher.isin(recent) & (relief.pitcher != STARTER)]
+    # Rest rule: drop relievers who pitched both previous days, or threw HEAVY_PITCHES+ the day before.
     d1 = before[before.game_date == GAME_DATE - pd.Timedelta(days=1)]
     d2 = before[before.game_date == GAME_DATE - pd.Timedelta(days=2)]
     rested_out = (set(d1.pitcher) & set(d2.pitcher)) | set(d1[d1.pitches >= HEAVY_PITCHES].pitcher)
+    # Each reliever's share of the bullpen, proportional to 2025 relief batters faced to date.
     shares = pen.groupby("pitcher").bf.sum()
     names = before.groupby("pitcher").name.first()
     hands = d[d.fld == OPP].groupby("pitcher").p_throws.agg(lambda h: h.mode().iat[0])
@@ -76,8 +97,10 @@ def staff_weights():
     shares = shares.drop([p for p in rested_out if p in shares.index])
     relief_per_game = relief.bf.sum() / before.game_pk.nunique()
     sp_bf, sp_starts = starter_bf_per_start(STARTER)
+    # Starter gets his average BF per start; the bullpen's shares are scaled to the average relief BF per game, so weights are in expected batters faced.
     weights = pd.concat([pd.Series({STARTER: sp_bf}),
                          shares / shares.sum() * relief_per_game])
+    # Hitter pool = anyone who batted for TEAM within +/-4 days (first 9 distinct batters per game approximates the lineup).
     # who started for PHI in the surrounding week = the hitters available that day
     window = d[(d.bat == TEAM) & d.game_date.between(GAME_DATE - pd.Timedelta(days=4),
                                                      GAME_DATE + pd.Timedelta(days=4))]
@@ -138,14 +161,20 @@ def baseline_vs_lhp(hitters):
 
 
 def main():
+    """
+    Runs the single-game example end to end: builds staff weights, scores every available hitter against each pitcher, aggregates, and writes the CSV/JSON outputs.
+    vs_staff = weight-averaged W(0,0) vs the staff; vs_lhp_generic = the model's generic projection against left-handers.
+    """
     weights, pitcher_names, hands, hitters, started, meta = staff_weights()
     w00, generic = per_pitcher_matrix(hitters)
 
+    # Guard: the ensemble re-run here must reproduce the cached final predictions, or the staff numbers are not comparable to Table 1.
     cached = (pd.read_csv("results/model_v1/model_v1_predictions_clean_dim64_final.csv")
               .set_index(["batter", "p_throws"]).pred_woba)
     gap = (generic - cached.reindex(generic.index)).abs().max()
     assert gap < 1e-6, f"generic projections do not reproduce the cached final run (max gap {gap})"
 
+    # Pitchers the model can query = (pitcher, hand) pairs present in the W(0,0) matrix; others are dropped and their weight reported.
     keys = set(zip(w00.index.get_level_values("pitcher"), w00.index.get_level_values("p_throws")))
     queryable = [p for p in weights.index if (p, hands[p]) in keys]
     dropped = weights.drop(queryable)
@@ -153,12 +182,15 @@ def main():
     rows = []
     names = pd.read_csv("data/processed/hitter_names_clean.csv").set_index("batter")["name"]
     for b in hitters:
+        # This hitter's W(0,0) against each queryable pitcher, in the order of `queryable`.
         vals = pd.Series([w00.get((b, p, hands[p]), np.nan) for p in queryable], index=queryable)
         assert vals.notna().all(), f"hitter {b} missing a staff pitcher"
         rows.append({"batter": b, "name": names.get(b, str(b)), "started": b in started,
+                     # Staff projection = weight-averaged W(0,0) over queryable pitchers (weights renormalised).
                      "vs_staff": float(vals @ w / w.sum()),
                      "vs_lhp_generic": float(generic.loc[(b, "L")])})
     table = pd.DataFrame(rows).sort_values("vs_staff", ascending=False)
+    # Ranks under the staff-specific projection and under the generic vs-LHP projection, for comparison.
     table["rank_staff"] = range(1, len(table) + 1)
     table["rank_generic"] = table.vs_lhp_generic.rank(ascending=False).astype(int)
     base = baseline_vs_lhp(hitters)
