@@ -211,7 +211,7 @@ def query_stage(args):
     out.mkdir(parents=True, exist_ok=True)
     # Load the built tensors and rebuild the pitch frame and lookup tables the query code needs.
     tensors, manifest = loader.load_tensors(args.data_dir)
-    assert EVAL_SEASON not in manifest["train_seasons"], "eval season inside the train window"
+    assert args.eval_season not in manifest["train_seasons"], "eval season inside the train window"
     frame = qt.align_pitch_frame(args.pitches, args.eval_targets, tensors["season"],
                                   career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(args.eval_targets)
@@ -222,7 +222,7 @@ def query_stage(args):
 
     # One composition pass over the eval season; keep_matrix=True also returns each hitter's W(0,0) against every pitcher.
     predictions, diagnostics = query.predict(
-        models, tensors, manifest, frame, tables, pa_df, EVAL_SEASON,
+        models, tensors, manifest, frame, tables, pa_df, args.eval_season,
         batters=args.batters, cold_start_prior=prior, keep_matrix=True)
     groups = diagnostics.pop("per_pitcher")
 
@@ -240,7 +240,8 @@ def query_stage(args):
     np.savez_compressed(out / "matrix_w00.npz", **arrays)
     predictions.to_csv(out / "query_predictions.csv", index=False)
     (out / "query_diagnostics.json").write_text(json.dumps(
-        {**diagnostics, "arm": args.arm, "seeds": args.seeds, "eval_season": EVAL_SEASON,
+        {**diagnostics, "arm": args.arm, "seeds": args.seeds, "eval_season": args.eval_season,
+         "train_seasons": manifest["train_seasons"],
          "data_dir": args.data_dir, "hitter_stats": args.hitter_stats}, indent=2))
     print(f"wrote {out / 'matrix_w00.npz'}: " + ", ".join(
         f"{g['stand']}HB_vs_{g['p_throws']}HP {g['w00'].shape}" for g in groups))
@@ -258,6 +259,9 @@ def main():
     parser.add_argument("--data-dir", default="data/processed/phase_d5_clean")
     parser.add_argument("--checkpoint-dir", default="results/checkpoints")
     parser.add_argument("--hitter-stats", default="results/model_visualization/hitter_stats.csv")
+    parser.add_argument("--eval-season", type=int, default=EVAL_SEASON)
+    parser.add_argument("--train-seasons", type=int, nargs="+", default=None,
+                        help="ceiling stage attribute window; default the split config train list")
     parser.add_argument("--batters", type=int, nargs="+", default=None,
                         help="smoke-test subset; write to a /tmp --out-dir")
     args = parser.parse_args()
@@ -266,13 +270,17 @@ def main():
         query_stage(args)
         return
 
-    seasons = train_seasons()
-    assert EVAL_SEASON not in seasons, "eval season is inside the train window"
+    # Attribute window: an explicit list (the 2015-2024 refit) or the frozen split's train seasons.
+    if args.train_seasons:
+        seasons = args.train_seasons
+    else:
+        seasons = train_seasons()
+    assert args.eval_season not in seasons, "eval season is inside the train window"
     pitches = pd.read_parquet(args.pitches, columns=[
         "pitcher", "p_throws", "season", "pitch_type", "release_speed", "plate_z"])
     pa_df = pd.read_parquet(args.eval_targets)
     # Ceiling stage reads only the pitch columns it needs, then writes labels, reliability table and summary.
-    labels, ceiling, summary = ceiling_stage(pitches, pa_df, seasons)
+    labels, ceiling, summary = ceiling_stage(pitches, pa_df, seasons, args.eval_season)
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)

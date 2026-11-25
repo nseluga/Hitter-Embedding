@@ -1,6 +1,5 @@
 # Claude Code — keep CLAUDE.md tracked, ignore everything else Claude-specific
 .claude/
-README.md
 
 # All docs are local-only now
 docs/
