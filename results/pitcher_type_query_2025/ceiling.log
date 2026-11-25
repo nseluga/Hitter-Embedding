@@ -1,0 +1,19 @@
+ stand  n_hitters  half_split_spearman  reliability  reliability_ci_low  reliability_ci_high      axis p_throws  eval_pa_covered  matchup
+     L        115            -0.093056    -0.205208           -0.750957             0.162736   fb_velo        R         0.853148 opposite
+     R        120             0.100132     0.182036           -0.172328             0.432173   fb_velo        R         0.853148     same
+pooled        235             0.007042     0.013986           -0.252281             0.225942   fb_velo        R         0.853148     both
+     L         26             0.067350     0.126201           -1.217558             0.662056   fb_velo        L         0.899187     same
+     R         37            -0.085586    -0.187192           -1.423708             0.371160   fb_velo        L         0.899187 opposite
+pooled         63             0.006816     0.013541           -0.627478             0.382355   fb_velo        L         0.899187     both
+     L        178             0.148161     0.258084           -0.016532             0.453526 fb_height        R         0.853148 opposite
+     R        179             0.029107     0.056567           -0.268342             0.290908 fb_height        R         0.853148     same
+pooled        357             0.090221     0.165510           -0.033758             0.327306 fb_height        R         0.853148     both
+     L         31            -0.043145    -0.090181           -1.534210             0.519556 fb_height        L         0.899187     same
+     R         37            -0.068279    -0.146565           -1.254305             0.442726 fb_height        L         0.899187 opposite
+pooled         68            -0.067985    -0.145888           -0.879747             0.301306 fb_height        L         0.899187     both
+     L        186             0.061716     0.116257           -0.167583             0.339576 brk_share        R         0.853148 opposite
+     R        200            -0.014547    -0.029524           -0.378793             0.234646 brk_share        R         0.853148     same
+pooled        386             0.018654     0.036624           -0.186726             0.230881 brk_share        R         0.853148     both
+     L         51            -0.098914    -0.219544           -1.209843             0.310755 brk_share        L         0.899187     same
+     R        133             0.080483     0.148976           -0.222864             0.420332 brk_share        L         0.899187 opposite
+pooled        184             0.043715     0.083768           -0.221084             0.310206 brk_share        L         0.899187     both

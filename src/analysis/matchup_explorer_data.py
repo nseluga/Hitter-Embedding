@@ -1,11 +1,14 @@
-"""Export the 2024 pitcher-type query matrix for the public matchup explorer (explorer/).
+"""Export a pitcher-type query matrix for the public matchup explorer (explorer/).
 
-Descriptive only: model predictions from the 2024 exploration build, not validated
-(one-season reliability of matchup contrasts ~0, see results/pitcher_type_query/ceiling.csv).
+Descriptive only: model predictions, not validated (one-season reliability of matchup
+contrasts ~0, see <res>/ceiling.csv). Arm, matchup season, train window and hitter stats are
+read from <res>/query_diagnostics.json (written by pitcher_type_query --stage query), so the
+page label always names the build that produced the matrix.
 The browser does all math (double-centering, type averages) from the raw W(0,0) matrices.
 
-Run: PYTHONPATH=. .venv/bin/python -m src.analysis.matchup_explorer_data
+Run: PYTHONPATH=. .venv/bin/python -m src.analysis.matchup_explorer_data [--res results/pitcher_type_query_2025]
 """
+import argparse
 import base64
 import json
 from pathlib import Path
@@ -13,9 +16,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.analysis.pitcher_type_query import BREAKING, FASTBALLS, PITCHES_PATH, train_seasons
+from src.analysis.pitcher_type_query import BREAKING, FASTBALLS, PITCHES_PATH
 
-RES = Path("results/pitcher_type_query")
+RES = Path("results/pitcher_type_query_2025")  # final model (clean_dim64_final) on 2025 matchups
 OUT = Path("explorer/data/matchups.json")
 GROUPS = [f"{s}HB_vs_{h}HP" for h in "RL" for s in "LR"]
 LO, HI = 0.0, 1.0  # fixed wOBA range for uint16 quantization
@@ -118,17 +121,18 @@ def lookup_names(ids):
         return {}
 
 
-def build():
+def build(res=RES):
     """Assemble the explorer payload: per-handedness-group quantized W matrices, hitter and pitcher records, and metadata. Returns a JSON-ready dict."""
     # Inputs: precomputed matrices and pitcher attributes; the extra traits are recomputed from train-season pitches here.
-    z = np.load(RES / "matrix_w00.npz")
-    attrs = pd.read_csv(RES / "pitcher_attributes.csv")
-    seasons = train_seasons()
+    diag = json.loads((res / "query_diagnostics.json").read_text())
+    z = np.load(res / "matrix_w00.npz")
+    attrs = pd.read_csv(res / "pitcher_attributes.csv")
+    seasons = diag["train_seasons"]  # traits from the model's train window only, never the matchup season
     extra = extra_attributes(load_pitches(seasons), seasons)
-    extra.to_csv(RES / "pitcher_attributes_extra.csv", index=False)  # also read by matchup_figures
+    extra.to_csv(res / "pitcher_attributes_extra.csv", index=False)  # also read by matchup_figures
     attrs = attrs.merge(extra, on=["pitcher", "p_throws"], how="left")
     hnames = pd.read_csv("data/processed/hitter_names.csv").set_index("batter")["name"]
-    hs = pd.read_csv("results/model_visualization/hitter_stats.csv").set_index("batter")
+    hs = pd.read_csv(diag["hitter_stats"]).set_index("batter")
 
     # One entry per batter-hand vs pitcher-hand group; each stores batter ids, pitcher ids, BF weights, and the quantized [hitters, pitchers] matrix.
     groups, bats, pits = {}, set(), {"R": set(), "L": set()}
@@ -167,7 +171,9 @@ def build():
                 # full-ish precision: rounding creates ties that shift percentile boundaries
                 **{k: (None if row is None else _r(row[k], 5)) for k in BASE + EXTRA})
 
-    meta = dict(build="embedding_sgd_sgd_lr1 (2024 exploration build)",
+    meta = dict(build=f"{diag['arm']} ({len(diag['seeds'])}-seed ensemble, trained {seasons[0]}\u2013{seasons[-1]}), "
+                      f"{diag['eval_season']} matchups",
+                eval_season=diag["eval_season"], train_seasons=[seasons[0], seasons[-1]],
                 generated=pd.Timestamp.now().strftime("%Y-%m-%d"),
                 quant=dict(lo=LO, hi=HI, dtype="uint16 little-endian, row-major hitters x pitchers"),
                 note="Model predictions, descriptive. One-season data cannot validate matchup effects.")
@@ -175,7 +181,9 @@ def build():
 
 
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--res", type=Path, default=RES)
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    d = build()
+    d = build(ap.parse_args().res)
     OUT.write_text(json.dumps(d, separators=(",", ":")))
     print(f"wrote {OUT} ({OUT.stat().st_size / 1e6:.1f} MB), {len(d['hitters'])} hitters, {len(d['pitchers'])} pitcher-hands")

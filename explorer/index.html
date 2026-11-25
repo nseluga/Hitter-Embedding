@@ -45,8 +45,8 @@ td:first-child,th:first-child{text-align:left}
 <body>
 <header>
   <h1>Matchup Explorer</h1>
-  <div class="sub">What a learned hitter process model predicts for any hitter against any pitcher (2015–2023 training pitchers, 2024 build).</div>
-  <div class="banner" id="banner">Model predictions from the 2024 build. Descriptive only: one season of data cannot validate hitter-by-hitter matchup effects, so treat anything here as a hypothesis, not a finding.</div>
+  <div class="sub">What a learned hitter process model predicts for any hitter against any pitcher (final model trained on 2015–2024, 2025 matchups).</div>
+  <div class="banner" id="banner">Model predictions from the final model (trained 2015–2024) for 2025 matchups. Descriptive only: one season of data cannot validate hitter-by-hitter matchup effects, so treat anything here as a hypothesis, not a finding.</div>
   <nav id="tabs">
     <button data-t="matchup" class="on">Pitcher X starts</button>
     <button data-t="leader">Leaderboards</button>
@@ -110,17 +110,17 @@ td:first-child,th:first-child{text-align:left}
 
   <section id="t-about" hidden>
     <div class="card" style="max-width:760px">
-      <p><b>Projected wOBA</b> is the model's prediction for this hitter against this pitcher. It comes from composing per-pitch predictions through the count sequence of a plate appearance. The pitcher is represented by his 2015–2023 pitch mix and locations, weighted by batters faced.</p>
+      <p><b>Projected wOBA</b> is the model's prediction for this hitter against this pitcher. It comes from composing per-pitch predictions through the count sequence of a plate appearance. The pitcher is represented by his 2015–2024 pitch mix and locations, weighted by batters faced.</p>
       <p><b>Matchup effect</b> is what's left after taking out "good hitters hit everyone" and "good pitchers get everyone out". It is the projection minus the hitter's own average against that hand, minus the pitcher's average against all hitters (plus the overall mean). In wOBA points: +10 means 0.010 better than expected. It is a small part of the picture: about 13 points of spread, against about 30 for hitter quality and about 45 for pitcher quality.</p>
       <p><b>Pitcher types</b> use within-hand percentiles weighted by batters faced: fastball velocity, fastball height at the plate, and breaking-ball share. A hitter's score against a type is the weighted average of his matchup effects against the pitchers in it.</p>
-      <p><b>More pitcher traits</b>, all averaged over the pitcher's 2015–2023 pitches. Fastball (four-seamers and sinkers): ride (vertical break, in), arm-side run (in), spin (rpm), sinker share. Delivery: release height, extension, release side (distance toward his arm side, ft). Mix: offspeed share (changeups, splitters), velo gap (fastball minus his other pitches, mph), mix depth (effective number of pitches: 4 means four pitches used equally), breaking-ball sweep (glove-side break, in). Location: zone rate, average horizontal location (glove side +, in), and location by pitch type: fastballs up (share in the top third of the batter's zone or above), breaking balls below the zone, offspeed below the zone, and breaking-ball height (ft). Up and below use each batter's own strike zone, so a tall and a short hitter are judged fairly. Left-handers are mirrored so the same number means the same thing for both hands. Pitchers with fewer than 20 breaking balls have no sweep, and fewer than 20 non-fastballs no velo gap.</p>
+      <p><b>More pitcher traits</b>, all averaged over the pitcher's 2015–2024 pitches. Fastball (four-seamers and sinkers): ride (vertical break, in), arm-side run (in), spin (rpm), sinker share. Delivery: release height, extension, release side (distance toward his arm side, ft). Mix: offspeed share (changeups, splitters), velo gap (fastball minus his other pitches, mph), mix depth (effective number of pitches: 4 means four pitches used equally), breaking-ball sweep (glove-side break, in). Location: zone rate, average horizontal location (glove side +, in), and location by pitch type: fastballs up (share in the top third of the batter's zone or above), breaking balls below the zone, offspeed below the zone, and breaking-ball height (ft). Up and below use each batter's own strike zone, so a tall and a short hitter are judged fairly. Left-handers are mirrored so the same number means the same thing for both hands. Pitchers with fewer than 20 breaking balls have no sweep, and fewer than 20 non-fastballs no velo gap.</p>
       <p><b>Hitter profile</b> maps one hitter against two pitcher attributes at once. Each square is a smoothed, batters-faced-weighted average of his projections against the pitchers near that spot (Gaussian kernel, bandwidth 0.35 standard deviations per axis). The four-box table splits both attributes at the median. Colors use one fixed scale for every hitter. Red is good for the hitter and blue is bad, everywhere on this site.</p>
-      <p><b>Limits.</b> These are model outputs, not observed results. The model was checked for handedness splits on sealed 2025 data. For finer matchups, one season has too few plate appearances per hitter to confirm or refute them. Pitchers with too few training pitches, and hitters new in 2024, are missing. Switch hitters are shown from the side they bat on against that pitcher's hand.</p>
+      <p><b>Limits.</b> These are model outputs, not observed results. The model was checked for handedness splits on sealed 2025 data. For finer matchups, one season has too few plate appearances per hitter to confirm or refute them. Pitchers with too few training pitches, and hitters with no plate appearances before 2025, use a cold-start prior or are missing. Switch hitters are shown from the side they bat on against that pitcher's hand.</p>
       <p class="muted" id="meta"></p>
     </div>
   </section>
 </main>
 <datalist id="dl-pitchers"></datalist><datalist id="dl-hitters"></datalist>
-<script src="app.js?v=5"></script><!-- bump v when app.js OR data/matchups.json changes: Pages caches both for 10 min; app.js reuses this v for the json URL -->
+<script src="app.js?v=6"></script><!-- bump v when app.js OR data/matchups.json changes: Pages caches both for 10 min; app.js reuses this v for the json URL -->
 </body>
 </html>
