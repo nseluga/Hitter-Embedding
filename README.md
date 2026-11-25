@@ -23,7 +23,8 @@ It was trained on 6.5M Statcast pitches (2015–2024) covering 1,672 hitters, an
 are averaged over. The weighted predictions then pass through the count-state Markov chain to
 give a projected wOBA. A new split needs a new weight vector, not a new model.
 
-<p align="center"><img src="results/paper_figures/fig_claim1_2025_strata.png" width="720" alt="2025 platoon-split accuracy by prior-exposure stratum"></p>
+<p align="center"><img src="paper/draft4/figs/fig_strata_seen.png" width="760" alt="2025 rank correlation and RMSE, model minus boosted baseline, by prior-exposure stratum"></p>
+<p align="center"><sub>2025 test, hitters seen in training only: model minus gradient-boosted baseline by prior-exposure stratum, with 95% intervals.</sub></p>
 
 ## Results
 
