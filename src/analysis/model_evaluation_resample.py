@@ -38,7 +38,11 @@ TAKE_CLASSES = ("ball", "called_strike", "hbp")
 
 
 def _take_means(tables, frame, rows, offsets):
-    """Mean P(ball / called strike / hbp | take) over `rows`, plus the in-zone share."""
+    """
+    Mean P(ball / called strike / hbp | take) over `rows`, plus the in-zone share.
+    rows: int array of pitch-frame row indices; offsets: optional per-count take offsets.
+    Returns a dict keyed by TAKE_CLASSES and "in_zone"; NaN when `rows` is empty.
+    """
     if len(rows) == 0:
         return {name: float("nan") for name in TAKE_CLASSES} | {"in_zone": float("nan")}
     take = qt.take_probabilities(tables["take"], frame, rows, offsets)
@@ -54,6 +58,10 @@ def resampler_audit(tables, frame, seed=0, use_offsets=False):
     The sampled draw is reproduced with `_sample_grid` under the same generator seeding
     `predict` uses, so this audits the draw the composition consumed rather than a fresh
     one that happens to look similar.
+
+    tables: fitted surfaces/repertoire/pitcher weights; frame: pitch-level table; use_offsets:
+    apply the per-count take offsets. Returns one row per (pitcher hand, stand, count) with
+    sampled_/exact_/league_ rates, backoff-level counts, and draw_gap_/pool_gap_ columns.
     """
     offsets = tables.get("take_count_offsets") if use_offsets else None
     repertoire, pool = tables["repertoire"], tables["pitcher_weights"]
@@ -63,6 +71,8 @@ def resampler_audit(tables, frame, seed=0, use_offsets=False):
     stand_column = frame["stand"].to_numpy()
     balls_column, strikes_column = frame["balls"].to_numpy(), frame["strikes"].to_numpy()
 
+    # for each (pitcher hand, batter stand): draw the composition's pitch grid once, then
+    # compare it at each count with the pitchers' own exact-cell pitches and the league rate
     rows = []
     generator = np.random.default_rng(seed)
     for hand, (slots, probability) in sorted(pool.items()):
@@ -72,8 +82,10 @@ def resampler_audit(tables, frame, seed=0, use_offsets=False):
                                                    query.DEFAULT_N_PITCHES, generator) \
                 if hasattr(qt, "_sample_grid") else query._sample_grid(
                     repertoire, slots, stand_slot, query.DEFAULT_N_PITCHES, generator)
+            # batters-faced weights over the pitchers that produced a usable draw
             weight = probability[usable] / probability[usable].sum()
             for position, (balls, strikes) in enumerate(query.COUNT_STATES):
+                # sampled rate: take probabilities on the drawn pitches, averaged per pitcher then weighted
                 drawn = grid[usable][:, position, :]                       # (P, 6)
                 per_pitcher = qt.take_probabilities(
                     tables["take"], frame, drawn.reshape(-1), offsets
@@ -103,6 +115,7 @@ def resampler_audit(tables, frame, seed=0, use_offsets=False):
                     exact = {name: float("nan") for name in TAKE_CLASSES} | {"in_zone": float("nan")}
                     n_exact = 0
 
+                # league rate: every train-window pitch at this count and stand, no pool weighting
                 mask = (train_mask & ~excluded & (stand_column == stand)
                         & (balls_column == balls) & (strikes_column == strikes))
                 league = _take_means(tables, frame, np.flatnonzero(mask), offsets)
@@ -118,6 +131,7 @@ def resampler_audit(tables, frame, seed=0, use_offsets=False):
                     "backoff_stand": int(levels[2]), "backoff_empty": int(levels[3]),
                 })
     table = pd.DataFrame(rows)
+    # draw gap = backoff and thin-cell draw effect; pool gap = pool weighting effect
     for name in list(TAKE_CLASSES) + ["in_zone"]:
         table[f"draw_gap_{name}"] = table[f"sampled_{name}"] - table[f"exact_{name}"]
         table[f"pool_gap_{name}"] = table[f"exact_{name}"] - table[f"league_{name}"]
@@ -125,6 +139,7 @@ def resampler_audit(tables, frame, seed=0, use_offsets=False):
 
 
 def main():
+    """Fit the take surface and repertoire, audit the resampled draw, and write the per-cell, per-count and summary outputs."""
     parser = argparse.ArgumentParser(
         description="Phase E.7 — audit the resampled pitch mix against the real one.")
     parser.add_argument("--eval-season", type=int, default=2024)
@@ -147,6 +162,7 @@ def main():
                                   career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(args.eval_targets)
 
+    # fit all train-window tables the composition uses; the audit then reuses them as-is
     print("fitting the take surface, repertoire and pitcher weights")
     train_mask = np.isin(frame["season"].to_numpy(), manifest["train_seasons"])
     surfaces, alpha = qt.fit_take_surfaces(frame, train_mask)

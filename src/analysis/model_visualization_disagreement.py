@@ -46,12 +46,15 @@ def eb_delta_frame(pa_df, eval_season=EVAL_SEASON):
 
     Returns one row per batter with `delta_eb`.
     """
+    # One prediction per (batter, pitcher hand) from the EB baseline, using seasons up to eval_season.
     predictions = baseline_ladder_bivariate_eb.predict(pa_df, eval_season)
     assert set(predictions["p_throws"]) <= {"L", "R"}, "unexpected pitcher hand in EB output"
     assert (predictions["season"] <= eval_season).all(), f"EB predictions leaked a post-{eval_season} season"
+    # One row per batter, columns L and R (predicted wOBA against each pitcher hand).
     wide = predictions.pivot(index="batter", columns="p_throws", values="pred_woba")
     # a hitter projected against only one hand has no split to compare
     wide = wide.dropna(subset=["L", "R"])
+    # Platoon differential = predicted wOBA vs LHP minus vs RHP.
     out = pd.DataFrame({"batter": wide.index.astype(int).to_numpy(),
                         "delta_eb": (wide["L"] - wide["R"]).to_numpy()})
     assert np.isfinite(out["delta_eb"]).all(), "EB platoon differential is non-finite"
@@ -73,6 +76,7 @@ def build_disagreement(platoon_frame, eb_frame, names):
     names: batter,name.
     Returns (disagreement_df, join_counts).
     """
+    # Inner join so only hitters both estimators cover are ranked; the loss is checked below.
     n_before = len(platoon_frame)
     merged = platoon_frame[["batter", "delta_pred", "stand", "stratum", "prior_pa"]].merge(
         eb_frame, on="batter", how="inner")
@@ -82,14 +86,18 @@ def build_disagreement(platoon_frame, eb_frame, names):
           f"({n_before - n_after} dropped, {loss_frac:.1%})")
     assert loss_frac < MAX_JOIN_LOSS, f"join dropped {loss_frac:.1%} of platoon_frame rows"
 
+    # Names are cosmetic (left join): a missing name must not drop a hitter.
     merged = merged.merge(names[["batter", "name"]], on="batter", how="left")
 
+    # Rank each estimator within batting stand (rank 1 = most favours LHP); rank_gap > 0 means the
+    # model puts the hitter lower in that list than EB does. Pooled ranks ignore stand.
     merged["rank_model"] = merged.groupby("stand")["delta_pred"].transform(_rank_most_positive_first)
     merged["rank_eb"] = merged.groupby("stand")["delta_eb"].transform(_rank_most_positive_first)
     merged["rank_gap"] = merged["rank_model"] - merged["rank_eb"]
     merged["rank_model_pooled"] = _rank_most_positive_first(merged["delta_pred"])
     merged["rank_eb_pooled"] = _rank_most_positive_first(merged["delta_eb"])
 
+    # Output columns: identity, exposure, both differentials, then the within-stand and pooled ranks.
     cols = ["batter", "name", "stand", "stratum", "prior_pa", "delta_pred", "delta_eb",
             "rank_model", "rank_eb", "rank_gap", "rank_model_pooled", "rank_eb_pooled"]
     return merged[cols].reset_index(drop=True), {"n_before": n_before, "n_after": n_after,
@@ -98,7 +106,12 @@ def build_disagreement(platoon_frame, eb_frame, names):
 
 
 def summarize(disagreement):
-    """Per stratum + pooled: n_hitters, Spearman(delta_pred, delta_eb), SD of rank_gap."""
+    """
+    Per stratum + pooled: n_hitters, Spearman(delta_pred, delta_eb), SD of rank_gap.
+    disagreement: frame from `build_disagreement`. Returns dict stratum (and "pooled") -> stats dict.
+    Descriptive agreement between the two estimators only; neither is compared to an outcome.
+    """
+    # Stats for one group of hitters.
     def one(df):
         rho, _ = stats.spearmanr(df["delta_pred"], df["delta_eb"])
         return {"n_hitters": int(len(df)), "spearman": float(rho),
@@ -110,7 +123,10 @@ def summarize(disagreement):
 
 
 def top_disagreements(disagreement, n=TOP_N_TABLE):
-    """Top-n hitters by |rank_gap|, pooled across strata, largest disagreement first."""
+    """
+    Top-n hitters by |rank_gap|, pooled across strata, largest disagreement first.
+    disagreement: frame from `build_disagreement`. Returns n rows with names, differentials and ranks.
+    """
     ranked = disagreement.assign(abs_rank_gap=disagreement["rank_gap"].abs()).sort_values(
         "abs_rank_gap", ascending=False).head(n)
     cols = ["name", "stand", "stratum", "prior_pa", "delta_pred", "delta_eb",
@@ -120,7 +136,9 @@ def top_disagreements(disagreement, n=TOP_N_TABLE):
 
 def fig_disagreement(disagreement, summary_by_stratum, path):
     """Four scatter panels (low, medium, high, pooled) of rank_eb vs rank_model with the
-    top-10 |rank_gap| hitters labelled by name and a diagonal marking perfect agreement."""
+    top-10 |rank_gap| hitters labelled by name and a diagonal marking perfect agreement.
+    disagreement: frame from `build_disagreement`; summary_by_stratum: dict from `summarize`
+    (supplies n and Spearman for the panel titles); path: output PNG."""
     panels = [("low", "low exposure"), ("medium", "medium exposure"),
               ("high", "high exposure"), (None, "pooled")]
     fig, axes = plt.subplots(2, 2, figsize=(11, 10))
@@ -129,10 +147,12 @@ def fig_disagreement(disagreement, summary_by_stratum, path):
         key = "pooled" if stratum is None else stratum
         stat = summary_by_stratum[key]
 
+        # Each dot is a hitter; points on the dashed diagonal are ranked identically by both estimators.
         ax.scatter(subset["rank_eb"], subset["rank_model"], s=14, alpha=0.5, color="#4c8dff")
         limit = max(subset["rank_eb"].max(), subset["rank_model"].max())
         ax.plot([1, limit], [1, limit], color="#999999", linestyle="--", linewidth=1)
 
+        # Label the hitters the two estimators disagree on most.
         top = subset.assign(abs_rank_gap=subset["rank_gap"].abs()).nlargest(TOP_N_LABEL, "abs_rank_gap")
         for _, row in top.iterrows():
             ax.annotate(row["name"], (row["rank_eb"], row["rank_model"]), fontsize=7,
@@ -156,10 +176,12 @@ def main():
     args = parser.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
+    # Model side: platoon_frame.csv from the visualised build; baseline side: EB recomputed at 2024 only.
     platoon_frame = pd.read_csv(args.platoon_frame)
     pa_df = pd.read_parquet("data/processed/eval_targets_pa.parquet")
     eb_frame = eb_delta_frame(pa_df, eval_season=EVAL_SEASON)
 
+    # Names are optional; fall back to NaN so the analysis still runs without the names file.
     names_path = args.names
     if os.path.exists(names_path):
         names = pd.read_csv(names_path)

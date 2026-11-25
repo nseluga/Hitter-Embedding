@@ -44,21 +44,29 @@ def corrected_null_cosine(source, target, rng):
 
 
 def main():
+    """
+    Computes real vs corrected-null median row cosine for seeds 1-4 against seed 0 and writes the JSON sidecar.
+    Embeddings are [N hitters, D dims] per seed; the reserved cold-start row 0 is dropped.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--arm", default=DEFAULT_ARM)
     parser.add_argument("--checkpoint-dir", default=DEFAULT_CHECKPOINT_DIR)
     parser.add_argument("--out", default=DEFAULT_OUT_PATH)
     args = parser.parse_args()
 
+    # Load each seed's hitter embedding matrix for the arm.
     embeddings = load_seed_embeddings(args.checkpoint_dir, args.arm, seeds=SEEDS)
+    # Seed 0 is the reference every other seed is rotated onto; row 0 is the cold-start slot, not a hitter.
     seed0_rows = embeddings[SEEDS[0]][COLD_START_ROW + 1:]
     seed0_centered = seed0_rows - seed0_rows.mean(axis=0)
 
     rng = np.random.default_rng(BOOT_SEED)
     per_seed = {}
     real_medians, null_medians = [], []
+    # Per other seed: align it to seed 0 (real), and shuffle-then-align (null), then compare median per-hitter cosines.
     for seed in SEEDS[1:]:
         rows = embeddings[seed][COLD_START_ROW + 1:]
+        # Real: Procrustes-align this seed to seed 0, then per-hitter cosine to centered seed 0.
         real_cos = row_cosine(procrustes_align(rows, seed0_rows), seed0_centered)
         null_cos = corrected_null_cosine(rows, seed0_rows, rng)
         real_median, null_median = float(np.median(real_cos)), float(np.median(null_cos))
@@ -72,6 +80,7 @@ def main():
     real_mean = float(np.mean(real_medians))
     null_mean = float(np.mean(null_medians))
 
+    # Bootstrap CI over the per-seed medians for (median real - median null).
     diff, lo, hi = bootstrap_ci(
         (np.array(real_medians), np.array(null_medians)),
         lambda r, n: float(np.median(r) - np.median(n)),

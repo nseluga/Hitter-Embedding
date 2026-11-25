@@ -71,6 +71,8 @@ def m6_population(pa_df, platoon_frame, model_predictions, eval_season=EVAL_SEAS
     exposure, collapse the hand, run the frozen scorer — rather than transcribed, so a
     mismatch against `pooled_summary.json` is caught here instead of propagating.
     """
+    # collapse the two pitcher-hand sides into one pooled prediction per hitter, and relabel the
+    # PA table with the single pooled hand so the frozen scorer treats each hitter as one group
     weights = pooling_weights(pa_df, eval_season)
     pooled_predictions = pool_predictions(model_predictions, weights, eval_season)
     pooled_pa = pa_df.copy()
@@ -78,6 +80,7 @@ def m6_population(pa_df, platoon_frame, model_predictions, eval_season=EVAL_SEAS
     pooled_frame, pooled_coverage = claim1_eval.build_eval_frame(pooled_pa, pooled_predictions,
                                                          eval_season)
 
+    # set algebra on hitter ids: E.5 (platoon) vs F.5 (pooled) populations and their overlap
     platoon_batters = set(platoon_frame["batter"])
     pooled_batters = set(pooled_frame["batter"])
     everyone = sorted(platoon_batters | pooled_batters)
@@ -85,6 +88,7 @@ def m6_population(pa_df, platoon_frame, model_predictions, eval_season=EVAL_SEAS
     exposure = platoon_frame.set_index("batter")[["denom_L", "denom_R", "stand", "stratum"]]
     pooled_denominator = pooled_frame.set_index("batter")["denominator"]
 
+    # one row per hitter in either population, with membership flags and exposure columns
     population = pd.DataFrame({"batter": everyone})
     population["in_platoon"] = population["batter"].isin(platoon_batters)
     population["in_pooled"] = population["batter"].isin(pooled_batters)
@@ -126,6 +130,7 @@ def per_hitter_tau2(frame, params):
     because nothing derived from a bound is an estimate. E.15's Route B read exactly this
     quantity, stored in `eb_prior_parameters.csv` as `tau2_split_derived`.
     """
+    # derived[batter_type]: C.2's derived split variance for that batter type (stand L or R)
     derived = {}
     for batter_type, fitted in params.items():
         _, tau2_split = eb.implied_split_constant(fitted)
@@ -148,6 +153,8 @@ def route_tables(frame, by_league, params_b, params_b_prime):
     The M.0 table: every route, the pre-registered rule's verdict, the fragility band and
     the stabilization thresholds — all on the M.6 intersection.
     """
+    # frame is one row per hitter; weight and sampling are [H] arrays (PA weight, Var[e] of the
+    # hitter's observed platoon differential). Everything below is on the M.6 intersection.
     weight = frame["weight"].to_numpy(dtype="float64")
     sampling = frame["sampling_var"].to_numpy(dtype="float64")
     mean_sampling = float(np.average(sampling, weights=weight))
@@ -157,6 +164,7 @@ def route_tables(frame, by_league, params_b, params_b_prime):
     route_a = measurement_ceiling_stats.route_a_tau2(observed, mean_sampling)
     band = measurement_ceiling_stats.fragility_band(observed, mean_sampling)
 
+    # Route B uses the C.2 fit on all hitters; B' uses the fit restricted to the M.6 population
     tau2_b, derived_b = pooled_tau2(frame, params_b)
     tau2_b_prime, derived_b_prime = pooled_tau2(frame, params_b_prime)
     route_b = measurement_ceiling_stats.ceiling_from_variances(tau2_b, mean_sampling)
@@ -166,6 +174,7 @@ def route_tables(frame, by_league, params_b, params_b_prime):
     monte_carlo = measurement_ceiling_stats.monte_carlo_ceiling(
         tau2_b_prime, sampling, weight, n_draws=300, seed=7) if tau2_b_prime > 0 else None
 
+    # the model's achieved within-stand rank correlation, placed against every route's ceiling
     achieved, _ = platoon_ceiling.recompute_platoon_rank_correlation(frame)
     routes = {"A": route_a, "B": route_b, "B_prime": route_b_prime}
     for name, row in routes.items():
@@ -228,6 +237,7 @@ def stabilization_table(frame, by_league, routes):
     Per-PA variances are the realized 2024 league values from E.15's own noise model, not
     a new one.
     """
+    # per-PA noise variance for each hitter (by his stand, vs LHP / vs RHP), then weight-averaged
     weight = frame["weight"].to_numpy(dtype="float64")
     league = by_league.set_index(["stand", "p_throws"])["var"]
     vs_left = np.array([float(league.loc[(stand, "L")]) for stand in frame["stand"]])
@@ -235,6 +245,7 @@ def stabilization_table(frame, by_league, routes):
     per_pa_weak = float(np.average(vs_left, weights=weight))
     per_pa_both = float(np.average(vs_left + vs_right, weights=weight))
 
+    # PA* per route under each convention
     rows = {}
     for name, row in routes.items():
         rows[name] = {
@@ -271,6 +282,8 @@ def half_sampling_variance(frame, pa_df, eval_season=EVAL_SEASON, min_half_pa=10
     parity rule, same per-side exposure floor — so the simulated null is a null for the
     estimator as it actually ran, not for an idealized version of it.
     """
+    # denominators [H, 4]: PA counts per hitter for (half A/B) x (vs L/R pitcher), after the
+    # per-side floor. Returns (batter ids [H], mean of the two halves' Var[e] [H], denominators).
     window = pa_df[(pa_df["season"] == eval_season) & pa_df["in_denominator"]]
     window = window[window["batter"].isin(frame["batter"])]
     window = window.assign(half=np.where(window["game_pk"].to_numpy() % 2 == 0, "A", "B"))
@@ -329,6 +342,8 @@ def route_c_diagnostic(frame, pa_df, tau2_b_prime, committed_split_half,
         "bug_found": False,
     }
 
+    # simulate the split-half estimator under each null (tau2 = 0 and tau2 = B'), per stand, and
+    # locate the committed split-half value in each simulated distribution
     batters, half_variance, denominators = half_sampling_variance(frame, pa_df, eval_season)
     stands = frame.set_index("batter")["stand"].reindex(batters)
     rng = np.random.default_rng(seed)
@@ -351,6 +366,7 @@ def route_c_diagnostic(frame, pa_df, tau2_b_prime, committed_split_half,
                        for label in simulations if stand in simulations[label]}
                for stand in ("L", "R")}
 
+    # verdict is read off the LHB (stand L) value only; the branches are the pre-registered §10 rule 2 outcomes
     lhb = located.get("L", {})
     inside_zero = lhb.get("tau2_zero", {}).get("inside_95")
     inside_b_prime = lhb.get("tau2_b_prime", {}).get("inside_95")
@@ -426,6 +442,7 @@ def gbm_full_differential(pa_df, cache_path, pitch_events, eval_season=EVAL_SEAS
 
     Returns a batter-indexed Series of predicted wOBA(vs L) − wOBA(vs R).
     """
+    # cache hit: reuse persisted predictions; miss: refit C.3-full once and save them
     cache_path = Path(cache_path)
     if cache_path.exists():
         predictions = pd.read_csv(cache_path)
@@ -439,6 +456,7 @@ def gbm_full_differential(pa_df, cache_path, pitch_events, eval_season=EVAL_SEAS
                                  feature_set="full", seed=seed)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         predictions.to_csv(cache_path, index=False)
+    # wide [H, 2]: one row per hitter, columns = predicted wOBA vs L and vs R pitchers
     predictions = predictions[predictions["season"] == eval_season]
     wide = predictions.pivot_table(index="batter", columns="p_throws", values="pred_woba")
     assert {"L", "R"}.issubset(wide.columns), "C.3-full did not emit both sides"
@@ -482,12 +500,14 @@ def differential(scored, routes, n_boot=2000, seed=0):
     error of the numerator alone, and the artifact says so) and the paired contrasts
     against `REFERENCE_MODEL`.
     """
+    # names: model labels; columns: matching differential columns on `scored`
     names = [name for name, _ in DIFFERENTIAL_MODELS]
     columns = [column for _, column in DIFFERENTIAL_MODELS]
     weight = scored["weight"].to_numpy(dtype="float64")
     draws, boot = measurement_ceiling_stats.paired_rank_bootstrap(scored, columns, n_boot=n_boot, seed=seed)
     boot = boot.set_index("column")
 
+    # scores table: one row per model with pooled and per-stand correlations plus paired contrast
     rows = []
     for name, column in DIFFERENTIAL_MODELS:
         by_stand = {}
@@ -525,6 +545,7 @@ def differential(scored, routes, n_boot=2000, seed=0):
         })
     scores = pd.DataFrame(rows)
 
+    # fractions table: achieved / ceiling, per model, for the primary route (B') and Route A
     fractions = []
     for index, (name, column) in enumerate(DIFFERENTIAL_MODELS):
         achieved = scores.loc[index, "rank_corr_within_stand_pooled"]
@@ -596,6 +617,7 @@ def stratum_ceiling_stratum(frame, routes, params_b_prime, n_boot=2000, seed=0):
     tau2_pooled = routes["B_prime"]["tau2"]
     rng = np.random.default_rng(seed)
 
+    # one row per frozen exposure stratum; strata with fewer than 3 hitters are skipped
     rows = []
     for stratum in claim1_eval.STRATUM_NAMES:
         part = frame[frame["stratum"] == stratum]
@@ -605,6 +627,8 @@ def stratum_ceiling_stratum(frame, routes, params_b_prime, n_boot=2000, seed=0):
         sampling = part["sampling_var"].to_numpy(dtype="float64")
         tau2_mix = float(np.average(part["tau2_b_prime"], weights=weight))
         mean_sampling = float(np.average(sampling, weights=weight))
+        # observed within-stand variance of the stratum's differentials; with a single stand
+        # there is no between-stand part, so it is the plain weighted variance
         observed = platoon_ceiling.between_within_stand(part["delta_obs"], weight, part["stand"]) \
             if part["stand"].nunique() > 1 else {
                 "within_stand": measurement_ceiling_stats.weighted_variance(part["delta_obs"], weight)}
@@ -762,6 +786,7 @@ def exhibit_cell(part, columns, tau2_mix, n_boot, seed, mc_draws=MC_CEILING_DRAW
     already reports under: the interval is the sampling error of the numerator alone and
     understates total uncertainty by the width of the route disagreement.
     """
+    # weight, sampling [n]: PA weight and differential sampling variance per hitter in this cell
     weight = part["weight"].to_numpy(dtype="float64")
     sampling = part["sampling_var"].to_numpy(dtype="float64")
 
@@ -774,6 +799,7 @@ def exhibit_cell(part, columns, tau2_mix, n_boot, seed, mc_draws=MC_CEILING_DRAW
     ceiling = monte_carlo["mc_spearman_mean"]
     floor = measurement_ceiling_stats.differential_noise_floor(sampling, weight)
 
+    # rank_draws, rmse_draws [n_boot, n_models]: per-replicate metrics on shared resampled hitters
     rank_draws, rmse_draws, boot = measurement_ceiling_stats.paired_differential_bootstrap(
         part, columns, n_boot=n_boot, seed=seed)
     boot = boot.set_index("column")
@@ -852,6 +878,7 @@ def differential_exhibit(frame, routes, params_b_prime, n_boot=2000, seed=0):
     frame = frame.assign(tau2_b_prime=per_hitter)
     columns = [column for _, column in DIFFERENTIAL_MODELS]
 
+    # rows: one per (exhibit column, model); denominators: one per exhibit column
     rows, denominators = [], []
     for name in EXHIBIT_COLUMNS:
         part = frame if name == "pooled" else frame[frame["stratum"] == name]
@@ -925,6 +952,7 @@ def min_eval_pa_sensitivity(pa_df, model_predictions, eb_delta, gbm_full_delta,
     also adding noise to the achieved correlation. Both move the same way, so the fraction
     of ceiling is the quantity worth reading here, not either term alone.
     """
+    # imported here, as in the other deferred imports in this file
     from src.analysis import model_evaluation_eval
 
     by_batter, by_league = platoon_ceiling.per_pa_variance_tables(pa_df, eval_season)
@@ -935,6 +963,7 @@ def min_eval_pa_sensitivity(pa_df, model_predictions, eb_delta, gbm_full_delta,
 
     rows = []
     for floor in floors:
+        # rebuild both the platoon (E.5) and pooled (F.5) frames at this floor, keep their intersection
         platoon_floor, _ = model_evaluation_eval.platoon_frame(pa_df, model_predictions, eval_season,
                                            min_eval_pa=floor)
         pooled_floor, _ = claim1_eval.build_eval_frame(pooled_pa, pooled_predictions, eval_season,
@@ -947,6 +976,7 @@ def min_eval_pa_sensitivity(pa_df, model_predictions, eb_delta, gbm_full_delta,
         # a floor below the committed one admits hitters no Phase C opponent forecast covers
         covered = frame["delta_eb"].notna() & frame["delta_c3full"].notna()
 
+        # refit C.2 on this floor's population (the B' construction) to get its ceiling
         restricted_pa = pa_df[pa_df["batter"].isin(keep)]
         params = eb.fit(restricted_pa, eval_season)
         weight = frame["weight"].to_numpy(dtype="float64")
@@ -991,6 +1021,7 @@ def precision_clause(table):
     illustration; the illustration moves to the stratum with the narrowest CI RELATIVE to
     its point estimate. No judgment call is left open.
     """
+    # table: per-stratum output of stratum_ceiling_stratum; returns the illustration-stratum decision
     table = table.copy()
     table["ci_includes_zero"] = (table["ceiling_b_prime_ci_low"] <= 0) & \
                                 (table["ceiling_b_prime_ci_high"] >= 0)
@@ -1043,6 +1074,7 @@ def level_ceiling_level(pa_df, model_predictions, population, params_b_prime,
     The ceiling is refit-invariant; the achieved fraction is not. They are separate fields,
     per the plan's wording.
     """
+    # pooled_scores: committed F.5 score table; model_predictions: model_v1 per-side predictions
     intersection = sorted(population.loc[population["in_intersection"], "batter"])
     weights = pooling_weights(pa_df, eval_season)
     pooled_predictions = pool_predictions(model_predictions, weights, eval_season)
@@ -1154,6 +1186,7 @@ def eb_level_variance(pa_df, batters, params, weights, eval_season):
     lookup = types.set_index("batter")["batter_type"].reindex(side.index)
     lookup = lookup.fillna("R")
 
+    # side [H, 2]: pooling weights per hitter for L and R; values: one pooled-talent variance per hitter
     values = []
     for batter, row in side.iterrows():
         fitted = params.get(lookup.loc[batter])
@@ -1181,11 +1214,13 @@ def level_split_half(pa_df, batters, eval_season, min_half_pa=25):
     window = pa_df[(pa_df["season"] == eval_season) & pa_df["in_denominator"]]
     window = window[window["batter"].isin(batters)]
     window = window.assign(half=np.where(window["game_pk"].to_numpy() % 2 == 0, "A", "B"))
+    # per hitter and half: summed wOBA points and PA count; the wide table then has one row per hitter
     grouped = (window.groupby(["batter", "half"])["woba_points"]
                .agg(points="sum", denom="size").reset_index())
     wide = grouped.pivot_table(index="batter", columns="half", values=["points", "denom"]).dropna()
     enough = ((wide[("denom", "A")] >= min_half_pa) & (wide[("denom", "B")] >= min_half_pa))
     wide = wide[enough]
+    # a, b [H]: each half's wOBA per hitter, correlated across hitters by split_half_from_halves
     a = wide[("points", "A")] / wide[("denom", "A")]
     b = wide[("points", "B")] / wide[("denom", "B")]
     estimate = measurement_ceiling_stats.split_half_from_halves(a, b)
@@ -1211,6 +1246,7 @@ def coverage_labels_coverage(pa_df, seed_predictions, manifest, population, eval
     M.6 hitters' own rows is what every interval displayed in notebook 08 must be labeled
     with.
     """
+    # coverage is scored on the five-seed ensemble frame, once on all groups and once on the M.6 hitters
     frame, _ = model_evaluation_probe_coverage.ensemble_frame(pa_df, seed_predictions, manifest, eval_season)
     keep = set(population.loc[population["in_intersection"], "batter"])
     restricted = frame[frame["batter"].isin(keep)]
@@ -1246,6 +1282,11 @@ def coverage_labels_coverage(pa_df, seed_predictions, manifest, population, eval
 # ------------------------------------------------------------------ driver
 
 def main():
+    """
+    CLI driver. Runs M.6 (population), M.0 (routes, Route C), M.1 (differential scores and PA-floor
+    sensitivity), M.2 (per-stratum ceiling), the main exhibit, M.3 (level-side ceiling) and M.4
+    (coverage labels) in that order, writing each artifact to `--out-dir` and a summary JSON last.
+    """
     parser = argparse.ArgumentParser(description="Phase M — the measurement ceiling.")
     parser.add_argument("--eval-season", type=int, default=EVAL_SEASON)
     parser.add_argument("--final-run", action="store_true")
@@ -1270,6 +1311,7 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # inputs: PA-level targets, E.5's committed platoon frame, model_v1 predictions for the eval season
     pa_df = pd.read_parquet(args.eval_targets)
     platoon_frame = pd.read_csv(args.platoon_frame)
     model_predictions = pd.read_csv(args.model_predictions)
@@ -1293,6 +1335,7 @@ def main():
     params_b_prime = eb.fit(restricted_pa, args.eval_season)
     routes = route_tables(frame, by_league, params_b, params_b_prime)
 
+    # E.15's committed split-half value per stand, which Route C locates in its simulated nulls
     committed_split_half = {}
     ceiling_json = json.loads(Path(args.ceiling_json).read_text())
     for row in ceiling_json["part1_ceiling"]["split_half"]:
@@ -1300,6 +1343,7 @@ def main():
     route_c = route_c_diagnostic(frame, pa_df, routes["routes"]["B_prime"]["tau2"],
                                  committed_split_half, args.eval_season)
 
+    # collect the §10 fallback rules that fired this run (rule 1 is handled below)
     fired = []
     if route_c["fallback_rule_2_fires"]:
         fired.append("2 — Route C outside both nulls with no bug: noise model suspect, "
@@ -1421,6 +1465,7 @@ def main():
 
     # ---------------- M.4
     print("\nM.4 coverage labels")
+    # one prediction table per ensemble seed, for the coverage intervals
     seed_predictions = {}
     for seed in args.seeds:
         table = pd.read_csv(args.seed_predictions.format(seed=seed))

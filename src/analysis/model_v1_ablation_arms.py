@@ -51,6 +51,7 @@ def load_arm_frames(out_dir, stage, arms, pa_df, eval_season):
     Arms with no CSV are skipped rather than defaulted, and the caller reports them: an arm
     silently absent from a ranking table reads as an arm that lost.
     """
+    # One predictions CSV per arm; each is joined to the eval-season PA targets to get a scorable frame.
     frames, missing = {}, []
     for arm in arms:
         path = Path(out_dir) / f"model_v1_predictions_{stage}_{arm}.csv"
@@ -70,6 +71,7 @@ def seed_spread(out_dir, stage, arm, pa_df, eval_season, seeds=(0, 1, 2, 3, 4)):
     `range` is the retired statistic. Printing both makes it visible that the retired one is
     roughly twice the other on five seeds and would keep growing on ten.
     """
+    # Score each seed's predictions file (suffix _s<seed>) on every stratum plus the aggregate "all".
     rows = []
     for seed in seeds:
         path = Path(out_dir) / f"model_v1_predictions_{stage}_{arm}_s{seed}.csv"
@@ -82,6 +84,7 @@ def seed_spread(out_dir, stage, arm, pa_df, eval_season, seeds=(0, 1, 2, 3, 4)):
                         for name in list(ce.STRATUM_NAMES) + ["all"]}})
     if not rows:
         return None, None
+    # Collapse seeds to mean, sample SD (ddof=1) and max-min range per stratum.
     per_seed = pd.DataFrame(rows)
     summary = pd.DataFrame([
         {"stratum": name, "n_seeds": len(per_seed),
@@ -109,12 +112,15 @@ def compare_arms(frames, baseline=BASELINE, n_boot=2000, seed=0):
     for arm, frame in frames.items():
         if arm == baseline:
             continue
+        # Same seed in both bootstraps so RMSE and rank intervals resample the same batters.
         rmse = ce.paired_rmse_difference(frame, frames[baseline], n_boot=n_boot, seed=seed)
         rank = ce.paired_rank_difference(frame, frames[baseline], n_boot=n_boot, seed=seed)
+        # One row per (arm, stratum) carrying both the RMSE and the rank comparison.
         merged = rmse.merge(rank, on=["stratum", "n_hitters", "n_batters"],
                             suffixes=("_rmse", "_rank"))
         rows.append(merged.assign(arm=arm))
     table = pd.concat(rows, ignore_index=True)
+    # Move `arm` to the first column for readability.
     return table[["arm"] + [column for column in table.columns if column != "arm"]]
 
 
@@ -128,16 +134,19 @@ def rank_arms(frames, comparisons, stratum=DECISIVE_STRATUM):
     """
     rows = []
     for arm, frame in frames.items():
+        # Absolute claim-1 scores for this arm: decisive stratum and the low-exposure stratum.
         scores = ce.score(frame).set_index("stratum")
         record = {"arm": arm,
                   "rmse_decisive": scores.loc[stratum, "pa_weighted_rmse"],
                   "rmse_low": scores.loc["low", "pa_weighted_rmse"],
                   "rank_decisive": scores.loc[stratum, "rank_corr_weighted"],
                   "rank_low": scores.loc["low", "rank_corr_weighted"]}
+        # Paired-vs-baseline rows for this arm (the baseline itself has none, so it gets no verdict columns).
         part = comparisons[(comparisons["arm"] == arm) & (comparisons["stratum"] == stratum)]
         low = comparisons[(comparisons["arm"] == arm) & (comparisons["stratum"] == "low")]
         if len(part):
             row = part.iloc[0]
+            # "Resolved" = the 95%-style bootstrap interval on the RMSE difference excludes zero.
             resolved = row["ci_high_rmse"] < 0 or row["ci_low_rmse"] > 0
             record.update({
                 "rmse_difference": row["rmse_difference"],
@@ -153,6 +162,7 @@ def rank_arms(frames, comparisons, stratum=DECISIVE_STRATUM):
 
 
 def main():
+    # CLI: which stage's predictions to score, which arms, and the eval season.
     parser = argparse.ArgumentParser(description="D.5 step 5: claim-1 for every ablation arm.")
     parser.add_argument("--stage", default="rebuild")
     parser.add_argument("--arms", nargs="+",
@@ -167,6 +177,7 @@ def main():
                         help="suffix on output names, so a re-score does not overwrite the original")
     args = parser.parse_args()
 
+    # Guard: refuse to score the held-out test season unless --final-run was passed.
     ce.assert_not_test_season(args.eval_season, final_run=args.final_run)
     pa_df = pd.read_parquet(args.eval_targets)
     out_dir = Path(args.out_dir)
@@ -177,6 +188,7 @@ def main():
         print(f"NOT SCORED (no predictions CSV): {', '.join(missing)}")
     assert BASELINE in frames, "baseline has no predictions, so nothing can be compared"
 
+    # Paired comparison and ranking table, written as CSVs so the verdict can be re-read without rerunning.
     comparisons = compare_arms(frames, n_boot=args.n_boot)
     comparisons.to_csv(out_dir / f"model_v1_arms_paired_{tag}.csv", index=False)
 
@@ -186,6 +198,7 @@ def main():
           f"NEGATIVE rmse_difference favours the arm.")
     print(table.to_string(index=False, float_format="%.5f"))
 
+    # Baseline-only seed spread, printed beside (not instead of) the paired intervals.
     per_seed, spread = seed_spread(out_dir, args.stage, BASELINE, pa_df, args.eval_season)
     if spread is not None:
         per_seed.to_csv(out_dir / f"model_v1_arms_baseline_per_seed_{tag}.csv", index=False)
@@ -193,6 +206,7 @@ def main():
               f"assumes its seed noise resembles this.")
         print(spread.to_string(index=False, float_format="%.5f"))
 
+    # Machine-readable verdict JSON: the ranking table plus the caveats that qualify it.
     verdict = {
         "stage": args.stage,
         "decisive_stratum": DECISIVE_STRATUM,
@@ -223,6 +237,7 @@ def _self_check():
     interval would promote noise. Both are checked against a planted arm that is genuinely
     better and one that is better but not resolvably so.
     """
+    # Synthetic eval frames: `better` has tiny prediction error, `baseline` large, `tied` is baseline plus negligible jitter.
     rng = np.random.default_rng(0)
     n = 240
     base = pd.DataFrame({

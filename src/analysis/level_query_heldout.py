@@ -34,7 +34,9 @@ N_BOOT = 1000
 
 
 def ols_residualise(y, x):
-    """Residuals of y after regressing on x plus an intercept (pairwise-complete)."""
+    """Residuals of y after regressing on x plus an intercept (pairwise-complete).
+
+    y, x [n]: same-length finite arrays (caller masks NaNs). Returns [n] residuals."""
     design = np.column_stack([np.ones_like(x), x])
     coefficients, *_ = np.linalg.lstsq(design, y, rcond=None)
     return y - design @ coefficients
@@ -46,11 +48,13 @@ def paired_pearson(a, b, confound=None):
     are residualised on it first (partial correlation), still pairwise-complete.
     Returns (r, n).
     """
+    # Keep only rows where every input is finite.
     mask = np.isfinite(a) & np.isfinite(b)
     if confound is not None:
         mask &= np.isfinite(confound)
     a, b = a[mask], b[mask]
     n = mask.sum()
+    # Too few rows for a meaningful correlation.
     if n < 3:
         return float("nan"), int(n)
     if confound is not None:
@@ -61,13 +65,16 @@ def paired_pearson(a, b, confound=None):
 
 
 def bootstrap_ci_partial(a, b, confound, n_boot=N_BOOT, seed=BOOT_SEED):
-    """95% percentile bootstrap CI on the partial Pearson r, resampling hitters (rows)."""
+    """95% percentile bootstrap CI on the partial Pearson r, resampling hitters (rows).
+
+    a, b, confound [N]: one value per hitter. Returns (point r, ci_low, ci_high, n)."""
     mask = np.isfinite(a) & np.isfinite(b) & np.isfinite(confound)
     a, b, confound = a[mask], b[mask], confound[mask]
     rng = np.random.default_rng(seed)
     n = len(a)
     point, _ = paired_pearson(a, b, confound)
     draws = np.empty(n_boot)
+    # Resample hitters with replacement and recompute the partial r each time.
     for i in range(n_boot):
         idx = rng.integers(0, n, n)
         draws[i], _ = paired_pearson(a[idx], b[idx], confound[idx])
@@ -103,13 +110,18 @@ def build_heldout_frame(level_query_csv=LEVEL_QUERY_CSV, eval_targets_path=EVAL_
 
 
 def heldout_level_query_stats(merged):
-    """Per-stratum + pooled Pearson (raw, partialled on log_prior_pa) with bootstrap CI."""
+    """Per-stratum + pooled Pearson (raw, partialled on log_prior_pa) with bootstrap CI.
+
+    merged: one row per hitter (level_query, woba_2024, log_prior_pa, stratum).
+    Returns {"pooled"/stratum name: {n, r_raw, r_partial, ci_low, ci_high}}.
+    log_prior_pa is partialled out because it tracks exposure."""
     out = {}
     confound_all = merged["log_prior_pa"].values.astype("float64")
     a_all = merged["level_query"].values.astype("float64")
     b_all = merged["woba_2024"].values.astype("float64")
 
     def _cell(a, b, confound):
+        # One stats cell: raw r plus partial r with its bootstrap CI.
         r_raw, _ = paired_pearson(a, b)
         r_partial, lo, hi, n = bootstrap_ci_partial(a, b, confound)
         return {"n": n, "r_raw": r_raw, "r_partial": r_partial, "ci_low": lo, "ci_high": hi}
@@ -123,6 +135,7 @@ def heldout_level_query_stats(merged):
 
 
 def main():
+    """CLI: build the join, compute stats, write level_query_heldout.csv/.json to --out-dir."""
     parser = argparse.ArgumentParser(
         description="Held-out (2024 wOBA) version of the V.4 level query check.")
     parser.add_argument("--out-dir", default="results/paper_figures")

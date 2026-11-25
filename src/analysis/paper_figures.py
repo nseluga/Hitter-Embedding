@@ -96,7 +96,7 @@ def exposure_at_reliability(target_reliability, n_star):
 
 
 def load_stabilization_row(root, metric_name):
-    """Returns the stabilization_panel.csv row for the given metric name as a dict."""
+    """Returns the stabilization_panel.csv row for the given metric name as a dict (root: repo root Path)."""
     panel = pd.read_csv(root / STABILIZATION_PANEL_CSV)
     row = panel[panel["metric"] == metric_name]
     if row.empty:
@@ -118,19 +118,24 @@ def load_calibration(root):
 
 def fig_reliability_curve(root, out_dir, max_pa=FULL_MAX_PA):
     """Figure 1: reliability(n) and its rank-correlation ceiling over exposure n, with the frozen markers."""
+    # n* = PA at which split-half reliability reaches 0.5 (stabilization point), with its 95% CI
     stabilization_row = load_stabilization_row(root, "wOBA vs LHP")
     n_star = stabilization_row["vc_n50"]
     n_star_low = stabilization_row["vc_n50_lo"]
     n_star_high = stabilization_row["vc_n50_hi"]
 
+    # measured ceiling vs achieved rank correlation for the evaluated hitter population
     with open(root / LEVEL_CEILING_JSON) as f:
         level_ceiling = json.load(f)["intersection"]
     ceiling_rank_corr = level_ceiling["ceiling_rank_corr"]
     achieved_rank_corr = level_ceiling["achieved_rank_corr_weighted"]
     fraction_of_ceiling = level_ceiling["fraction_of_ceiling"]
 
+    # stratum edges and evaluation floors are the project's frozen PA cut points
     exposure_stratum_edges = [113, 452]
     evaluation_floors = [10, 50]
+    # ceiling = sqrt(reliability), so squaring it recovers the population's reliability,
+    # which exposure_at_reliability maps onto the PA axis
     achieved_reliability = ceiling_rank_corr**2
     achieved_pa = exposure_at_reliability(achieved_reliability, n_star)
 
@@ -138,6 +143,7 @@ def fig_reliability_curve(root, out_dir, max_pa=FULL_MAX_PA):
     reliability_curve = reliability(plate_appearances, n_star)
     ceiling_curve = rank_correlation_ceiling(plate_appearances, n_star)
 
+    # shaded band = n* CI; curves = reliability and its sqrt ceiling; markers = measured ceiling and achieved correlation
     figure, axis = plt.subplots(figsize=(8, 5.5))
     axis.fill_between(
         np.linspace(n_star_low, n_star_high, 2),
@@ -170,6 +176,7 @@ def fig_reliability_curve(root, out_dir, max_pa=FULL_MAX_PA):
         arrowprops={"arrowstyle": "->", "color": "black"},
     )
 
+    # dotted verticals: exposure stratum edges (grey) and evaluation floors (red)
     for edge_pa in exposure_stratum_edges:
         axis.axvline(edge_pa, color="gray", linestyle=":", linewidth=1)
         axis.text(edge_pa, 0.96, f"stratum edge n={edge_pa}", ha="left", va="top",
@@ -205,7 +212,12 @@ def fig_reliability_curve(root, out_dir, max_pa=FULL_MAX_PA):
 
 
 def fig_claim1_2025_strata(root, out_dir):
-    """Figure 2: rank_difference and rmse_difference vs gbm_full by stratum, at both evaluation floors."""
+    """
+    Figure 2: rank_difference and rmse_difference vs gbm_full by stratum, at both evaluation floors.
+    Each row is a point estimate with its CI; the marker is filled when the CI excludes zero in
+    the model's favour (rank CI low > 0; RMSE CI high < 0). The two floors are drawn at small
+    vertical offsets within each stratum so they do not overlap.
+    """
     floors = [10, 50]
     strata = ["low", "medium", "high"]
     floor_offset = 0.15
@@ -217,6 +229,7 @@ def fig_claim1_2025_strata(root, out_dir):
     stratum_positions = {stratum: i for i, stratum in enumerate(strata)}
     floor_colors = {10: "tab:blue", 50: "tab:orange"}
 
+    # panel A = rank correlation difference, panel B = RMSE difference, per min-PA floor
     for floor_pa in floors:
         floor_rows = sweep[sweep["min_eval_pa"] == floor_pa]
         y_positions = [stratum_positions[s] + (floor_offset if floor_pa == floors[-1] else -floor_offset) for s in floor_rows["stratum"]]
@@ -267,7 +280,11 @@ def fig_claim1_2025_strata(root, out_dir):
 
 
 def fig_calibration_2025(root, out_dir):
-    """Figure 3: fitted calibration line per stratum, identity line, and binned overlay on the all panel."""
+    """
+    Figure 3: fitted calibration line per stratum, identity line, and binned overlay on the all panel.
+    Calibration is a regression of observed on predicted wOBA per hitter and side; a slope of 1
+    with intercept 0 (the identity line) is perfect calibration.
+    """
     calibration = load_calibration(root)
     reliability_bins = pd.read_csv(root / CALIBRATION_RELIABILITY_CSV)
 
@@ -410,6 +427,7 @@ def fig_level_query_strata(root, out_dir):
 
     row_order = ["pooled", "low", "medium", "high"]
 
+    # returns (r values, lower error lengths, upper error lengths) in row_order, as errorbar expects
     def series(source):
         r = [source[name]["r_partial"] for name in row_order]
         return (r,
@@ -494,7 +512,10 @@ FIGURE_FUNCTIONS = {
 
 
 def render_figure(name, root, out_dir, smoke=False):
-    """Renders one named figure into out_dir, returning the Path written or None if skipped."""
+    """
+    Renders one named figure into out_dir, returning the Path written or None if skipped.
+    smoke shortens the reliability-curve x-axis (SMOKE_MAX_PA instead of FULL_MAX_PA).
+    """
     if name == "reliability_curve":
         max_pa = SMOKE_MAX_PA if smoke else FULL_MAX_PA
         return fig_reliability_curve(root, out_dir, max_pa=max_pa)
@@ -502,6 +523,7 @@ def render_figure(name, root, out_dir, smoke=False):
 
 
 def main():
+    """CLI: renders all (or one, via --only) paper figures from the committed result files into --out-dir."""
     parser = argparse.ArgumentParser(description="Render the six paper figures from committed result artifacts.")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR, help="directory to write figures into")
     parser.add_argument("--smoke", action="store_true", help="tiny run for tests, still writes real figures")
@@ -509,6 +531,7 @@ def main():
                         help="swap results/model_evaluation_final for this dir (clean-refit build)")
     parser.add_argument("--only", default=None, choices=FIGURE_NAMES, help="render a single figure by name")
     args = parser.parse_args()
+    # point the evaluation-result paths at another build's directory
     if args.eval_dir:
         global MIN_PA_SWEEP_CSV, CALIBRATION_CSV, CALIBRATION_RELIABILITY_CSV
         old = "results/model_evaluation_final/"

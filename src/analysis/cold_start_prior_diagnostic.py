@@ -72,6 +72,7 @@ def low_stratum_population(stats, eval_targets_path=DEFAULT_EVAL_TARGETS,
     `exclude_pitcher_batters=False` reproduces the contaminated population, and exists so
     the two priors can be scored against one panel; it is not a supported analysis mode.
     """
+    # stats = hitter_stats.csv rows; "low" = little prior exposure, the debut-like population
     low = stats[stats["stratum"] == "low"]
     if exclude_pitcher_batters:
         low = low[~low["batter"].isin(_pitcher_ids(eval_targets_path))]
@@ -87,6 +88,7 @@ def low_stratum_means(embeddings, stats, eval_targets_path=DEFAULT_EVAL_TARGETS,
     hitter_stats.csv frame (batter, embedding_index, stand, stratum, ...).
     Population per `low_stratum_population`. Returns {"L": vec, "R": vec}.
     """
+    # embedding_index maps each hitter to his row in the embedding table; average those rows per stand
     low = low_stratum_population(stats, eval_targets_path, exclude_pitcher_batters)
     return {stand: embeddings[group["embedding_index"].to_numpy()].mean(axis=0)
             for stand, group in low.groupby("stand")}
@@ -94,6 +96,7 @@ def low_stratum_means(embeddings, stats, eval_targets_path=DEFAULT_EVAL_TARGETS,
 
 def _low_stratum_rows(stats, stand, eval_targets_path=DEFAULT_EVAL_TARGETS,
                       exclude_pitcher_batters=True):
+    """Embedding-table row indices of the low-stratum hitters who bat from `stand`."""
     low = low_stratum_population(stats, eval_targets_path, exclude_pitcher_batters)
     return low.loc[low["stand"] == stand, "embedding_index"].to_numpy()
 
@@ -105,6 +108,7 @@ def level_query_at(model, kernel, points, n_bins, context_pool, vector):
     `query.expected_woba`). Restores row 0 afterward -- the checkpoint in memory is
     never left mutated, even if the query raises.
     """
+    # swap the vector in, query, and always swap back (the finally block)
     saved = set_row0(model, vector)
     try:
         swing, contact, q = query_quantities([model], [kernel], points, n_bins,
@@ -116,6 +120,7 @@ def level_query_at(model, kernel, points, n_bins, context_pool, vector):
 
 
 def _seed_checkpoint(checkpoint_dir, arm, seed):
+    """Path of one seed's trained checkpoint: <checkpoint_dir>/<arm>_s<seed>.pt."""
     return Path(checkpoint_dir) / f"{arm}_s{seed}.pt"
 
 
@@ -126,9 +131,11 @@ def _build_context_pool(frame, tensors, manifest, n_pitches, seed=0):
     level query, not the live per-(pitcher hand, batter stand) scorer, so pitches are
     drawn across both p_throws values rather than gated by hand.
     """
+    # half the pitches from each pitcher hand, drawn from training seasons only
     train_seasons = manifest["train_seasons"]
     idx = np.concatenate([sample_pool(frame, train_seasons, hand, n_pitches // 2, seed)
                           for hand in ("L", "R")])
+    # context features of the sampled pitches: [n_pitches, context_dim]
     return tensors["context"][torch.as_tensor(idx, dtype=torch.long)]
 
 
@@ -142,12 +149,14 @@ def cold_start_group_count(pa_df, eval_season=EVAL_SEASON):
     group (build_eval_frame's population/coverage logic doesn't read prediction
     values, only which groups survive the min-PA filter and the join).
     """
+    # eval-frame population: hitters only, eval season only
     hitters = drop_pitcher_batters(pa_df)
     actuals = aggregate(hitters, by=tuple(claim1_eval.KEY))
     actuals = actuals[actuals["season"] == eval_season]
     placeholder = actuals[claim1_eval.KEY].copy()
     placeholder["pred_woba"] = 0.0
     frame, coverage = claim1_eval.build_eval_frame(pa_df, placeholder, eval_season, seen_only=False)
+    # cold-start groups = low stratum with no prior PA against that hand
     zero_prior = frame[(frame["stratum"] == "low") & (frame["prior_pa"] == 0)]
     by_hand = zero_prior.groupby("p_throws").size().to_dict()
     return {"total": int(len(zero_prior)),
@@ -158,6 +167,13 @@ def cold_start_group_count(pa_df, eval_season=EVAL_SEASON):
 def run_diagnostic(checkpoint_dir, arm, seeds, stats_csv, data_dir,
                    pitch_events=DEFAULT_PITCH_EVENTS, eval_targets_path=DEFAULT_EVAL_TARGETS,
                    n_pitches=N_PITCHES, n_boot=N_BOOT):
+    """
+    For each seed's model, run the level query with row 0 at its trained origin and at the
+    low-stratum mean vector of each stand, then average the query outputs across seeds.
+    Returns a JSON-ready dict: origin summary, per-stand level queries, their differences
+    from the origin, and a hitter-bootstrap CI on the q difference.
+    """
+    # load data and build the outcome tables the level query reads
     tensors, manifest = loader.load_tensors(data_dir)
     frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"],
                                   career_pitchers=manifest.get("career_pitchers_excluded", False))
@@ -167,14 +183,17 @@ def run_diagnostic(checkpoint_dir, arm, seeds, stats_csv, data_dir,
     points = torch.from_numpy(qt.woba_points_table(tables["outcome"], weights)).float()
     n_bins = manifest["n_quality_bins"]
 
+    # one fixed context pool for every query (see _build_context_pool)
     stats = pd.read_csv(stats_csv)
     context_pool = _build_context_pool(frame, tensors, manifest, n_pitches)
     n_low = {stand: len(_low_stratum_rows(stats, stand)) for stand in ("L", "R")}
 
+    # per_seed: query outputs per seed for each row-0 setting; boot_diffs: q(low-stratum mean) - q(origin) draws
     per_seed = {"origin": [], "L": [], "R": []}
     boot_diffs = {"L": [], "R": []}
     rng = np.random.default_rng(BOOT_SEED)
 
+    # each seed is handled inside its own embedding space; only scalar outputs are pooled afterward
     for path in (_seed_checkpoint(checkpoint_dir, arm, s) for s in seeds):
         models = query.load_ensemble([path], manifest, tensors["context"].shape[1])
         model = models[0]
@@ -189,6 +208,7 @@ def run_diagnostic(checkpoint_dir, arm, seeds, stats_csv, data_dir,
         for stand in ("L", "R"):
             per_seed[stand].append(
                 level_query_at(model, kernel, points, n_bins, context_pool, means[stand]))
+            # bootstrap over low-stratum hitters: resample them, rebuild the mean vector, re-query q
             rows = _low_stratum_rows(stats, stand)
             for _ in range(n_boot):
                 draw = rng.choice(rows, size=len(rows), replace=True)
@@ -199,6 +219,7 @@ def run_diagnostic(checkpoint_dir, arm, seeds, stats_csv, data_dir,
     def _avg(records, key):
         return float(np.mean([r[key] for r in records]))
 
+    # average the scalar outputs over seeds and assemble the report
     origin_summary = {key: _avg(per_seed["origin"], key) for key in ("p_swing", "p_contact", "q")}
     result = {
         "n_seeds": len(list(seeds)), "n_pitches": n_pitches,

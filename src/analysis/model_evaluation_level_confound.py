@@ -42,8 +42,14 @@ def arm_mean(arm):
 
 
 def main():
+    """
+    Reads each arm's prediction CSV and the shipped arms verdict, then correlates the arms' mean
+    predicted wOBA (their level) with their RMSE and ranking scores. Writes a table (CSV) and a
+    summary (JSON) to OUT_DIR and prints both. Takes no arguments; returns nothing.
+    """
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     verdict = json.loads((PHASE_D / "model_v1_arms_verdict_rebuild.json").read_text())
+    # one row per arm: its level (mean predicted wOBA) beside its verdict scores
     rows = []
     for arm, scores in verdict["arms"].items():
         mean, n = arm_mean(arm)
@@ -58,14 +64,18 @@ def main():
         rows.append({"arm": "baseline", "mean_pred_woba": mean, "n_rows": n,
                      "rmse_decisive": np.nan, "rank_decisive": np.nan,
                      "rmse_low": np.nan, "rank_low": np.nan, "degenerate": False})
+    # sorted best-RMSE-first; the baseline row (NaN scores) sorts last
     table = pd.DataFrame(rows).sort_values("rmse_decisive").reset_index(drop=True)
 
+    # arms entering the correlations: scored and not degenerate
     fit = table[~table["degenerate"] & table["rmse_decisive"].notna()]
     assert len(fit) >= 5, f"only {len(fit)} non-degenerate scored arms; correlation is not worth reading"
 
     out = {"n_arms_total": int(len(table)), "n_arms_in_correlation": int(len(fit)),
            "excluded_as_degenerate": list(DEGENERATE),
            "decisive_stratum": verdict["decisive_stratum"]}
+    # correlate arm level against each score; Pearson reads linear association, Spearman
+    # reads rank-order association (robust to one outlying arm)
     for metric, direction in (("rmse_decisive", "lower is better"),
                               ("rank_decisive", "higher is better"),
                               ("rmse_low", "lower is better"),

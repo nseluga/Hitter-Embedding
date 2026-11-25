@@ -70,9 +70,11 @@ def cosine_neighbours(embedding, anchor_row, k=K_NEIGHBOURS, exclude_rows=(0,), 
     allowed_rows: if given, only rows in this set are eligible neighbours (e.g. one stratum).
     Returns a DataFrame with columns rank, row, similarity, excluding the anchor itself.
     """
+    # Unit-normalise rows so the dot product with the anchor is its cosine similarity.
     norms = np.linalg.norm(embedding, axis=1, keepdims=True)
     normed = embedding / np.clip(norms, 1e-12, None)
     similarity = normed @ normed[anchor_row]
+    # Rank all rows by similarity (best first), skipping excluded rows and any outside the allowed set.
     excluded = set(exclude_rows) | {anchor_row}
     order = [row for row in np.argsort(-similarity)
             if row not in excluded and (allowed_rows is None or row in allowed_rows)][:k]
@@ -85,14 +87,17 @@ def zscore_candidates(stats_df, columns=STAT_COLUMNS, min_prior_pa=MIN_PRIOR_PA,
     Candidate pool for the stat-neighbour search: drop rows with NaN in any used column
     and rows below the exposure floor, optionally restrict to `strata` (a set of values
     in stats_df["stratum"]), then z-score the remaining columns.
-    Returns (filtered_df, z matrix aligned row-for-row with filtered_df).
+    stats_df: one row per hitter. Returns (filtered_df, z [H, len(columns)]): H eligible hitters,
+    one z-scored column per stat, aligned row-for-row with filtered_df.
     """
+    # Eligible = enough prior PA and no missing stat; optionally also restricted to given strata.
     eligible = stats_df["log_prior_pa"] >= math.log(min_prior_pa)
     complete = stats_df[columns].notna().all(axis=1)
     mask = eligible & complete
     if strata is not None:
         mask &= stats_df["stratum"].isin(strata)
     filtered = stats_df[mask].reset_index(drop=True)
+    # Z-score each stat column so no stat dominates the Euclidean distance by scale.
     values = filtered[columns].to_numpy(dtype="float64")
     mean, std = values.mean(axis=0), values.std(axis=0)
     z = (values - mean) / np.clip(std, 1e-12, None)
@@ -102,12 +107,14 @@ def zscore_candidates(stats_df, columns=STAT_COLUMNS, min_prior_pa=MIN_PRIOR_PA,
 def euclidean_neighbours(filtered_df, z, anchor_embedding_index, k=K_NEIGHBOURS):
     """
     Rows nearest the anchor by Euclidean distance in the z-scored stat space, ascending.
+    z [H, S]: H candidate hitters, S z-scored stats, aligned with filtered_df.
     Returns a DataFrame with rank, row (embedding_index), similarity_or_distance -- or an
     empty frame if the anchor itself failed the NaN/exposure filter.
     """
     match = filtered_df.index[filtered_df["embedding_index"] == anchor_embedding_index]
     if len(match) == 0:
         return pd.DataFrame(columns=["rank", "row", "similarity_or_distance"])
+    # Distance from the anchor to every candidate; the anchor itself (distance 0) is skipped.
     anchor_pos = match[0]
     distance = np.linalg.norm(z - z[anchor_pos], axis=1)
     order = [i for i in np.argsort(distance) if i != anchor_pos][:k]
@@ -122,12 +129,15 @@ def build_neighbours_table(embedding, stats_df, names_df, anchors=ANCHORS, strat
     strata: if given (a set of values in stats_df["stratum"]), both the embedding and
     stat neighbour pools are restricted to hitters in those strata.
     """
+    # Lookup tables keyed by embedding row, to attach names and stats to each neighbour.
     names_by_row = names_df.set_index("embedding_index")
     stats_by_row = stats_df.set_index("embedding_index")
+    # Stat-space candidate pool, and the matching embedding-row restriction for the cosine search.
     filtered, z = zscore_candidates(stats_df, strata=strata)
     allowed_rows = (set(stats_df.loc[stats_df["stratum"].isin(strata), "embedding_index"])
                     if strata is not None else None)
 
+    # For each anchor, one neighbour list per space (embedding cosine, observed-stat distance).
     rows = []
     for batter, anchor_name in anchors.items():
         anchor_row = int(names_df.loc[names_df["batter"] == batter, "embedding_index"].iloc[0])
@@ -166,7 +176,11 @@ def overlap_counts(neighbours_table):
 
 
 def plot_neighbours(neighbours_table, anchors, out_path):
-    """One row per anchor, two text-table panels: embedding neighbours vs stat neighbours."""
+    """
+    One row per anchor, two text-table panels: embedding neighbours vs stat neighbours.
+    neighbours_table: output of `build_neighbours_table`; anchors: dict batter id -> display name;
+    out_path: output PNG.
+    """
     fig, axes = plt.subplots(len(anchors), 2, figsize=(11, 2.1 * len(anchors)))
     for i, (batter, anchor_name) in enumerate(anchors.items()):
         for j, method in enumerate(["embedding", "stats"]):
@@ -191,8 +205,11 @@ def decode_pitch_family(context, context_columns):
     """
     Coarse pitch-type family per row, decoded from the context tensor's one-hot
     `pitch_type=XX` columns (the aligned frame does not carry pitch_type directly).
-    Returns an array of "fastball"/"breaking"/"offspeed"/"other".
+    context [N, C]: N pitches, C context features; context_columns: C column names.
+    Returns an array [N] of "fastball"/"breaking"/"offspeed"/"other".
     """
+    # Layout: the pitch_type one-hot block is the subset of context columns named `pitch_type=<code>`;
+    # block [N, n_codes] holds one 0/1 column per code, so the argmax column is each pitch's type.
     onehot_cols = [(i, name.split("=")[1]) for i, name in enumerate(context_columns)
                   if name.startswith("pitch_type=")]
     indices = np.array([i for i, _ in onehot_cols])
@@ -207,6 +224,7 @@ def bin_index(values, edges):
     Which of len(edges)-1 bins each value falls in, edges[0]..edges[-1] inclusive on
     both ends (a point exactly on the right edge lands in the last bin, not bin n).
     Values outside the range clip to the nearest edge bin.
+    values [N]: coordinates; edges [n_bins + 1]: bin boundaries. Returns [N] ints in 0..n_bins-1.
     """
     n_bins = len(edges) - 1
     idx = np.digitize(values, edges[1:-1], right=False)
@@ -214,7 +232,10 @@ def bin_index(values, edges):
 
 
 def sample_pool(frame, train_seasons, hand, n_pitches, seed=0):
-    """Seeded sample of n_pitches training-season row indices with p_throws == hand."""
+    """
+    Seeded sample of n_pitches training-season row indices with p_throws == hand.
+    frame: aligned pitch frame, one row per pitch (season, p_throws). Returns int row indices [<= n_pitches].
+    """
     eligible = np.flatnonzero(np.isin(frame["season"].to_numpy(), train_seasons)
                               & (frame["p_throws"].to_numpy() == hand))
     n = min(n_pitches, len(eligible))
@@ -233,7 +254,10 @@ def query_quantities(models, kernels, points, n_bins, embedding_index, context_p
     p_swing, p_contact, q for one hitter over one pool of pitch contexts.
     A thin call-through to query.expected_woba -- nothing about the model, scorer, or
     loss is touched here, only queried.
+    context_pool [P, C]: P pitch contexts, C context features. embedding_index: the hitter's embedding row,
+    applied to all P pitches. Returns (p_swing, p_contact, q), each [P].
     """
+    # Same hitter on every pitch in the pool: the only thing varying is the pitch context.
     hitter = torch.full((context_pool.shape[0],), embedding_index, dtype=torch.long)
     swing, contact, quality, _ = query.expected_woba(models, hitter, context_pool,
                                                       points, n_bins, kernels)
@@ -241,12 +265,19 @@ def query_quantities(models, kernels, points, n_bins, embedding_index, context_p
 
 
 def project_runtime(seconds_per_unit_batch, unit_batch_size, total_units):
-    """Linear projection: seconds per row-eval, times total row-evals."""
+    """
+    Linear projection: seconds per row-eval, times total row-evals.
+    Used to decide whether the full V.9 job fits the time budget before running it.
+    """
     return seconds_per_unit_batch / unit_batch_size * total_units
 
 
 def aggregate_type_count(family, balls, strikes, values):
-    """Mean of `values` (dict quantity -> array) grouped by (family, balls, strikes)."""
+    """
+    Mean of `values` (dict quantity -> array) grouped by (family, balls, strikes).
+    family, balls, strikes, and each array in values: [P], one entry per pitch.
+    Returns one row per cell with n_pitches and the mean of each quantity.
+    """
     df = pd.DataFrame({"family": family, "balls": balls, "strikes": strikes, **values})
     return df.groupby(["family", "balls", "strikes"]).agg(
         n_pitches=("family", "size"), **{q: (q, "mean") for q in values}
@@ -254,7 +285,10 @@ def aggregate_type_count(family, balls, strikes, values):
 
 
 def aggregate_location(x_bin, z_bin, values):
-    """Mean of `values` grouped by (x_bin, z_bin)."""
+    """
+    Mean of `values` grouped by (x_bin, z_bin).
+    x_bin, z_bin, and each array in values: [P], one entry per pitch. Returns one row per location cell.
+    """
     df = pd.DataFrame({"x_bin": x_bin, "z_bin": z_bin, **values})
     return df.groupby(["x_bin", "z_bin"]).agg(
         n_pitches=("x_bin", "size"), **{q: (q, "mean") for q in values}
@@ -266,6 +300,7 @@ def cell_delta(anchor_cells, league_cells, key_columns):
     Merge anchor and league per-cell means on `key_columns` and return anchor - league
     per quantity, long-format (one row per cell x quantity).
     """
+    # Only cells present for both the anchor and the league average can be differenced.
     merged = anchor_cells.merge(league_cells, on=key_columns, suffixes=("_anchor", "_league"))
     rows = []
     for _, r in merged.iterrows():
@@ -280,10 +315,16 @@ def cell_delta(anchor_cells, league_cells, key_columns):
 # --- orchestration --------------------------------------------------------------------
 
 def run_v8(embedding, names_df, stats_df, out_dir):
+    """
+    V.8: write neighbour tables and figures for the anchors, over all hitters and over the high stratum only.
+    embedding [n_rows, dim]: trained hitter embedding table; names_df / stats_df: per-hitter names and stats.
+    Returns the all-strata neighbours table.
+    """
     table = build_neighbours_table(embedding, stats_df, names_df)
     table.to_csv(out_dir / "neighbours.csv", index=False)
     plot_neighbours(table, ANCHORS, out_dir / "fig_neighbours.png")
 
+    # Repeat restricted to high-exposure hitters, so neighbours are not just low-exposure noise.
     high_table = build_neighbours_table(embedding, stats_df, names_df, strata={"high"})
     high_table.to_csv(out_dir / "neighbours_high.csv", index=False)
     plot_neighbours(high_table, ANCHORS, out_dir / "fig_neighbours_high.png")
@@ -304,10 +345,18 @@ def run_v8(embedding, names_df, stats_df, out_dir):
 
 def run_v9(checkpoint, out_dir, data_dir, pitch_events, eval_targets_path, names_df,
            n_pitches=40000, n_league=100, budget_seconds=1200):
+    """
+    V.9: for each anchor, average the model's p_swing / p_contact / q over a fixed pool of training-season
+    pitches by (pitch family x count) and by plate location, per pitcher hand, as anchor minus a
+    league-average of n_league sampled trained hitters scored on the identical pool.
+    n_pitches: pool size per hand; budget_seconds: projected runtime above which the pool is shrunk.
+    Returns (type_count, location, summary) frames, or (None, None, None) if even the shrunk job is over budget.
+    """
     tensors, manifest = loader.load_tensors(data_dir)
     train_seasons = manifest["train_seasons"]
     assert max(train_seasons) <= 2023, "2025 must never be read (spec §0.3)"
 
+    # Pitch frame aligned row-for-row with the training tensors, plus the aux tables the query needs.
     frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"],
                                   career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(eval_targets_path)
@@ -316,12 +365,14 @@ def run_v9(checkpoint, out_dir, data_dir, pitch_events, eval_targets_path, names
     points = torch.from_numpy(qt.woba_points_table(tables["outcome"], weights)).float()
     n_bins = manifest["n_quality_bins"]
 
+    # Load the checkpoint(s) in eval mode and build the spray kernels the query composes with.
     models = query.load_ensemble([Path(checkpoint)], manifest, tensors["context"].shape[1])
     for model in models:
         assert not model.training, "queried model must be in eval mode"
     kernels = [query.spray_kernels(model, points, n_bins, tables["spray_mass"])
               for model in models]
 
+    # Per-pitch binning keys over the whole frame; pools below index into these.
     context_np = tensors["context"].numpy()
     family_all = decode_pitch_family(context_np, manifest["context_columns"])
     x_bin_all = bin_index(frame["plate_x"].to_numpy(), LOCATION_X_EDGES)
@@ -329,6 +380,7 @@ def run_v9(checkpoint, out_dir, data_dir, pitch_events, eval_targets_path, names
     balls_all = frame["balls"].to_numpy()
     strikes_all = frame["strikes"].to_numpy()
 
+    # One fixed pitch pool per pitcher hand, shared by every hitter so differences are due to the hitter only.
     hands = ["L", "R"]
     pools = {hand: sample_pool(frame, train_seasons, hand, n_pitches) for hand in hands}
 
@@ -343,11 +395,13 @@ def run_v9(checkpoint, out_dir, data_dir, pitch_events, eval_targets_path, names
     benchmark_seconds = time.monotonic() - start
     benchmark_n = len(benchmark_idx)
 
+    # Full job = (anchors + league hitters) x hands x pool size row-evaluations.
     total_units = (len(ANCHORS) + n_league) * len(hands) * n_pitches
     projection = project_runtime(benchmark_seconds, benchmark_n, total_units)
     print(f"V.9 runtime projection: {projection / 60:.1f} min "
           f"({benchmark_seconds:.2f}s for {benchmark_n} pitches)")
 
+    # Over budget: fall back to a smaller league sample and pool; abort if still over.
     if projection > budget_seconds:
         n_league, n_pitches = 40, 20000
         pools = {hand: sample_pool(frame, train_seasons, hand, n_pitches) for hand in hands}
@@ -359,6 +413,7 @@ def run_v9(checkpoint, out_dir, data_dir, pitch_events, eval_targets_path, names
                   f"min budget even at the shrunk pool. Not running.")
             return None, None, None
 
+    # Same sampled league hitters for both hands.
     league_rows = sample_league_hitters(manifest["n_hitters"], n_league)
     started = time.monotonic()
 
@@ -369,6 +424,7 @@ def run_v9(checkpoint, out_dir, data_dir, pitch_events, eval_targets_path, names
         family, x_bin, z_bin = family_all[idx], x_bin_all[idx], z_bin_all[idx]
         balls, strikes = balls_all[idx], strikes_all[idx]
 
+        # League baseline: average each quantity over the sampled hitters, cell by cell and pool-wide.
         league_type_count, league_location, league_pool_means = [], [], {q: [] for q in QUANTITIES}
         for row in league_rows:
             swing, contact, q = query_quantities(models, kernels, points, n_bins,
@@ -386,6 +442,7 @@ def run_v9(checkpoint, out_dir, data_dir, pitch_events, eval_targets_path, names
             **{qty: (qty, "mean") for qty in QUANTITIES}).reset_index()
         league_summary = {qty: float(np.mean(vals)) for qty, vals in league_pool_means.items()}
 
+        # Each anchor on the same pool, reported as anchor minus league per cell.
         for batter, anchor_name in ANCHORS.items():
             anchor_row = int(names_df.loc[names_df["batter"] == batter, "embedding_index"].iloc[0])
             swing, contact, q = query_quantities(models, kernels, points, n_bins,
@@ -406,6 +463,7 @@ def run_v9(checkpoint, out_dir, data_dir, pitch_events, eval_targets_path, names
             loc_delta.insert(2, "p_throws", hand)
             location_rows.append(loc_delta)
 
+            # Pool-wide summary row: anchor mean vs league mean for each quantity.
             for qty in QUANTITIES:
                 anchor_mean = float(values[qty].mean())
                 summary_rows.append({"anchor": batter, "anchor_name": anchor_name,
@@ -429,7 +487,11 @@ def run_v9(checkpoint, out_dir, data_dir, pitch_events, eval_targets_path, names
 
 
 def plot_surfaces_type_count(type_count, out_path):
-    """Rows = anchors, columns = quantity x hand; each cell a pitch_type x count heatmap."""
+    """
+    Rows = anchors, columns = quantity x hand; each cell a pitch_type x count heatmap.
+    type_count: long frame of anchor-minus-league `delta` per (anchor_name, quantity, p_throws, pitch_type,
+    balls, strikes). Colour scale is shared and symmetric about zero (red = anchor above league).
+    """
     anchors = list(ANCHORS.values())
     hands = sorted(type_count["p_throws"].unique())
     cols = [(q, h) for q in QUANTITIES for h in hands]
@@ -457,7 +519,11 @@ def plot_surfaces_type_count(type_count, out_path):
 
 
 def plot_surfaces_location(location, out_path):
-    """Rows = anchors, columns = quantity x hand; each cell a 5x5 plate-location heatmap."""
+    """
+    Rows = anchors, columns = quantity x hand; each cell a 5x5 plate-location heatmap.
+    location: long frame of anchor-minus-league `delta` per (anchor_name, quantity, p_throws, x_bin, z_bin).
+    Colour scale is shared and symmetric about zero.
+    """
     anchors = list(ANCHORS.values())
     hands = sorted(location["p_throws"].unique())
     cols = [(q, h) for q in QUANTITIES for h in hands]
@@ -498,6 +564,7 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Inputs: hitter names/stats tables and the trained embedding table from the checkpoint.
     names_df = pd.read_csv(args.names_csv)
     stats_df = pd.read_csv(args.stats_csv)
     saved = torch.load(args.checkpoint, map_location="cpu", weights_only=False)

@@ -59,6 +59,7 @@ def ensemble_log_likelihood(models, arrays, n_bins, masks, cold_start=False,
     cold_start: force every hitter index to the reserved zero row, removing identity.
     Returns {head: array of log p(observed), NaN off that head's mask}.
     """
+    # Per-row log-likelihood arrays, NaN until a row is scored.
     n_rows = len(arrays["hitter"])
     out = {name: np.full(n_rows, np.nan, dtype="float64")
            for name in BINARY_HEADS + CATEGORICAL_HEADS}
@@ -67,6 +68,7 @@ def ensemble_log_likelihood(models, arrays, n_bins, masks, cold_start=False,
             stop = min(start + batch, n_rows)
             size = stop - start
             index = arrays["hitter"][start:stop].astype("int64")
+            # Cold start: every hitter index becomes the reserved zero row, so identity is the only thing removed.
             if cold_start:
                 index = np.full_like(index, RESERVED_HITTER_INDEX)
             hitter = torch.from_numpy(index)
@@ -88,6 +90,7 @@ def ensemble_log_likelihood(models, arrays, n_bins, masks, cold_start=False,
                     probability = torch.softmax(heads[name], dim=1)
                     totals[name] = probability + totals.get(name, 0.0)
 
+            # Convert mean probabilities to log p of the observed label: binary heads pick p or 1-p, categorical heads pick the observed class.
             for name, total in totals.items():
                 mean = (total / len(models)).double().numpy()
                 observed = arrays[name][start:stop].astype("int64")
@@ -97,6 +100,7 @@ def ensemble_log_likelihood(models, arrays, n_bins, masks, cold_start=False,
                 else:
                     safe = np.clip(observed, 0, mean.shape[1] - 1)
                     probability = mean[np.arange(size), safe]
+                # Clip to avoid log(0); rows outside the head's mask stay NaN.
                 row = np.where(mask, np.log(np.clip(probability, 1e-12, 1.0)), np.nan)
                 out[name][start:stop] = row
     return out
@@ -109,6 +113,7 @@ def frequency_reference(frame, arrays, masks, n_bins, train_rows, eval_rows):
     with an empty conditioning set rather than a different model.
     """
     widths = {"split": len(v1.SPLIT_CLASSES), "ev": n_bins, "la": n_bins, "spray": n_bins}
+    # Cell id per pitch from the conditioning keys (count, stand, hand).
     cells = frame[list(REFERENCE_KEYS)].astype(str).agg("|".join, axis=1).to_numpy()
     out = {}
     for name in BINARY_HEADS + CATEGORICAL_HEADS:
@@ -118,8 +123,10 @@ def frequency_reference(frame, arrays, masks, n_bins, train_rows, eval_rows):
         assert fit.sum(), f"no train rows to fit the {name} reference"
         labels = arrays[name].astype("int64")
         table = {}
+        # Smoothed class frequencies over all train rows: the fallback for a cell never seen in train.
         marginal = (np.bincount(labels[fit], minlength=width) + LAPLACE_ALPHA)
         marginal = marginal / marginal.sum()
+        # Smoothed class frequencies per cell, from train rows only.
         for cell in np.unique(cells[fit]):
             rows = fit & (cells == cell)
             counts = np.bincount(labels[rows], minlength=width) + LAPLACE_ALPHA
@@ -153,6 +160,7 @@ def summarize(name, model_ll, cold_ll, reference_ll, mask):
 
 
 def main():
+    """Scores each head's mean NLL on the eval season for the model, the cold-start model and the train-fit frequency table, and writes process_nll.csv and process_summary.json."""
     parser = argparse.ArgumentParser(
         description="Phase F.4 -- pitch-level process scoring against no-identity references.")
     parser.add_argument("--arm", default="clean_clean_dim64")
@@ -185,6 +193,7 @@ def main():
 
     # both the eval season and the reference seasons are needed, so the whole build is
     # subset once on the union rather than twice
+    # Subset the build once to train + eval seasons.
     season_all = np.asarray(np.load(directory / "season.npy", mmap_mode="r"))
     wanted = np.isin(season_all, list(train_seasons) + [args.eval_season])
     keep = np.flatnonzero(wanted)
@@ -208,6 +217,7 @@ def main():
     models = query.load_ensemble(paths, manifest, arrays["context"].shape[1])
     masks = head_masks(arrays)
 
+    # Score only eval-season rows on each head's mask.
     scored = {name: mask & eval_rows for name, mask in masks.items()}
     model_ll = ensemble_log_likelihood(models, arrays, n_bins, scored, cold_start=False,
                                        batch=args.batch)
@@ -220,6 +230,7 @@ def main():
     table = pd.DataFrame(rows)
     table.to_csv(out_dir / "process_nll.csv", index=False)
 
+    # Share of eval pitches whose hitter is already the cold-start row.
     cold_share = float(np.mean(arrays["hitter"][eval_rows] == RESERVED_HITTER_INDEX))
     summary = {
         "provenance": provenance.stamp(args.data_dir, arm=args.arm, seeds=args.seeds,

@@ -86,6 +86,7 @@ def fit(df):
     Continuous stats for optional fields are computed over present values only.
     """
     means, stds = {}, {}
+    # per-feature mean/std over non-missing rows only, so a missing reading never skews the stats
     for col in STANDARDIZED:
         values = df[col].to_numpy(dtype="float64")
         values = values[~np.isnan(values)]
@@ -94,6 +95,7 @@ def fit(df):
         means[col] = mean
         stds[col] = std if std > STD_FLOOR else 1.0
 
+    # vocabulary is sorted so the one-hot column order is deterministic across runs
     categories = {}
     for col in CATEGORICAL:
         categories[col] = sorted(str(v) for v in df[col].dropna().unique())
@@ -108,6 +110,7 @@ def fit_on_train(df, config=None):
     """
     from src.config.splits import load_splits
 
+    # only the frozen train seasons feed the fit; val/test rows are never seen here
     config = config or load_splits()
     train_seasons = sorted(config["split"]["train"])
     train = df[df["season"].isin(train_seasons)]
@@ -121,6 +124,9 @@ def feature_names(params):
     The ordered feature names produced by `transform`, computable from the fitted
     params alone. Consumers use this to align columns without touching the data.
     """
+    # column order must mirror `transform` exactly:
+    # [standardized continuous | sin,cos per circular | one missing flag per FLAG_SOURCES
+    #  | one-hot block per categorical, in CATEGORICAL order]
     names = list(STANDARDIZED)
     for col in CIRCULAR:
         names += [f"{col}_sin", f"{col}_cos"]
@@ -170,6 +176,8 @@ def transform(df, params):
     """
     columns = []
 
+    # each block below appends its columns in the order `feature_names` lists them:
+    # standardized continuous, then sin/cos, then missingness flags, then one-hots
     for col in STANDARDIZED:
         columns.append(_standardize(df[col], params.means[col], params.stds[col]))
     for col in CIRCULAR:
@@ -182,6 +190,7 @@ def transform(df, params):
         for cat in params.categories[col]:
             columns.append(_onehot(df[col], cat))
 
+    # the assertions catch a block/name drift and any NaN/inf that standardization failed to remove
     names = feature_names(params)
     assert len(columns) == len(names), f"column/name mismatch: {len(columns)} vs {len(names)}"
     X = np.column_stack(columns).astype("float32")
@@ -200,13 +209,16 @@ def decode_sample(df, X, names, params, n=8, seed=0):
     gate. For each sampled row: the raw categorical values beside the category the
     one-hot block activates, and raw release_speed beside its de-standardized value.
     """
+    # df is the raw frame, X [len(df), len(names)] its encoding, names the column order of X
     name_index = {name: i for i, name in enumerate(names)}
     sample = df.sample(min(n, len(df)), random_state=seed)
     rows = []
     for pos, (_, row) in zip(sample.index, sample.iterrows()):
+        # x [len(names)]: this row's encoded vector
         x = X[df.index.get_loc(pos)]
         decoded = {}
         for col in CATEGORICAL:
+            # the category whose one-hot column is 1.0; none active means an unseen category
             active = [cat for cat in params.categories[col] if x[name_index[f"{col}={cat}"]] == 1.0]
             decoded[f"{col}_raw"] = row[col]
             decoded[f"{col}_decoded"] = active[0] if active else "<other>"
@@ -230,6 +242,7 @@ def load_params(path):
 
 
 def main():
+    """CLI: fit on train seasons, save params JSON, and print the verification gate report."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Fit the context vectorizer on train and run its verification gates on real data.")
@@ -238,6 +251,7 @@ def main():
     parser.add_argument("--sample", type=int, default=200_000, help="rows to transform for the gate report")
     args = parser.parse_args()
 
+    # read only the columns the vectorizer needs; dict.fromkeys dedupes while keeping order
     columns = list(dict.fromkeys(
         STANDARDIZED + CIRCULAR + CATEGORICAL + ["season"]
     ))
@@ -252,6 +266,7 @@ def main():
     for col in CATEGORICAL:
         print(f"vocab {col:12s}        {params.categories[col]}")
 
+    # transform a fixed-seed subsample, enough to exercise the gates without vectorizing every pitch
     sample = df.sample(min(args.sample, len(df)), random_state=0).reset_index(drop=True)
     X, names = transform(sample, params)
     print(f"sample matrix shape       {X.shape}")

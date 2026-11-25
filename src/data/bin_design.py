@@ -47,16 +47,24 @@ def per_row_target(pitch_df, pa_df):
     quantity is built from the complete outcome record. NaN where the pitch's plate appearance is
     outside the wOBA denominator, which `fit_bin_edges` and `joint_cell_variance` both drop.
     """
+    # one row per plate appearance, indexed by the keys that identify it
     outcome = (pa_df[TARGET_COLUMNS].drop_duplicates(qt.JOIN_KEYS)
                .set_index(qt.JOIN_KEYS))
     assert outcome.index.is_unique, "a plate appearance key appears twice in the PA table"
+    # PAs outside the wOBA denominator become NaN rather than 0, so they drop out instead of reading as outs
     points = outcome["woba_points"].where(outcome["in_denominator"])
+    # look each pitch up by its PA key; pitches whose PA is absent also come back NaN
     keys = pd.MultiIndex.from_frame(pitch_df[qt.JOIN_KEYS])
     return points.reindex(keys).to_numpy(dtype="float64")
 
 
 def measure(pitch_df, train_seasons, target, n_bins):
-    """One record per scheme in BIN_SCHEMES: its edges plus the joint-grid diagnostics."""
+    """
+    One record per scheme in BIN_SCHEMES: its edges plus the joint-grid diagnostics.
+    pitch_df: labeled pitches; train_seasons: seasons the edges are fit on;
+    target [len(pitch_df)]: realized wOBA points per pitch (NaN where undefined); n_bins: bins per dimension.
+    Returns {scheme: {"edges": ..., **joint_cell_variance stats}}.
+    """
     results = {}
     for scheme in md.BIN_SCHEMES:
         edges = md.fit_bin_edges(pitch_df, train_seasons, n_bins=n_bins, scheme=scheme,
@@ -72,6 +80,7 @@ def measure(pitch_df, train_seasons, target, n_bins):
 
 
 def main():
+    """CLI: load the tables, measure every scheme on train seasons, write the JSON and print backoff exposure."""
     parser = argparse.ArgumentParser(description="Measure three candidate quality binnings.")
     parser.add_argument("--pitch-events", default="data/processed/pitch_events_labeled.parquet")
     parser.add_argument("--eval-targets", default="data/processed/eval_targets_pa.parquet")
@@ -81,6 +90,7 @@ def main():
                         help="defaults to the frozen split's train seasons")
     args = parser.parse_args()
 
+    # read only the columns this measurement needs from each parquet
     columns = (list(md.QUALITY_DIMENSIONS) + ["season", "launch_angle", "launch_speed"]
                + qt.JOIN_KEYS)
     pitch_df = pd.read_parquet(args.pitch_events, columns=columns)
@@ -102,6 +112,7 @@ def main():
 
     results = measure(pitch_df, train_seasons, target, args.n_bins)
 
+    # persist every scheme's edges and diagnostics so the hand-made choice can cite them
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "model_v1_bin_design.json"

@@ -40,12 +40,17 @@ def league_chain(frame, train_mask, shares):
     foul_tip is a strike, not a foul: it is caught by definition, so on two strikes it ends
     the plate appearance. Folding it into `foul` would hand the chain a self-loop that real
     baseball does not have.
+
+    frame: pitch-level table (description, balls, strikes, stand, p_throws); train_mask:
+    bool [n_pitches] selecting train-window pitches; shares: {(stand, p_throws): weight}.
+    Returns {channel: array [4 balls, 3 strikes]} for ball/strike/hbp/foul/bip/take_mass.
     """
     description = frame["description"].to_numpy()
     balls, strikes = frame["balls"].to_numpy(), frame["strikes"].to_numpy()
     stand, hand = frame["stand"].to_numpy(), frame["p_throws"].to_numpy()
     keep = train_mask & ~np.isin(description, qt.EXCLUDED_DESCRIPTIONS)
 
+    # each pitch description maps to exactly one outcome channel (partition asserted below)
     channels = {
         "ball": np.isin(description, qt.BALL_DESCRIPTIONS),
         "hbp": description == "hit_by_pitch",
@@ -53,10 +58,12 @@ def league_chain(frame, train_mask, shares):
         "bip": description == qt.IN_PLAY_DESCRIPTION,
     }
     channels["strike"] = np.isin(description, STRIKE_LIKE) | np.isin(description, SWING_MISS)
+    # a "take" is any pitch the hitter did not swing at
     take = channels["ball"] | channels["hbp"] | (description == "called_strike")
 
     out = {name: np.zeros((qt.N_BALLS, qt.N_STRIKES)) for name in
            ("ball", "strike", "hbp", "foul", "bip", "take_mass")}
+    # per count: average each channel's frequency over (stand, hand) cells, weighted by share
     for b, s in query.COUNT_STATES:
         cell = keep & (balls == b) & (strikes == s)
         total = 0.0
@@ -74,6 +81,7 @@ def league_chain(frame, train_mask, shares):
         for name in out:
             out[name][b, s] /= total
 
+    # sanity: the five outcome channels must sum to 1 at every count
     covered = sum(out[name] for name in ("ball", "strike", "hbp", "foul", "bip"))
     assert np.allclose(covered[np.array(query.COUNT_STATES).T[0],
                                np.array(query.COUNT_STATES).T[1]], 1.0, atol=1e-12), \
@@ -82,7 +90,10 @@ def league_chain(frame, train_mask, shares):
 
 
 def to_aggregates(chain):
-    """solve_chain's dict, with zero wOBA points on balls in play (only rates are read)."""
+    """
+    Repackage a league_chain result as the dict `query.absorbing_rates` expects, with zero
+    wOBA points on balls in play (only rates are read). Arrays are [4 balls, 3 strikes].
+    """
     return {"ball": chain["ball"], "strike": chain["strike"], "hbp": chain["hbp"],
             "foul": chain["foul"], "bip": chain["bip"],
             "bip_points": np.zeros_like(chain["bip"])}
@@ -95,6 +106,9 @@ def apply_draw_gap(chain, by_count, sign=1.0):
     The gap is in P(class | take), so it is multiplied by that count's take mass to land in
     the chain's units. Called strikes absorb the ball shift, which is what the surface
     itself does -- the three take classes sum to 1 by construction.
+
+    chain: league_chain output; by_count: one row per count with draw_gap_ball/hbp columns;
+    sign: +1 or -1 to apply or undo the shift. Returns a shifted copy of the chain.
     """
     shifted = {name: array.copy() for name, array in chain.items()}
     for row in by_count.itertuples():
@@ -107,6 +121,7 @@ def apply_draw_gap(chain, by_count, sign=1.0):
 
 
 def main():
+    """Price E.7's draw gap: shift the league chain by it, re-solve, and write per-count and summary outputs."""
     parser = argparse.ArgumentParser(
         description="Phase E.8 — what the resampler's draw gap is worth in walks.")
     parser.add_argument("--eval-season", type=int, default=2024)
@@ -124,8 +139,10 @@ def main():
     frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets, np.asarray(season),
                                   career_pitchers=manifest.get("career_pitchers_excluded", False))
     pa_df = pd.read_parquet(args.eval_targets)
+    # (stand, p_throws) weights used to average the chain over handedness
     shares = query.handedness_shares(pa_df, manifest["train_seasons"])
 
+    # collapse E.7's per-(count, stand, hand) gaps to one gap per count, handedness-weighted
     audit = pd.read_csv(out_dir / "resampler_audit_resampler_audit.csv")
     audit["share"] = [shares[(row.stand, row.p_throws)] for row in audit.itertuples()]
     by_count = audit.groupby(["balls", "strikes"]).apply(
@@ -134,6 +151,7 @@ def main():
             for name in ("draw_gap_ball", "draw_gap_hbp", "draw_gap_called_strike")
         }), include_groups=False).reset_index()
 
+    # baseline league chain and the same chain with every count's draw gap applied
     train_mask = np.isin(frame["season"].to_numpy(), manifest["train_seasons"])
     chain = league_chain(frame, train_mask, shares)
     base = query.absorbing_rates(to_aggregates(chain))

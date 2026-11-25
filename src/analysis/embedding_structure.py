@@ -72,12 +72,17 @@ ATTRIBUTE_MAP_COLUMNS = [
 # --------------------------------------------------------------------- (1) length normalization
 
 def unit_normalize(matrix):
-    """Divides each row by its L2 norm, projecting onto the unit sphere."""
+    """Divides each row by its L2 norm, projecting onto the unit sphere.
+
+    matrix [N, D]: N hitters, D embedding dims. Returns (normalized [N, D],
+    original row norms [N]). Removes vector length, which tracks exposure."""
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     return matrix / norms, norms.ravel()
 
 
 def norm_exposure_correlation(norms, log_prior_pa):
+    """Pearson r between a per-hitter value [N] (row norm, or a PCA coordinate)
+    and log prior plate appearances [N]; measures how much it tracks exposure."""
     return float(np.corrcoef(norms, log_prior_pa)[0, 1])
 
 
@@ -119,6 +124,7 @@ def silhouette_curve(normalized_matrix, k_range=K_RANGE, seed=BOOT_SEED):
     32-D embedding (never on a 2-D projection). Returns a list of
     {k, silhouette_score} and the k with the highest score.
     """
+    # One k-means fit per candidate k; silhouette near 0 means no clear discrete groups.
     scores = []
     for k in k_range:
         labels = KMeans(n_clusters=k, random_state=seed, n_init=10).fit_predict(normalized_matrix)
@@ -129,6 +135,7 @@ def silhouette_curve(normalized_matrix, k_range=K_RANGE, seed=BOOT_SEED):
 
 
 def cluster_labels(normalized_matrix, k, seed=BOOT_SEED):
+    """K-means cluster id [N] per hitter, fit on normalized_matrix [N, D] with k clusters."""
     return KMeans(n_clusters=k, random_state=seed, n_init=10).fit_predict(normalized_matrix)
 
 
@@ -139,6 +146,7 @@ def cluster_profiles(labels, hitters, names_by_batter, n_examples=5):
     full league (all hitters), so a cluster's row says how far its
     average member sits from a typical hitter.
     """
+    # League mean/std over all hitters (ddof=0) give the reference for each cluster's z-scores.
     df = hitters.copy()
     df["cluster"] = labels
     league_mean = df[SCOUTING_COLUMNS].mean()
@@ -164,13 +172,16 @@ def cluster_profiles(labels, hitters, names_by_batter, n_examples=5):
 
 def nearest_neighbour_indices(normalized_matrix, k=N_NEIGHBOURS):
     """Row indices of each hitter's k nearest neighbours by cosine distance, excluding itself."""
+    # Self-distance set to inf so a hitter is never its own neighbour; returns [N, k] indices.
     distances = cosine_distances(normalized_matrix)
     np.fill_diagonal(distances, np.inf)
     return np.argsort(distances, axis=1)[:, :k]
 
 
 def purity_fraction(neighbour_idx, labels):
-    """Fraction of each hitter's neighbours sharing its own label value."""
+    """Fraction of each hitter's neighbours sharing its own label value.
+
+    neighbour_idx [N, k]: neighbour rows per hitter; labels [N]. Returns [N]."""
     labels = np.asarray(labels)
     own = labels[:, None]
     neighbour_labels = labels[neighbour_idx]
@@ -187,6 +198,7 @@ def permutation_null(neighbour_idx, labels, n_permutations=N_PERMUTATIONS, seed=
     rng = np.random.default_rng(seed)
     labels = np.asarray(labels)
     draws = np.empty(n_permutations)
+    # Shuffling labels breaks any link between attribute and embedding position while keeping the neighbour graph.
     for i in range(n_permutations):
         shuffled = labels[rng.permutation(len(labels))]
         draws[i] = purity_fraction(neighbour_idx, shuffled).mean()
@@ -195,6 +207,9 @@ def permutation_null(neighbour_idx, labels, n_permutations=N_PERMUTATIONS, seed=
 
 
 def purity_test(neighbour_idx, labels, n_permutations=N_PERMUTATIONS, seed=BOOT_SEED):
+    """Observed mean neighbour purity vs its permutation null. Returns a dict
+    with observed_purity, null_mean, null_ci95, one-sided p_value (add-one
+    smoothed: (#null >= observed + 1) / (n_permutations + 1)) and n_permutations."""
     observed = purity_fraction(neighbour_idx, labels).mean()
     null_mean, lo, hi, draws = permutation_null(neighbour_idx, labels, n_permutations, seed)
     p_value = (np.sum(draws >= observed) + 1) / (n_permutations + 1)
@@ -213,6 +228,7 @@ def neighbour_purity_report(normalized_matrix, hitters):
     tercile (contact_rate), overall and within each exposure stratum,
     each against its own permutation null.
     """
+    # Neighbours are found once on the full population; terciles are over the whole league.
     neighbour_idx = nearest_neighbour_indices(normalized_matrix)
     power_tercile = tercile_labels(hitters["ev_p90"])
     contact_tercile = tercile_labels(hitters["contact_rate"])
@@ -228,12 +244,14 @@ def neighbour_purity_report(normalized_matrix, hitters):
         result = purity_test(neighbour_idx, labels)
         result.update({"attribute": attribute_name, "stratum": "all"})
         rows.append(result)
+        # Repeat within each exposure stratum, re-finding neighbours inside it, so exposure can't drive the result.
         for stratum in sorted(hitters["stratum"].unique()):
             mask = (hitters["stratum"] == stratum).values
             stratum_idx_map = {old: new for new, old in enumerate(np.where(mask)[0])}
             sub_matrix = normalized_matrix[mask]
             sub_neighbour_idx = nearest_neighbour_indices(sub_matrix)
             sub_labels = labels[mask]
+            # Skip strata where purity is undefined (one label only) or too small for k neighbours.
             if len(np.unique(sub_labels)) < 2 or len(sub_labels) <= N_NEIGHBOURS:
                 continue
             sub_result = purity_test(sub_neighbour_idx, sub_labels)
@@ -245,6 +263,8 @@ def neighbour_purity_report(normalized_matrix, hitters):
 # --------------------------------------------------------------------- projections
 
 def project(normalized_matrix, seed=BOOT_SEED):
+    """2-D PCA and t-SNE coordinates of normalized_matrix [N, D]. Returns
+    (pca_coords [N, 2], tsne_coords [N, 2], PCA variance fraction retained by the 2 components)."""
     pca = PCA(n_components=2, random_state=seed)
     pca_coords = pca.fit_transform(normalized_matrix)
     tsne_coords = TSNE(n_components=2, perplexity=30, random_state=seed, init="pca").fit_transform(normalized_matrix)
@@ -255,6 +275,7 @@ def project(normalized_matrix, seed=BOOT_SEED):
 # --------------------------------------------------------------------- figures
 
 def fig_clusters(pca_coords, tsne_coords, labels, variance_retained, path):
+    """Side-by-side PCA and t-SNE scatter [N, 2 each], colored by k-means labels [N] fit in 32-D; saves PNG to path."""
     fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
     for ax, coords, title in zip(
         axes,
@@ -274,6 +295,7 @@ def fig_clusters(pca_coords, tsne_coords, labels, variance_retained, path):
 
 
 def fig_silhouette(scores, best_k, path):
+    """Line plot of silhouette score vs k from silhouette_curve's rows, with the chosen k marked; saves PNG to path."""
     ks = [row["k"] for row in scores]
     values = [row["silhouette_score"] for row in scores]
     fig, ax = plt.subplots(figsize=(6, 4.5))
@@ -289,6 +311,9 @@ def fig_silhouette(scores, best_k, path):
 
 
 def fig_attribute_maps(pca_coords, hitters, variance_retained, path):
+    """One PCA scatter [N, 2] per ATTRIBUTE_MAP_COLUMNS entry, colored by that
+    attribute (handedness categorical, others continuous), so a real attribute
+    group would show as co-located color across panels. Saves PNG to path."""
     fig, axes = plt.subplots(2, 3, figsize=(15, 9))
     for ax, column in zip(axes.ravel(), ATTRIBUTE_MAP_COLUMNS):
         if column == "stand":
@@ -327,6 +352,7 @@ def load_hitters(checkpoint_dir, arm, hitter_stats_path, names_path, seeds=SEEDS
     see that function's docstring for why the pipeline's own filter misses
     them.
     """
+    # Sort by embedding_index so row order is deterministic before the table lookup below.
     hitters = pd.read_csv(hitter_stats_path).sort_values("embedding_index").reset_index(drop=True)
     names = pd.read_csv(names_path)
     names_by_batter = dict(zip(names["batter"], names["name"]))
@@ -339,6 +365,7 @@ def load_hitters(checkpoint_dir, arm, hitter_stats_path, names_path, seeds=SEEDS
         pitcher_ids = career_pitcher_batter_ids(eval_targets_pa_path)
         hitters = hitters[~hitters["batter"].isin(pitcher_ids)].reset_index(drop=True)
 
+    # embedding_index is 1-based, so subtract 1 to index the 0-based embedding table; this keeps embedding rows aligned with `hitters`.
     embedding = seed_mean_embedding(checkpoint_dir, arm, seeds=seeds)
     rows = hitters["embedding_index"].to_numpy() - 1
     embedding = embedding[rows]
@@ -347,12 +374,16 @@ def load_hitters(checkpoint_dir, arm, hitter_stats_path, names_path, seeds=SEEDS
 
 
 def run(checkpoint_dir, arm, hitter_stats_path, names_path, out_dir):
+    """Full pipeline: load embedding, unit-normalize, cluster in full-D, run
+    neighbour-purity tests, project to 2-D, write CSVs/PNGs/JSON to out_dir.
+    Returns the summary dict written to embedding_structure.json."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     embedding, hitters, names_by_batter = load_hitters(
         checkpoint_dir, arm, hitter_stats_path, names_path)
 
+    # Before normalizing: how strongly raw vector length tracks exposure (the first trap in the module docstring).
     raw_norm_correlation = norm_exposure_correlation(
         np.linalg.norm(embedding, axis=1), hitters["log_prior_pa"].to_numpy())
     normalized, norms = unit_normalize(embedding)

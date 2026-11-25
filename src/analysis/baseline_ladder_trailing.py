@@ -55,6 +55,7 @@ def trailing_window(pa_df, eval_season, n_seasons=TRAILING_SEASONS):
     The PA rows a forecaster could see: the n_seasons immediately before eval_season.
     Returns the filtered PA-level frame.
     """
+    # half-open range [eval_season - n_seasons, eval_season): the evaluated season is excluded
     first = eval_season - n_seasons
     window = pa_df[(pa_df["season"] < eval_season) & (pa_df["season"] >= first)]
     assert len(window) > 0, f"no PA in seasons [{first}, {eval_season})"
@@ -77,6 +78,7 @@ MEASURES = {"woba": ("woba_points", "in_denominator"),
 
 def league_average(window, measure="woba"):
     """Side-specific league average of `measure` over the window; predictions shrink toward it."""
+    # ratio of sums (total points / total denominator), i.e. PA-weighted, per pitcher hand
     points, denominator = MEASURES[measure]
     grouped = window.groupby("p_throws")
     league = grouped[points].sum() / grouped[denominator].sum()
@@ -85,6 +87,7 @@ def league_average(window, measure="woba"):
 
 def trailing_woba(window, measure="woba"):
     """Each hitter's observed `measure` and its PA count against each pitcher hand."""
+    # eval_targets.aggregate collapses PA rows to one row per (batter, pitcher hand)
     out = aggregate(window, by=("batter", "p_throws"))
     denominator = "denominator" if measure == "woba" else "xwoba_denominator"
     assert measure in out.columns, (
@@ -99,6 +102,7 @@ def bucket_weight(trailing_pa, buckets=PA_BUCKETS):
     Weight placed on the hitter's own trailing wOBA, by PA bucket.
     trailing_pa: a Series of PA counts. Returns a Series of weights in [0, 1].
     """
+    # step function: start at 0, then each bucket whose min_pa is reached overwrites with its weight (ascending order)
     weight = pd.Series(0.0, index=trailing_pa.index)
     for min_pa, w in sorted(buckets):
         weight[trailing_pa >= min_pa] = w
@@ -131,6 +135,7 @@ def predict(pa_df, eval_season, variant="bucketed", n_seasons=TRAILING_SEASONS,
         .drop_duplicates()
         .merge(trailing, on=["batter", "p_throws"], how="left")
     )
+    # a hitter-hand with no window PA has no history: zero PA, NaN trailing wOBA
     targets["trailing_pa"] = targets["trailing_pa"].fillna(0.0)
     targets["league_woba"] = targets["p_throws"].map(league)
     assert targets["league_woba"].notna().all(), "a pitcher hand has no league average in the window"
@@ -141,6 +146,7 @@ def predict(pa_df, eval_season, variant="bucketed", n_seasons=TRAILING_SEASONS,
     else:
         weight = bucket_weight(targets["trailing_pa"], buckets)
 
+    # blend: weight on his own record, the rest on the side-specific league average
     own = targets["trailing_woba"].fillna(0.0)  # masked by weight 0 wherever absent
     targets["pred_woba"] = weight * own + (1.0 - weight) * targets["league_woba"]
 

@@ -33,8 +33,11 @@ DEFAULT_LOG_DIR = Path("results/model_v1/logs")
 DEFAULT_ARM = "clean_clean_dim64"
 DEFAULT_SEEDS = list(range(5))
 
+# train.py's per-epoch log line: captures the epoch index, the lr printed after that epoch's
+# scheduler step, and the number of optimizer steps in the epoch
 EPOCH_LINE = re.compile(
     r"^epoch\s+(?P<epoch>\d+)\s+.*?\slr\s+(?P<lr>\S+)\s+.*?\((?P<steps>\d+) steps\)")
+# train.py's final summary line; its epoch is the 0-indexed best epoch (see the off-by-one note)
 BEST_LINE = re.compile(r"^best val loss \S+ at epoch (?P<epoch>\d+);")
 
 
@@ -56,6 +59,8 @@ def parse_log(path):
     assert len(steps) == 1, (
         f"{path} has epochs of differing step counts {sorted(steps)}; a step budget derived "
         f"from a ragged epoch is not a step budget")
+    # a cut is an epoch whose printed lr differs from the previous epoch's; it fired at the end
+    # of epoch - 1, and only cuts strictly before the best epoch count
     cut_epochs = [epoch - 1 for epoch in sorted(lrs)[1:]
                   if lrs[epoch] != lrs[epoch - 1] and epoch - 1 < best_epoch]
     return {"best_epoch": best_epoch, "steps_per_epoch": steps.pop(),
@@ -69,15 +74,20 @@ def recover(paths):
     Cut points are medianed as FRACTIONS of each run's own budget rather than as raw step
     counts: the runs stopped at different epochs, so the same cut sits at a different
     absolute step in each, and the fraction is what transfers to a budget none of them had.
+    paths: one training log per seed. Returns the schedule dict written by main().
     """
     runs = []
     for path in paths:
         run = parse_log(path)
+        # best_epoch + 1 epochs of steps (0-indexed best epoch, see the off-by-one note)
         run["total_steps"] = (run["best_epoch"] + 1) * run["steps_per_epoch"]
+        # a cut at the end of epoch e sits after (e + 1) epochs' worth of steps
         run["cut_fractions"] = [(epoch + 1) * run["steps_per_epoch"] / run["total_steps"]
                                 for epoch in run["cut_epochs"]]
         runs.append(run)
 
+    # median across seeds: budget in steps, number of cuts, then each i-th cut's fraction
+    # (over the seeds that have an i-th cut), converted back to absolute steps
     budget = int(statistics.median(run["total_steps"] for run in runs))
     n_cuts = int(statistics.median(len(run["cut_fractions"]) for run in runs))
     fractions = [statistics.median([run["cut_fractions"][i] for run in runs
@@ -101,11 +111,13 @@ def main():
     parser.add_argument("--out", default="results/model_v1/replay_schedule.json")
     args = parser.parse_args()
 
+    # one log per seed, named as sweep.py's runs write them
     paths = [Path(args.log_dir) / f"{args.arm}_s{seed}.log" for seed in args.seeds]
     schedule = {**recover(paths), "arm": args.arm, "seeds": args.seeds}
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(schedule, indent=2) + "\n")
     print(json.dumps(schedule, indent=2))
+    # the exact flags to hand to train.py for the refit
     print(f"\n--step-budget {schedule['step_budget']} "
           f"--lr-cut-steps {' '.join(str(s) for s in schedule['lr_cut_steps'])}")
     print(f"wrote {args.out}")

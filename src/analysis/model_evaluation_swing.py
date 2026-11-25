@@ -42,6 +42,10 @@ def load_season_rows(data_dir, eval_season):
     so a resident load would hold nine seasons of context to read one. The gather is a
     single fancy-index into the memmap, which is the access pattern memmapping is good at,
     unlike the shuffled per-batch gather `loader` warns about.
+
+    Returns (rows, arrays, manifest): rows [n] indices of that season in the full table;
+    arrays {"context": [n, C], "hitter": [n] embedding-row ids, "swing": [n] 0/1 observed};
+    manifest is the dataset manifest dict.
     """
     directory = Path(data_dir)
     season = np.load(directory / "season.npy", mmap_mode="r")
@@ -59,6 +63,9 @@ def ensemble_swing(models, hitter, context, batch=DEFAULT_BATCH):
     """
     Mean p(swing) over the ensemble, per pitch row. Probabilities averaged, not logits --
     the deep-ensemble mixture for a Bernoulli, and the same convention as `expected_woba`.
+
+    models: list of loaded seeds; hitter [n]: embedding-row ids; context [n, C]: context
+    features; batch: rows scored per forward pass. Returns float64 array [n] of p(swing).
     """
     out = np.zeros(len(hitter), dtype="float64")
     with torch.no_grad():
@@ -78,7 +85,11 @@ def ensemble_swing(models, hitter, context, batch=DEFAULT_BATCH):
 
 
 def calibration_table(frame, by, label):
-    """Observed swing rate against mean predicted, grouped by `by`. One row per cell."""
+    """
+    Observed swing rate against mean predicted, grouped by `by`. One row per cell.
+    frame: one row per pitch with swing (0/1) and p_swing; by: column names to group on;
+    label: tag written to the `grouping` column. gap = predicted - observed.
+    """
     grouped = frame.groupby(list(by), observed=True)
     out = grouped.agg(n_pitches=("swing", "size"), observed=("swing", "mean"),
                       predicted=("p_swing", "mean")).reset_index()
@@ -89,6 +100,7 @@ def calibration_table(frame, by, label):
 
 
 def main():
+    """Score real held-out pitches with the ensemble swing head and write calibration tables and a summary."""
     parser = argparse.ArgumentParser(
         description="Phase E.6 — swing-head calibration on real held-out pitches.")
     parser.add_argument("--arm", default="clean_clean_dim64")
@@ -110,6 +122,7 @@ def main():
     rows, arrays, manifest = load_season_rows(args.data_dir, args.eval_season)
     print(f"{len(rows)} pitches in {args.eval_season}")
 
+    # attach pitch-level metadata (count, zone, description, ...) aligned row-for-row to the tensors
     season = np.load(Path(args.data_dir) / "season.npy", mmap_mode="r")
     pitch_frame = qt.align_pitch_frame(args.pitch_events, args.eval_targets,
                                        np.asarray(season),
@@ -118,6 +131,7 @@ def main():
     assert (frame["season"].to_numpy() == args.eval_season).all(), \
         "the pitch frame and the tensor season mask disagree"
 
+    # one checkpoint per seed; scored as an ensemble
     paths = [Path(args.checkpoint_dir) / f"{args.arm}_s{seed}.pt" for seed in args.seeds]
     models = query.load_ensemble(paths, manifest, arrays["context"].shape[1])
 
@@ -128,6 +142,7 @@ def main():
     assert np.array_equal(check, p_swing[:4096]), \
         "scoring the same rows twice changed the answer -- a model is not in eval mode"
 
+    # attach predictions and observed outcome; in_zone = Statcast zone 1-9; trained = hitter has own embedding row
     frame["p_swing"] = p_swing
     frame["swing"] = arrays["swing"]
     frame["in_zone"] = (frame["zone"].to_numpy() <= 9).astype("int64")
@@ -144,6 +159,7 @@ def main():
     print("\n-- decoded sample --")
     print(sample.to_string(index=False))
 
+    # calibration sliced by count, handedness, zone, count x zone, overall, and trained hitters only
     tables = [
         calibration_table(frame, ("balls", "strikes"), "count"),
         calibration_table(frame, ("stand", "p_throws"), "handedness"),
@@ -156,6 +172,7 @@ def main():
     table = pd.concat(tables, ignore_index=True)
     table.to_csv(out_dir / "swing_calibration_swing_calibration.csv", index=False)
 
+    # summary: overall gap, and 3-ball vs fewer-than-3-ball counts (where the walk excess lives)
     overall = table[table["grouping"] == "overall"].iloc[0]
     three_ball = frame[frame["balls"] == 3]
     other = frame[frame["balls"] < 3]

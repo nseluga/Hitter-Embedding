@@ -51,6 +51,7 @@ PITCH_PARQUET = "data/processed/pitch_events_labeled.parquet"
 EVAL_TARGETS_PARQUET = "data/processed/eval_targets_pa.parquet"
 MANIFEST_PATH = "data/processed/phase_d5_clean/manifest.json"
 
+# Statcast zone codes: 1-9 are the strike-zone cells, 11-14 the regions outside it
 CHASE_ZONES = (11, 12, 13, 14)
 IN_ZONE_ZONES = tuple(range(1, 10))
 PULL_THRESHOLD_DEG = 15.0
@@ -63,6 +64,8 @@ def load_pitch_frame(path=PITCH_PARQUET, train_seasons=TRAIN_SEASONS):
     """
     Read only the columns this module needs (pyarrow column projection) and restrict
     to the build's training seasons. Asserts no other season survives the filter.
+    path: labeled pitch parquet; train_seasons: (first, last) inclusive.
+    Returns a pitch-level DataFrame (one row per pitch, columns = PITCH_COLUMNS).
     """
     df = pq.read_table(path, columns=PITCH_COLUMNS).to_pandas()
     df = df[df["season"].between(*train_seasons)]
@@ -77,6 +80,7 @@ def per_batter_pitch_stats(df):
     df: pitch_events_labeled rows already filtered to seasons 2015-2023.
     Returns one row per batter with n_pitches, the rate columns, and majority stand.
     """
+    # sub-populations that define each rate's denominator (e.g. chase = swings on pitches outside the zone)
     grouped = df.groupby("batter")
     swings = df[df["swing"] == 1]
     chase = df[df["zone"].isin(CHASE_ZONES)]
@@ -86,11 +90,13 @@ def per_batter_pitch_stats(df):
     batted_spray = df[df["spray"].notna()]
     tracked_bat_speed = df[df["bat_speed"].notna()]
 
+    # stand = the side a hitter batted from most often (switch hitters appear on both)
     stats = pd.DataFrame({
         "n_pitches": grouped.size(),
         "swing_rate": grouped["swing"].mean(),
         "stand": grouped["stand"].agg(lambda values: values.mode().iat[0]),
     })
+    # whiff and contact are complements, both measured per swing
     stats["whiff_rate"] = 1 - swings.groupby("batter")["contact"].mean()
     stats["contact_rate"] = swings.groupby("batter")["contact"].mean()
     stats["chase_rate"] = chase.groupby("batter")["swing"].mean()
@@ -109,6 +115,8 @@ def per_batter_exposure_and_platoon(pa_df, train_seasons=TRAIN_SEASONS):
     Training-season wOBA level, side-specific exposure, and the observed platoon
     differential per batter, from eval_targets_pa.
     pa_df: the raw PA-level eval-target table (any seasons); filtered internally.
+    Returns one row per batter: woba_level, prior_pa_L/R, n_pa_L/R, log_prior_pa, stratum
+    (from the smaller of the L and R PA counts), obs_platoon_diff.
     """
     pa_df = drop_pitcher_batters(pa_df)
     train_pa = pa_df[pa_df["season"].between(*train_seasons)]
@@ -117,6 +125,7 @@ def per_batter_exposure_and_platoon(pa_df, train_seasons=TRAIN_SEASONS):
     level = aggregate(train_pa, by=("batter",))[["batter", "woba"]] \
         .rename(columns={"woba": "woba_level"})
 
+    # PA counts by pitcher hand (L, R), from seasons strictly before the first non-training season
     prior = prior_exposure(pa_df, eval_season=train_seasons[1] + 1)
     prior_wide = (prior.pivot(index="batter", columns="p_throws", values="prior_pa")
                   .reindex(columns=["L", "R"]).fillna(0.0))
@@ -128,6 +137,7 @@ def per_batter_exposure_and_platoon(pa_df, train_seasons=TRAIN_SEASONS):
     prior_wide["stratum"] = assign_stratum(
         prior_wide[["prior_pa_L", "prior_pa_R"]].min(axis=1))
 
+    # wOBA against each pitcher hand, used for the platoon differential below
     side_woba = aggregate(train_pa, by=("batter", "p_throws"))[["batter", "p_throws", "woba"]]
     side_wide = side_woba.pivot(index="batter", columns="p_throws", values="woba") \
         .reindex(columns=["L", "R"])
@@ -138,6 +148,8 @@ def per_batter_exposure_and_platoon(pa_df, train_seasons=TRAIN_SEASONS):
     # LHB: better vs opposite hand (RHP) is positive; RHB: better vs opposite hand (LHP)
     stand = df_majority_stand(pa_df, train_pa)
     out = out.merge(stand, on="batter", how="left")
+    # positive = better against the opposite hand than the same hand; switch hitters
+    # fall in the else branch (R-style orientation)
     is_lhb = out["stand"] == "L"
     out["obs_platoon_diff"] = np.where(
         is_lhb, out["woba_vs_R"] - out["woba_vs_L"], out["woba_vs_L"] - out["woba_vs_R"])
@@ -172,6 +184,7 @@ def build_hitter_stats(pitch_path=PITCH_PARQUET, eval_targets_path=EVAL_TARGETS_
     with the build's would define the low stratum on one era and apply it to another. The
     refit build trains through 2024 and needs its own panel for exactly that reason.
     """
+    # season range comes from the manifest so the panel matches the build being described
     train_seasons = json.loads(Path(manifest_path).read_text())["train_seasons"]
     train_seasons = (min(train_seasons), max(train_seasons))
     pitch_df = load_pitch_frame(pitch_path, train_seasons)
@@ -187,6 +200,7 @@ def build_hitter_stats(pitch_path=PITCH_PARQUET, eval_targets_path=EVAL_TARGETS_
 
 
 def main():
+    """CLI: builds the per-hitter stat panel for the manifest's build and writes hitter_stats.csv to --out-dir."""
     parser = argparse.ArgumentParser(description="Phase V per-hitter observable-stat panel.")
     parser.add_argument("--out-dir", default="results/model_visualization")
     parser.add_argument("--manifest", default=MANIFEST_PATH,

@@ -29,21 +29,26 @@ STRATA = ("low", "medium", "high")
 
 
 def slope(x, y):
+    """OLS slope of y on x (degree-1 polyfit)."""
     return float(np.polyfit(x, y, 1)[0])
 
 
 def pearson(x, y):
+    """Pearson correlation of x and y."""
     return float(np.corrcoef(x, y)[0, 1])
 
 
 def norm_exposure(weight, stats):
     """One seed: {slope, slope_ci95, r, r_ci95, spread: {stratum: norm sd}}.
     `stats` rows map `embedding_index` -> `log_prior_pa`, `stratum`; row 0 is never used."""
+    # weight: [n_embedding_rows, D] one seed's table; norms: L2 norm of each hitter's row, [n_hitters]
     rows = stats["embedding_index"].to_numpy()
     norms = np.linalg.norm(weight[rows], axis=1)
     x = stats["log_prior_pa"].to_numpy(dtype=float)
+    # slope and r of norm vs log prior PA, each with a hitter-bootstrap 95% CI
     s, s_lo, s_hi = bootstrap_ci((x, norms), slope)
     r, r_lo, r_hi = bootstrap_ci((x, norms), pearson)
+    # norm sd within each exposure stratum (ddof=1)
     spread = {k: float(np.std(norms[stats["stratum"].to_numpy() == k], ddof=1))
               for k in STRATA}
     return {"slope": s, "slope_ci95": [s_lo, s_hi], "r": r, "r_ci95": [r_lo, r_hi],
@@ -53,11 +58,13 @@ def norm_exposure(weight, stats):
 def reference_bar(rows, stage, config, incumbent=("rebuild", "baseline")):
     """Arm vs incumbent on `reference`; pass if the arm is not worse by more than
     MARGIN_SES standard errors (one-sided). Advisory below two seeds."""
+    # floor_sd: rebuild-baseline across-seed sd; arm / inc: per-seed `reference` values for arm and incumbent
     floor_sd, _, _ = noise_floor(rows)
     arm = references(rows, stage, config)
     inc = references(rows, *incumbent)
     if not arm:
         return {"n_arm": 0, "passes": None, "note": "no completed runs for the arm"}
+    # standard error of the arm-minus-incumbent difference of means, per the module docstring
     se = floor_sd * math.sqrt(1 / len(arm) + 1 / len(inc))
     margin = float(np.mean(inc) - np.mean(arm))  # >0 arm is better
     return {"n_arm": len(arm), "n_incumbent": len(inc), "arm_mean": float(np.mean(arm)),
@@ -77,6 +84,7 @@ def main():
     p.add_argument("--out-dir", required=True)
     args = p.parse_args()
 
+    # per-seed norm/exposure stats, then the ledger bar against the incumbent
     arm = f"{args.stage}_{args.config}"
     stats = pd.read_csv(args.stats_csv)[["embedding_index", "log_prior_pa", "stratum"]]
     per_seed = {s: norm_exposure(w, stats)
@@ -90,6 +98,7 @@ def main():
         "spread_passes": bool(all(d["spread"]["low"] <= d["spread"]["high"] for d in seeds)),
         "reference_bar": bar,
     }
+    # overall pass = slope >= 0 on every seed, low-stratum norm sd <= high-stratum on every seed, and the ledger bar
     out["passes"] = bool(out["slope_passes"] and out["spread_passes"] and bar["passes"])
     Path(args.out_dir).mkdir(parents=True, exist_ok=True)
     path = Path(args.out_dir) / f"embedding_norm_check_{arm}.json"

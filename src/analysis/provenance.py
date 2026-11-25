@@ -53,6 +53,7 @@ def stamp(data_dir, arm=None, seeds=None, eval_season=None, **extra):
     Returns a JSON-serializable dict for the artifact's `provenance` key.
     """
     manifest = json.loads((Path(data_dir) / "manifest.json").read_text())
+    # Provenance block: which build (manifest hash), checkpoints and code revision produced the artifact.
     block = {
         "data_dir": str(data_dir),
         "manifest_sha256": manifest_digest(data_dir),
@@ -87,6 +88,7 @@ def assert_quality_bins(data_dir, reference_data_dir=CANONICAL_DATA_DIR):
         f"expected edges for {QUALITY_ARRAYS}, found {sorted(edges)}"
     reference = json.loads(
         (Path(reference_data_dir) / "manifest.json").read_text())["quality_bin_edges"]
+    # Compare each quality-bin edge array to the trained build's; a mismatch would mis-bin batted balls.
     for name in QUALITY_ARRAYS:
         assert edges[name] == reference[name], (
             f"{data_dir} has different {name} bin edges than {reference_data_dir}, which is "

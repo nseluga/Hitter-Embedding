@@ -44,8 +44,11 @@ def sweep(pa_df, predictions, eval_season, label, seed=0,
     over, because the whole question is whether the verdict is a property of the model or of
     the frame.
     """
+    # pa_df: PA-level eval targets; predictions: {name: prediction table} for every model
+    # compared; label: key in `predictions` of the model being scored (model_v1 side).
     rows, verdicts = [], {}
     for threshold in thresholds:
+        # rebuild every model's eval frame under this threshold; predictions are reused as-is
         frames = {name: evaluation.build_eval_frame(pa_df, prediction, eval_season,
                                                     min_eval_pa=threshold)[0]
                   for name, prediction in predictions.items()}
@@ -54,6 +57,8 @@ def sweep(pa_df, predictions, eval_season, label, seed=0,
         comparisons.insert(0, "min_eval_pa", threshold)
         rows.append(comparisons)
 
+        # reduce the paired comparison to one gate verdict per stratum: RMSE gate is against
+        # gbm_full only, the ordering gate must hold against every opponent in the table
         per_stratum = {}
         for stratum in sorted(comparisons["stratum"].unique()):
             gate = comparisons[comparisons["stratum"] == stratum]
@@ -74,6 +79,7 @@ def sweep(pa_df, predictions, eval_season, label, seed=0,
             }
         verdicts[str(threshold)] = per_stratum
 
+    # all thresholds stacked into one long table (column `min_eval_pa` tells them apart)
     table = pd.concat(rows, ignore_index=True)
     # the sweep passes only if the DECISIVE stratum's verdict is the same at every threshold.
     # A verdict that flips is not a weaker claim, it is a claim about the filter.
@@ -89,6 +95,11 @@ def sweep(pa_df, predictions, eval_season, label, seed=0,
 
 
 def main():
+    """
+    CLI driver: rebuilds the baseline predictions, adds the model_v1 predictions CSV under
+    `--label`, runs `sweep`, and writes the comparison table (CSV) and verdict (JSON) to
+    `--out-dir`. Refuses the test season unless `--final-run`.
+    """
     parser = argparse.ArgumentParser(description="E.11b — MIN_EVAL_PA sweep on the D/E headline.")
     parser.add_argument("--predictions",
                         default="results/model_v1/model_v1_predictions_clean_clean_dim64.csv")
@@ -102,12 +113,14 @@ def main():
     args = parser.parse_args()
 
     evaluation.assert_not_test_season(args.eval_season, final_run=args.final_run)
+    # baseline comparators are refit/rebuilt the same way the Phase C report builds them
     pa_df = baseline_ladder_report.load_targets(args.eval_targets)
     params, _, _ = baseline_ladder_report.fit_and_describe(pa_df, args.eval_season, args.seed)
     process_seasons = gbm.season_process(
         pd.read_parquet(args.pitch_events, columns=baseline_ladder_report.PITCH_COLUMNS))
     predictions, _ = baseline_ladder_report.build_predictions(pa_df, args.eval_season, params,
                                                 process_seasons, seed=args.seed)
+    # the model under test joins the baselines in the same {name: prediction} dict
     predictions[args.label] = model_v1_ablation_report.load_predictions(args.predictions)
 
     table, verdict = sweep(pa_df, predictions, args.eval_season, args.label, seed=args.seed)

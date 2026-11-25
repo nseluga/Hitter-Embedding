@@ -180,6 +180,7 @@ def observed_seam(frame, bins, pa_df, groups, eval_season, weights):
     an in-play pitch is MEASURED when all three quality bins are present, and the split is
     counted over pitches whose plate appearance joins to a wOBA category.
     """
+    # restrict PA rows to eval-season denominator PAs of the matched (batter, p_throws) groups
     matched = eval_targets.drop_pitcher_batters(pa_df)
     matched = matched[(matched["season"].to_numpy() == eval_season)
                       & matched["in_denominator"].to_numpy()]
@@ -189,11 +190,14 @@ def observed_seam(frame, bins, pa_df, groups, eval_season, weights):
     assert not matched.duplicated(subset=qt.JOIN_KEYS).any(), \
         "a plate-appearance key appears twice in the matched population"
 
+    # frame/bins are pitch-level, row-aligned: bins[name] [N]: bin index per pitch, MASKED when
+    # Statcast has no reading. outcome maps a PA key to its wOBA category.
     outcome = matched.set_index(qt.JOIN_KEYS)["woba_category"]
     scored = ((bins["ev"] != MASKED) & (bins["la"] != MASKED) & (bins["spray"] != MASKED))
     in_play = ((frame["description"].to_numpy() == qt.IN_PLAY_DESCRIPTION)
                & (frame["season"].to_numpy() == eval_season))
 
+    # counts[name] [len(BIP_CLASSES)]: in-play pitches per outcome class, split measured/unmeasured
     counts = {}
     for name, mask in (("measured", in_play & scored), ("unmeasured", in_play & ~scored)):
         rows = np.flatnonzero(mask)
@@ -205,6 +209,7 @@ def observed_seam(frame, bins, pa_df, groups, eval_season, weights):
     n_measured, n_unmeasured = counts["measured"].sum(), counts["unmeasured"].sum()
     assert n_measured > 0 and n_unmeasured > 0, \
         "one side of the measured split is empty on the matched population"
+    # wOBA points per outcome class under the eval-season weights (identity input -> one row per class)
     values = qt.woba_points_table(np.eye(len(qt.BIP_CLASSES)), weights)
     return {
         "n_measured": int(n_measured), "n_unmeasured": int(n_unmeasured),
@@ -237,6 +242,8 @@ def fit_two_v_tables(frame, bins, pa_df, manifest, eval_season):
     Returns {name: (table, cell_counts, n_joined)} with the tables as CATEGORY probabilities,
     exactly the shape `query.predict` collapses under the eval season's weights.
     """
+    # frame: pitch-level table; bins[name] [N]: ev/la/spray bin index per pitch. Output tables are
+    # [n_bins, n_bins, n_bins, len(BIP_CLASSES)]: (ev, la, spray) bin -> class probabilities.
     train_seasons = manifest["train_seasons"]
     assert eval_season not in train_seasons, \
         f"{eval_season} is inside the train seasons; there would be no train/eval contrast"
@@ -244,6 +251,7 @@ def fit_two_v_tables(frame, bins, pa_df, manifest, eval_season):
         "the manifest does not carry the three quality bin edge sets"
     n_bins = manifest["n_quality_bins"]
 
+    # one boolean row-mask per side of the train-vs-2024 contrast
     season = frame["season"].to_numpy()
     masks = {"train": np.isin(season, train_seasons), "obs": season == eval_season}
     out = {}
@@ -266,6 +274,11 @@ def fit_two_v_tables(frame, bins, pa_df, manifest, eval_season):
 
 
 def main():
+    """
+    CLI driver for E.13: loads the tensor build in `--data-dir`, the arm's predictions and the
+    E.3 report; runs Check B (two V fits), then Check A (measured-share seam); writes
+    `bip_value_bip_value_by_bin.csv` and `bip_value_bip_value.json` to `--out-dir`.
+    """
     parser = argparse.ArgumentParser(
         description="Phase E.13 — who owns the balls-in-play value gap.")
     parser.add_argument("--arm", default="embedding_sgd_sgd_lr1")
@@ -315,6 +328,7 @@ def main():
     assert abs(np.asarray(fits["train"][3]["categories"]) @ values
                - TRAIN_UNMEASURED_POINTS) < 1e-12, \
         "this build does not reproduce the train unmeasured-value constant the D.10 run applied"
+    # points[name] [n_bins]^3: E[wOBA points | bin]; mass[name] [n_bins]^3: P(bin), sums to 1
     points = {name: fits[name][0] @ values for name in fits}
     mass = {name: fits[name][1] / fits[name][1].sum() for name in fits}
     drift = drift_terms(points["train"], points["obs"], mass["train"], mass["obs"])
@@ -341,6 +355,7 @@ def main():
                          "conditional_contribution": float(contribution[ev, la].sum())})
     pd.DataFrame(rows).to_csv(out_dir / "bip_value_bip_value_by_bin.csv", index=False)
 
+    # the two checks are summed against the gap; what is left is reported as unexplained
     explained = attribution["total"] + drift["conditional_drift"]
     residual = gap - explained
     report = {

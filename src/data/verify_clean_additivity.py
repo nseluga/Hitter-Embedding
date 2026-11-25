@@ -35,6 +35,7 @@ def compare(baseline, rebuilt):
     Returns (ok, findings, added). `baseline` is the table on disk, `rebuilt` the fresh pass.
     Findings are strings; an empty list is the pass condition.
     """
+    # added columns are expected and allowed; only changes to pre-existing columns are findings
     findings = []
     added = [c for c in rebuilt.columns if c not in baseline.columns]
 
@@ -47,6 +48,7 @@ def compare(baseline, rebuilt):
         # every per-column comparison below is meaningless once the lengths differ
         return False, findings, added
 
+    # compare each pre-existing column for dtype and exact values, in row order
     shared = [c for c in baseline.columns if c in rebuilt.columns]
     for column in shared:
         left, right = baseline[column], rebuilt[column]
@@ -75,6 +77,7 @@ def _self_check():
 
 
 def main():
+    """CLI: rebuild the table from the snapshot, compare to the baseline, return the exit code (0, 1 or 2)."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("--snapshot-dir", default="data/raw/statcast/snapshot_2026-07-14")
     parser.add_argument("--baseline", default="data/processed/pitch_events.parquet",
@@ -98,6 +101,7 @@ def main():
     print(f"baseline: {len(baseline)} rows, {len(baseline.columns)} columns "
           f"from {baseline_path}")
 
+    # fresh cleaning pass over the same snapshot, with the widened RETAIN_COLUMNS
     rebuilt, report = clean.clean(args.snapshot_dir, args.seasons)
     print(f"rebuilt:  {len(rebuilt)} rows, {len(rebuilt.columns)} columns")
 

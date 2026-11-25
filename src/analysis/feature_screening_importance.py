@@ -67,20 +67,26 @@ def feature_groups(params):
     optional continuous travels with its own missingness flag (you cannot keep the
     value without the flag). Permutation shuffles a whole group's columns jointly,
     so a one-hot block stays a valid one-hot after permutation.
+
+    Returns {group name: list of column indices into the [N, 48] context matrix}.
     """
+    # name -> column index in the context vector, so groups can be built from names.
     names = cf.feature_names(params)
     idx = {n: i for i, n in enumerate(names)}
     groups = {}
+    # Core continuous: one column each. Optional continuous: value + its missingness flag.
     for c in cf.CORE_CONTINUOUS:
         groups[c] = [idx[c]]
     for c in cf.OPTIONAL_CONTINUOUS:
         groups[c] = [idx[c], idx[f"{c}_missing"]]
+    # Spin axis is encoded as sin, cos (circular) plus a missingness flag; one-hot blocks are grouped by name prefix.
     groups["spin_axis"] = [idx["spin_axis_sin"], idx["spin_axis_cos"], idx["spin_axis_missing"]]
     groups["pitch_type"] = [i for n, i in idx.items() if n.startswith("pitch_type=")]
     groups["p_throws"] = [i for n, i in idx.items() if n.startswith("p_throws=")]
     groups["stand"] = [i for n, i in idx.items() if n.startswith("stand=")]
     groups["count"] = [i for n, i in idx.items() if n.startswith("balls=") or n.startswith("strikes=")]
 
+    # Every column must belong to exactly one group, or importance would be double-counted or lost.
     covered = sorted(i for cols in groups.values() for i in cols)
     assert covered == list(range(len(names))), "feature groups do not partition the 48 columns"
     return groups
@@ -91,6 +97,9 @@ def head_target(df, head):
     The row mask and target vector for one head, honoring the §1.2 nesting.
     swing: all pitches. whiff: swings only, y=1 on a miss. ev/la/spray: in-play
     rows where that measurement is present (spray already clip-nulled in labels).
+
+    df: labeled pitch table (one row per pitch). Returns (mask [N] bool of rows
+    the head sees, y [mask.sum()] float32 target aligned to the masked rows).
     """
     if head == "swing":
         mask = df["swing"].notna()
@@ -109,11 +118,15 @@ def fit_head(X_tr, y_tr, X_val, y_val, task, seed=0):
     Train one XGBoost head, early-stopped on VAL (that is the 'tuned on val' step).
     Light fixed hyperparameters — this is a triage screen, not a tuned competitor;
     a full sweep would over-fit the screen to VAL and burn budget for no decision.
+
+    X_* [N, 48]: context vectors; y_*: targets [N]; task "clf" or "reg".
     """
+    # Shared settings; early_stopping_rounds stops adding trees once VAL loss stalls for 30 rounds.
     common = dict(n_estimators=600, max_depth=6, learning_rate=0.05,
                   subsample=0.8, colsample_bytree=0.8, min_child_weight=5,
                   tree_method="hist", n_jobs=-1, random_state=seed,
                   early_stopping_rounds=30)
+    # Binary heads use logistic loss; continuous heads use squared error.
     if task == "clf":
         model = xgb.XGBClassifier(objective="binary:logistic", eval_metric="logloss", **common)
     else:
@@ -135,6 +148,7 @@ def base_rate_metric(y, task):
     The metric of the trivial predictor (base rate for a classifier, mean for a
     regressor). The model must beat this on VAL — the loss-scale sanity gate.
     """
+    # Clip the base rate away from 0/1 so log-loss stays finite.
     if task == "clf":
         p = float(np.clip(y.mean(), 1e-6, 1 - 1e-6))
         return float(log_loss(y, np.full(len(y), p), labels=[0, 1]))
@@ -147,6 +161,9 @@ def permutation_importance(model, X, y, groups, task, seed=0, n_repeats=PERM_REP
     group's columns jointly across rows and measure how much the primary metric
     worsens. Returns {group: (mean_increase, std_increase)}. A joint row shuffle
     keeps one-hot blocks valid and measures the group's combined contribution.
+
+    X [N, 48]: held-out context rows; y [N]; groups {name: column indices}.
+    Note: the returned tuple is (baseline metric, {group: (mean, std)}).
     """
     rng = np.random.default_rng(seed)
     baseline = _metric(model, X, y, task)
@@ -154,6 +171,7 @@ def permutation_importance(model, X, y, groups, task, seed=0, n_repeats=PERM_REP
     for name, cols in groups.items():
         deltas = []
         for _ in range(n_repeats):
+            # Shuffle the group's rows jointly, leaving other columns intact, to break its link to y.
             Xp = X.copy()
             perm = rng.permutation(len(X))
             Xp[:, cols] = X[np.ix_(perm, cols)]
@@ -167,6 +185,8 @@ def shap_importance(model, X_sample, groups):
     Mean |SHAP| per group on a small VAL sample (TreeExplainer is exact and fast
     for trees). Complements permutation with per-feature attribution; grouped by
     summing column contributions so it is comparable to the permutation ranking.
+
+    X_sample [S, 48]: S held-out rows. Returns {group: summed mean |SHAP|}.
     """
     explainer = shap_explainer(model)
     vals = explainer.shap_values(X_sample)
@@ -185,6 +205,8 @@ def screen_head(df_ctx, X_all, params, splits, head, seed=0):
     Run the full screen for one head and return its result dict: held-out metric,
     base-rate metric, and the permutation + SHAP importance tables. df_ctx carries
     the label columns aligned row-for-row with X_all (the vectorized context).
+
+    X_all [N, 48]: context vectors for N pitches; splits: frozen season split config.
     """
     task = HEADS[head]["task"]
     groups = feature_groups(params)
@@ -192,12 +214,14 @@ def screen_head(df_ctx, X_all, params, splits, head, seed=0):
     train_seasons = set(splits["split"]["train"])
     val_seasons = set(splits["split"]["val"])
 
+    # Rows this head sees, then those rows split by season into train / val (test is never selected).
     mask, y = head_target(df_ctx, head)
     in_train = mask & np.isin(season, list(train_seasons))
     in_val = mask & np.isin(season, list(val_seasons))
     # split-boundary gate: this head touches only train/val seasons, never test
     used = set(np.unique(season[in_train | in_val]).tolist())
     assert used.issubset(train_seasons | val_seasons), f"{head}: selected a non-train/val season {used}"
+    # y is already restricted to mask rows, so its season filter indexes season[mask] to stay aligned with X_all[in_*].
     X_tr, y_tr = X_all[in_train], y[np.isin(season[mask], list(train_seasons))]
     X_val, y_val = X_all[in_val], y[np.isin(season[mask], list(val_seasons))]
 
@@ -209,9 +233,11 @@ def screen_head(df_ctx, X_all, params, splits, head, seed=0):
     Xv, yv = X_val[take], y_val[take]
 
     baseline, perm = permutation_importance(model, Xv, yv, groups, task, seed=seed)
+    # SHAP is slower than permutation, so it uses only the first SHAP_SAMPLE of the same subsample.
     shap_take = take[:min(SHAP_SAMPLE, len(take))]
     shap_vals = shap_importance(model, X_val[shap_take], groups)
 
+    # perm_norm = metric increase as a fraction of the baseline metric, comparable across heads.
     return {
         "head": head,
         "task": task,
@@ -246,6 +272,7 @@ def decision_table(results, keep_frac=0.01):
     """
     groups = list(results[0]["importance"].keys())
     rows = []
+    # For each group, collect its normalized permutation importance on every head.
     for g in groups:
         norms = {r["head"]: r["importance"][g]["perm_norm"] for r in results}
         best = max(norms.values())
@@ -263,7 +290,10 @@ def load_context(labeled_path, params):
     """
     Load the labeled table, vectorize its context with the train-fit params, and
     return (df with labels+season, X). X rows align with df rows one-for-one.
+
+    X [N, 48]: N pitches, 48 context columns (see feature_groups).
     """
+    # Only read the columns the vectorizer and head targets need; dict.fromkeys dedupes preserving order.
     need = list(dict.fromkeys(
         cf.STANDARDIZED + cf.CIRCULAR + cf.CATEGORICAL
         + ["season", "swing", "contact", "ev", "la", "spray"]
@@ -279,6 +309,7 @@ def _run_gates(df, X, params, splits):
     recorded. Config split-boundary disjointness + a decode-a-batch eyeball so a
     join or feature/label misalignment shows up against the source rows.
     """
+    # Season splits must not overlap, and the sealed test season must not touch train/val.
     tr, va, te = (set(splits["split"][k]) for k in ("train", "val", "test"))
     assert tr.isdisjoint(va), "train/val season overlap"
     assert te.isdisjoint(tr | va), "test season leaks into train/val"
@@ -296,6 +327,7 @@ def run_screen(labeled_path, params_path, out_dir, splits, seed=0, max_rows=None
     """Orchestrate all five heads; write per-head importance CSVs + the decision table."""
     params = cf.load_params(params_path)
     df, X = load_context(labeled_path, params)
+    # Optional random row subsample (sorted to keep original order) for quick smoke runs.
     if max_rows is not None and len(df) > max_rows:  # smoke path only
         keep = np.random.default_rng(seed).permutation(len(df))[:max_rows]
         keep.sort()
@@ -306,6 +338,7 @@ def run_screen(labeled_path, params_path, out_dir, splits, seed=0, max_rows=None
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     results = []
+    # Fit and score each head, writing its importance table; "beats" = model beats the trivial base-rate predictor on VAL.
     for head in HEADS:
         res = screen_head(df, X, params, splits, head, seed=seed)
         results.append(res)

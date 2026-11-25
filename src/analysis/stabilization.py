@@ -72,6 +72,7 @@ def reliability_at(groups, metric_fn, n, rng, n_resamples=1, split="random"):
     projection-relevant number (Carleton, "Reliably Stable"). n_resamples>1 only
     affects "random"; "sequential" is deterministic so it runs a single split.
     """
+    # Each qualifying hitter (>= n observations) contributes two disjoint halves of n//2 observations.
     half = n // 2
     qualifying = [g for g in groups.values() if len(g) >= n]
     if half < 1 or len(qualifying) < 2:
@@ -142,6 +143,7 @@ def variance_components(stats):
     within-hitter variance. signal_var is clamped at 0 (a negative moment estimate
     means the signal is indistinguishable from zero). nan if under 2 usable hitters.
     """
+    # Unpack per-hitter counts, means and within sums of squares.
     n_i = stats["n"].to_numpy(dtype=float)
     mean_i = stats["mean"].to_numpy(dtype=float)
     ss_i = stats["ss"].to_numpy(dtype=float)
@@ -150,6 +152,7 @@ def variance_components(stats):
     if k < 2 or total <= k:  # need >1 hitter and some within-hitter df
         return np.nan, np.nan
 
+    # One-way random-effects ANOVA, method of moments: msw estimates noise, msb = noise + n0*signal, n0 is the effective group size for unequal groups.
     grand_mean = float((n_i * mean_i).sum() / total)
     ssw = float(ss_i.sum())
     ssb = float((n_i * (mean_i - grand_mean) ** 2).sum())
@@ -221,6 +224,7 @@ def stabilization_point(curve, threshold=0.5):
 
 
 def _fmt(x, unit):
+    """Format an estimate with its unit, or 'not reached' for nan/inf."""
     if not np.isfinite(x):
         return "not reached"
     return f"{x:.0f} {unit}"
@@ -247,6 +251,7 @@ def _report(label, df, value_col, unit, seed, resamples):
 
 
 def main():
+    """Runs the Phase B panel on train seasons: process metrics (swing, whiff, EV, LA, spray) and side-specific wOBA, each reported by `_report`."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Run the Phase B stabilization panel: process vs. outcome metrics on train seasons.")
@@ -257,13 +262,16 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
+    # Restrict to train seasons (<= --max-train-season) so no eval-season data shapes the stabilization numbers.
     train = lambda d: d[d["season"] <= args.max_train_season]
 
     # process metrics, one per model head, each in its natural observation unit
     labeled = pd.read_parquet(args.labeled, columns=["batter", "season", "p_throws", "swing", "contact", "ev", "la", "spray"])
     labeled = train(labeled)
+    # Whiff rate is defined per swing: swings with no contact.
     swings = labeled[labeled["swing"] == 1].copy()
     swings["whiff"] = (swings["contact"] == 0).astype(float)
+    # Exit velocity / launch angle exist only for balls in play; spray only where a direction is recorded.
     in_play = labeled[labeled["ev"].notna()]
     sprayed = labeled[labeled["spray"].notna()]
 
@@ -281,6 +289,7 @@ def main():
 
     # outcome metric: side-specific wOBA, each pitcher hand (denominator PAs only)
     pa = train(pd.read_parquet(args.eval_targets, columns=["batter", "season", "p_throws", "woba_points", "in_denominator"]))
+    # wOBA is a ratio over its denominator PAs, so keep only those and average woba_points.
     pa = pa[pa["in_denominator"] == 1]
     for hand, hand_label in [("L", "vs LHP"), ("R", "vs RHP")]:
         _report(f"wOBA {hand_label} (per PA) -> outcome", pa[pa["p_throws"] == hand], "woba_points", "PA", args.seed, args.resamples)

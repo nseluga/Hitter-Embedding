@@ -79,6 +79,7 @@ def bin_centres(edges):
     natural centre, so they extrapolate the adjacent gap outward -- documented per the task
     spec's "if only edges exist, use midpoints" instruction.
     """
+    # edges are the K-1 interior cut points between the K quality bins
     edges = np.asarray(edges, dtype="float64")
     interior = (edges[:-1] + edges[1:]) / 2.0
     first = edges[0] - (edges[1] - edges[0]) / 2.0
@@ -90,6 +91,8 @@ def sample_reference_context(tensors, manifest, n=N_REFERENCE_PITCHES, seed=REFE
     """
     A fixed seeded sample of n pitch-row indices restricted to training seasons. Returns
     the sorted index array; deterministic under the seed so every head reuses the same set.
+    tensors: dict of per-pitch tensors (needs "season" [N pitches]). manifest: data manifest
+    with "train_seasons". Returns int array [n] of row indices into the N pitches.
     """
     train_seasons = set(manifest["train_seasons"])
     assert max(train_seasons) <= 2023, "reference set must draw from training seasons only"
@@ -106,41 +109,60 @@ def head_marginals_for_hitters(model, hitter_ids, reference_context, centres, n_
     Averages the six per-pitch head outputs over `reference_context` for each id in
     `hitter_ids`. reference_context: (n, n_context) fixed pitch rows. Returns a dict of
     arrays, one entry per HEAD_MARGINALS name, each length len(hitter_ids).
+    hitter_ids [H]: embedding indices (1..1762). centres: dict axis ("ev","la","spray") ->
+    [n_bins] bin centres. n_bins: K quality bins per axis. Each hitter is paired with every
+    reference pitch (H*n rows), so a head's output differs between hitters only through
+    the hitter embedding, not through the pitch context.
+    Shapes below: rows = H*n pitch-hitter pairs, K_e/K_l/K_s = EV/LA/spray bins.
     """
     n_ref = reference_context.shape[0]
     n_hit = len(hitter_ids)
     ev_centre = torch.from_numpy(centres["ev"]).float()
     la_centre = torch.from_numpy(centres["la"]).float()
+    # spray_kernels contracts a [K,K,K] "points" table (normally wOBA points per
+    # EV/LA/spray triple); passing the spray bin centre there makes it return the
+    # expected spray angle instead of expected wOBA
     spray_centre_points = torch.from_numpy(
         np.broadcast_to(centres["spray"], (n_bins, n_bins, n_bins)).copy()).float()
 
     with torch.no_grad():
         weighted, kernel = spray_kernels(model, spray_centre_points, n_bins)
+        # every hitter repeated n_ref times, against the same reference pitches tiled H times
         hitter_tensor = torch.as_tensor(hitter_ids, dtype=torch.long).repeat_interleave(n_ref)
         context_tensor = reference_context.repeat(n_hit, 1)
         trunk = _trunk(model, hitter_tensor, context_tensor)
         hidden = trunk.shape[1]
 
+        # swing/contact are binary heads (sigmoid); split is a softmax over outcome classes
         swing = torch.sigmoid(model.head_swing(trunk).squeeze(-1))
         contact = torch.sigmoid(model.head_contact(trunk).squeeze(-1))
         split_inplay = torch.softmax(model.head_split(trunk), dim=1)[:, IN_PLAY_INDEX]
 
+        # The LA and spray heads are linear on [trunk | one-hot of EV bin (| one-hot of LA
+        # bin)]. Multiplying a one-hot by the weight matrix just selects a column, so the
+        # trunk part is computed once and the per-bin columns are added for every bin,
+        # giving the full EV/LA (and spray) conditional without looping over bins.
         p_ev = torch.softmax(model.head_ev(trunk), dim=1)                       # (rows, K)
         base_la = trunk @ model.head_la.weight[:, :hidden].T + model.head_la.bias
         column_la = model.head_la.weight[:, hidden:].T                          # (K_e, K_l)
         p_la = torch.softmax(base_la.unsqueeze(1) + column_la.unsqueeze(0), dim=-1)  # (rows,K_e,K_l)
 
+        # spray expectation per (EV bin, LA bin): softmax-weighted mean of spray-bin centres
+        # (numerator/denominator, max-shifted for numerical stability)
         base_spray = trunk @ model.head_spray.weight[:, :hidden].T + model.head_spray.bias
         scaled = torch.exp(base_spray - base_spray.amax(dim=1, keepdim=True))
         numerator = scaled @ weighted.T
         denominator = scaled @ kernel.T
         spray_expect = (numerator / denominator).reshape(-1, n_bins, n_bins)    # (rows,K_e,K_l)
 
+        # collapse bin distributions to scalars: EV = E[centre]; LA and spray are averaged
+        # over the model's own predicted EV (and LA) bin distribution
         ev = p_ev @ ev_centre
         la_given_e = p_la @ la_centre                                           # (rows, K_e)
         la = (p_ev * la_given_e).sum(dim=1)
         spray = torch.einsum("me,mel,mel->m", p_ev, p_la, spray_expect)
 
+        # per-pitch values -> one mean per hitter across the reference pitches
         rows = {"swing": swing, "contact": contact, "split_inplay": split_inplay,
                 "ev": ev, "la": la, "spray": spray}
         out = {name: value.reshape(n_hit, n_ref).mean(dim=1).numpy()
@@ -149,7 +171,10 @@ def head_marginals_for_hitters(model, hitter_ids, reference_context, centres, n_
 
 
 def compute_head_marginals(model, hitter_ids, reference_context, manifest, batch=HITTER_BATCH):
-    """Batches `head_marginals_for_hitters` over all hitters, HITTER_BATCH at a time."""
+    """
+    Batches `head_marginals_for_hitters` over all hitters, `batch` at a time (bounds memory,
+    since each hitter expands to n_ref rows). Returns dict HEAD_MARGINALS name -> [H] array.
+    """
     n_bins = manifest["n_quality_bins"]
     centres = {axis: bin_centres(edges) for axis, edges in manifest["quality_bin_edges"].items()}
     chunks = []
@@ -160,7 +185,7 @@ def compute_head_marginals(model, hitter_ids, reference_context, manifest, batch
 
 
 def ols_residualise(y, x):
-    """Residuals of y after regressing on x plus an intercept (pairwise-complete)."""
+    """Residuals of y after regressing on x plus an intercept. y, x: [n] arrays with no NaNs (callers mask first)."""
     design = np.column_stack([np.ones_like(x), x])
     coefficients, *_ = np.linalg.lstsq(design, y, rcond=None)
     return y - design @ coefficients
@@ -172,6 +197,7 @@ def paired_pearson(a, b, confound=None):
     are residualised on it first (partial correlation), still pairwise-complete.
     Returns (r, n).
     """
+    # drop any hitter missing a value in a, b (or the confound)
     mask = np.isfinite(a) & np.isfinite(b)
     if confound is not None:
         mask &= np.isfinite(confound)
@@ -187,7 +213,10 @@ def paired_pearson(a, b, confound=None):
 
 
 def bootstrap_ci_partial(a, b, confound, n_boot=N_BOOT, seed=BOOT_SEED):
-    """95% percentile bootstrap CI on the partial Pearson r, resampling hitters (rows)."""
+    """
+    95% percentile bootstrap CI on the partial Pearson r, resampling hitters (rows).
+    a, b, confound [n hitters]. Returns (point r, ci_low, ci_high, n after dropping NaNs).
+    """
     mask = np.isfinite(a) & np.isfinite(b) & np.isfinite(confound)
     a, b, confound = a[mask], b[mask], confound[mask]
     rng = np.random.default_rng(seed)
@@ -216,6 +245,7 @@ def get_or_compute_pca_coords(hitters, out_dir, checkpoint=None):
         assert len(pc_cols) >= 2, f"{path} has no pc columns"
         return coords, sorted(pc_cols, key=lambda c: int(c[2:])), False
 
+    # fallback: PCA on the trained rows (row 0 is the cold-start vector, excluded)
     saved = torch.load(checkpoint or DEFAULT_CHECKPOINT, map_location="cpu", weights_only=False)
     embedding = saved["model"]["embedding.weight"].numpy().astype("float64")[1:]
     centered = embedding - embedding.mean(axis=0)
@@ -235,6 +265,7 @@ def head_partial_loadings(merged):
     hitters). merged must already carry the head marginal, stat, and log_prior_pa columns
     (e.g. the output of `build_loadings`'s merge).
     """
+    # log prior PA is partialled out because exposure drives both embeddings and stats
     confound = merged["log_prior_pa"].values.astype("float64")
     rows = []
     for head in HEAD_MARGINALS:
@@ -252,6 +283,7 @@ def fig_head_partial_heatmap(frame, path):
     Heatmap: rows = HEAD_MARGINALS, columns = STAT_VARIABLES, cell = partial r
     (partialled on log prior PA). Cells whose CI excludes zero are marked with a dot.
     """
+    # three aligned grids: the r value and the CI bounds that decide the significance mark
     pivot = frame.pivot(index="head", columns="stat", values="r_partial").reindex(
         index=HEAD_MARGINALS, columns=STAT_VARIABLES)
     lo_pivot = frame.pivot(index="head", columns="stat", values="ci_low").reindex(
@@ -281,7 +313,12 @@ def fig_head_partial_heatmap(frame, path):
 
 
 def build_loadings(coords, pc_cols, marginals_df, hitters):
-    """Long-form (pc, variable, r_raw, r_partial, n) over the head marginals + stat panel."""
+    """
+    Long-form (pc, variable, r_raw, r_partial, n): correlation of each of the first four PCs
+    with each head marginal, stat, and log_prior_pa; partial = controlling log prior PA.
+    coords: PC table; marginals_df: head marginals; hitters: stat table (all keyed by
+    batter, embedding_index). Returns (long-form frame, merged per-hitter frame).
+    """
     merged = coords.merge(marginals_df, on=["batter", "embedding_index"]) \
                     .merge(hitters, on=["batter", "embedding_index"], suffixes=("", "_h"))
     variables = HEAD_MARGINALS + STAT_VARIABLES + ["log_prior_pa"]
@@ -299,6 +336,7 @@ def build_loadings(coords, pc_cols, marginals_df, hitters):
 
 
 def fig_loadings(loadings, pc_cols, path):
+    """Saves two heatmaps (raw vs partialled on log prior PA) of PC x variable Pearson r for the first four PCs."""
     pcs = pc_cols[:4]
     variables = HEAD_MARGINALS + STAT_VARIABLES + ["log_prior_pa"]
     raw = loadings.pivot(index="variable", columns="pc", values="r_raw").reindex(
@@ -322,7 +360,10 @@ def fig_loadings(loadings, pc_cols, path):
 
 
 def preregistered_cells(merged):
-    """The two spec V.3 expectation cells: contact-marginal vs contact_rate, EV vs ev_mean."""
+    """
+    The two spec V.3 expectation cells: contact-marginal vs contact_rate, EV vs ev_mean.
+    Verdict is True when the partial r (on log prior PA) is positive and its CI excludes zero.
+    """
     confound = merged["log_prior_pa"].values.astype("float64")
     cells = {"contact_vs_contact_rate": ("contact", "contact_rate"),
              "ev_vs_ev_mean": ("ev", "ev_mean")}
@@ -341,6 +382,11 @@ def preregistered_cells(merged):
 # --------------------------------------------------------------------- V.4
 
 def build_level_query(hitters, predictions_path=None, names_path=None):
+    """
+    Per-hitter table pairing the model's "level query" (mean predicted wOBA over the rows
+    that hitter was queried on in the predictions CSV) with training wOBA level, stratum and
+    log prior PA. Inner-joined, so hitters absent from the predictions are dropped.
+    """
     predictions = pd.read_csv(predictions_path or LEVEL_QUERY_PREDICTIONS_PATH)
     level_query = predictions.groupby("batter")["pred_woba"].mean().rename("level_query")
     names = pd.read_csv(names_path or NAMES_PATH)[["batter", "embedding_index", "name", "stand"]]
@@ -352,6 +398,7 @@ def build_level_query(hitters, predictions_path=None, names_path=None):
 
 
 def fig_level_map(coords, level_query_df, hitters, path):
+    """Saves two PC1/PC2 maps, one coloured by model level query and one by training wOBA level (colour range clipped to 2nd-98th percentile), anchors labelled."""
     merged = coords.merge(level_query_df, on="batter", how="inner")
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.5))
     for ax, column, title in zip(axes, ["level_query", "woba_level"],
@@ -373,7 +420,10 @@ def fig_level_map(coords, level_query_df, hitters, path):
 
 
 def level_query_stats(level_query_df):
-    """Per-stratum + pooled Pearson (raw, partialled on log_prior_pa) with bootstrap CI."""
+    """
+    Per-stratum + pooled Pearson (raw, partialled on log_prior_pa) with bootstrap CI, between
+    level query and training wOBA level. Only the "high" exposure stratum gets a pass/fail verdict.
+    """
     out = {}
     confound_all = level_query_df["log_prior_pa"].values.astype("float64")
     a_all = level_query_df["level_query"].values.astype("float64")
@@ -398,6 +448,7 @@ def level_query_stats(level_query_df):
 # --------------------------------------------------------------------- main
 
 def main():
+    """Computes V.3 head marginals and loadings, then V.4 level-query stats, writing CSVs, JSONs and figures to --out-dir."""
     parser = argparse.ArgumentParser(description="Phase V.3/V.4 -- head fingerprints and level query map.")
     parser.add_argument("--out-dir", default=DEFAULT_OUT_DIR)
     parser.add_argument("--checkpoint", default=DEFAULT_CHECKPOINT)
@@ -414,15 +465,18 @@ def main():
 
     tensors, manifest = loader.load_tensors(args.data_dir)
     n_context = tensors["context"].shape[1]
+    # one checkpoint (seed 0), so the "ensemble" is a single frozen model
     models = load_ensemble([args.checkpoint], manifest, n_context)
     model = models[0]
     assert not model.training, "model must be in eval mode"
 
+    # fixed reference pitches, saved so the run is reproducible
     reference_idx = sample_reference_context(tensors, manifest)
     pd.DataFrame({"row_index": reference_idx}).to_csv(
         out_dir / "reference_context_index.csv", index=False)
     reference_context = tensors["context"][torch.from_numpy(reference_idx)].float()
 
+    # trained hitters = embedding rows >= 1 (row 0 is the shared cold-start vector)
     names = pd.read_csv(args.names)
     hitters = names[names["embedding_index"] >= 1][["batter", "embedding_index"]].sort_values(
         "embedding_index").reset_index(drop=True)

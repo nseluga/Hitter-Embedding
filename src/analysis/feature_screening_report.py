@@ -30,10 +30,15 @@ OUTCOME_COLOR = "#e0574a"
 
 def panel_row(label, df, value_col, unit):
     """Full stabilization panel for one metric: VC point + CI at both thresholds,
-    and split-half random (optimistic) vs sequential (across-time) at 0.5."""
+    and split-half random (optimistic) vs sequential (across-time) at 0.5.
+
+    label: row name; df: observation-level frame (one row per pitch/swing/BBIP/PA);
+    value_col: the metric column; unit: what one row is. Returns a dict (one panel row)."""
+    # Variance-components n* (observations to reach reliability 0.5 and 0.7) with bootstrap CI.
     stats = stab.hitter_stats(df, "batter", value_col)
     p50, lo50, hi50 = stab.stabilization_ci(stats, 0.5, n_boot=N_BOOT, seed=SEED)
     p70, lo70, hi70 = stab.stabilization_ci(stats, 0.7, n_boot=N_BOOT, seed=SEED)
+    # Split-half checks: random halves (optimistic) vs earlier/later halves (reliability across time).
     metric = stab.mean_metric(value_col)
     rand = stab.stabilization_point(stab.stabilization_curve(df, "batter", metric, GRID, seed=SEED, n_resamples=5), 0.5)
     seq = stab.stabilization_point(stab.stabilization_curve(df, "batter", metric, GRID, seed=SEED, split="sequential"), 0.5)
@@ -44,10 +49,14 @@ def panel_row(label, df, value_col, unit):
 
 
 def build_panel(labeled, pa):
+    """One stabilization-panel row per metric (overall and split by pitcher hand).
+    labeled: pitch-level frame; pa: PA-level frame. Returns a DataFrame."""
+    # Each metric is computed on its own population: swings for whiff, balls in play for ev/la, rows with spray for spray.
     swings = labeled[labeled["swing"] == 1].copy()
     swings["whiff"] = (swings["contact"] == 0).astype(float)
     in_play = labeled[labeled["ev"].notna()]
     sprayed = labeled[labeled["spray"].notna()]
+    # Units differ per metric (pitches / swings / BBIP / PA); ranking() later converts them to PA.
     rows = [
         panel_row("swing rate", labeled, "swing", "pitches"),
         panel_row("whiff rate", swings, "whiff", "swings"),
@@ -68,6 +77,7 @@ def conversion_factors(labeled):
     """League-average observations-per-PA on the modeling table, to put each metric's
     native-unit stabilization point on a common PA axis. Approximate: uses pooled
     league rates, not per-hitter rates."""
+    # A PA is one unique (game, at-bat) pair; each factor is count of that observation type / PA count.
     n_pa = labeled.drop_duplicates(["game_pk", "at_bat_number"]).shape[0]
     return {"pitches": len(labeled) / n_pa,
             "swings": labeled["swing"].sum() / n_pa,
@@ -79,6 +89,7 @@ def ranking(panel, factors):
     """Common-PA-axis ranking (#4): convert each metric's VC n*(0.5) to PA-equivalent
     and sort fastest-first. Only the core one-per-head metrics, not the matched cuts."""
     core = ["swing rate", "whiff rate", "exit velocity", "launch angle", "spray angle", "wOBA vs LHP", "wOBA vs RHP"]
+    # Dividing native-unit n* by observations-per-PA gives the PA-equivalent n*.
     rows = []
     for _, r in panel[panel["metric"].isin(core)].iterrows():
         per_pa = factors[r["unit"]]
@@ -126,11 +137,13 @@ def spray_clipping(labeled):
     limit = labels.SPRAY_ABS_MAX
     sprayed = unclipped_spray(labeled)
     extreme = sprayed["spray_raw"].abs() > limit
+    # Three treatments of the near-plate artifact (|spray| > limit): keep, clip to +/-limit, or drop those rows.
     treatments = {
         "unclipped": sprayed.assign(spray=sprayed["spray_raw"]),
         "clipped_90": sprayed.assign(spray=sprayed["spray_raw"].clip(-limit, limit)),
         "dropped_gt90": sprayed[~extreme].assign(spray=sprayed.loc[~extreme, "spray_raw"]),
     }
+    # Same n* estimators as the main panel, applied to each treatment.
     rows = []
     for name, df in treatments.items():
         stats = stab.hitter_stats(df, "batter", "spray")
@@ -141,6 +154,7 @@ def spray_clipping(labeled):
                      "n_hitters": len(stats),
                      "vc_n50": p50, "vc_n50_lo": lo, "vc_n50_hi": hi, "splithalf_random_50": rand})
     table = pd.DataFrame(rows)
+    # Guard against the earlier no-op bug (see unclipped_spray): identical n* means the treatments did not differ.
     assert table["vc_n50"].nunique() > 1, \
         "all three treatments returned the same n* — the check is not measuring anything"
     return table
@@ -150,6 +164,7 @@ def woba_survivorship(pa):
     """wOBA VC stabilization by population floor: shows n* doubling as low-exposure
     hitters are dropped, because restricting to durable regulars halves the signal
     variance. This is why VC (all hitters) and split-half (durable tip) diverge."""
+    # For each pitcher hand, re-estimate n* after dropping hitters below a side-PA floor.
     rows = []
     for hand in ["L", "R"]:
         side = pa[pa["p_throws"] == hand]
@@ -165,6 +180,7 @@ def woba_survivorship(pa):
 
 
 def fig_ranking(rank, path):
+    """Horizontal bars of PA-equivalent n* per metric (from ranking()), colored process vs outcome; saves PNG to path."""
     fig, ax = plt.subplots(figsize=(7, 4))
     colors = [PROCESS_COLOR if k == "process" else OUTCOME_COLOR for k in rank["kind"]]
     ax.barh(rank["metric"], rank["vc_n50_pa_equiv"], color=colors)
@@ -179,6 +195,7 @@ def fig_ranking(rank, path):
 
 
 def fig_survivorship(surv, path):
+    """Grouped bars of wOBA n* by PA floor (0/400/800), one bar per pitcher hand (from woba_survivorship()); saves PNG to path."""
     fig, ax = plt.subplots(figsize=(7, 4))
     floors = [0, 400, 800]
     x = np.arange(len(floors))
@@ -199,6 +216,7 @@ def fig_survivorship(surv, path):
 
 
 def fig_spray(spray, path):
+    """Bars of spray n* for each clipping treatment (from spray_clipping()); saves PNG to path."""
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.bar(spray["treatment"], spray["vc_n50"], color=PROCESS_COLOR)
     for x, v in enumerate(spray["vc_n50"]):
@@ -211,6 +229,7 @@ def fig_spray(spray, path):
 
 
 def main():
+    """Load train-season data, build every table and figure, write them under OUT, and print the tables."""
     os.makedirs(OUT, exist_ok=True)
     labeled = pd.read_parquet("data/processed/pitch_events_labeled.parquet",
                               columns=["batter", "season", "p_throws", "game_pk", "at_bat_number",
@@ -218,6 +237,7 @@ def main():
                                        # source columns for the pre-clip spray angle the
                                        # clipping check rebuilds (see `unclipped_spray`)
                                        "hc_x", "hc_y", "stand", "description"])
+    # Train seasons only (<= MAX_TRAIN_SEASON); later seasons stay unused.
     labeled = labeled[labeled["season"] <= MAX_TRAIN_SEASON]
     pa = pd.read_parquet("data/processed/eval_targets_pa.parquet")
     pa = pa[(pa["season"] <= MAX_TRAIN_SEASON) & (pa["in_denominator"] == 1)]
@@ -229,6 +249,7 @@ def main():
     pa = pa[~pd.MultiIndex.from_arrays([pa["season"], pa["batter"]]).isin(excluded)]
     labeled = labeled[~pd.MultiIndex.from_arrays([labeled["season"], labeled["batter"]]).isin(excluded)]
 
+    # Build all analysis tables, then write CSVs and figures.
     panel = build_panel(labeled, pa)
     factors = conversion_factors(labeled)
     rank = ranking(panel, factors)

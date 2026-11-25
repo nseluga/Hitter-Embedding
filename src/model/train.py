@@ -49,6 +49,8 @@ from src.model import loader
 from src.model.v1 import (DEFAULT_EMBEDDING_DIM, HitterEmbeddingV1, LOSS_RULES,
                           WEIGHTINGS, factor_masks, factorized_loss, weight_decay_groups)
 
+# paths and tracking: mlruns/ is the MLflow file store, DATA_DIR the tensor build, OUT_DIR the
+# benchmark CSV, CHECKPOINT_DIR where the best (or final) model state is saved
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TRACKING_URI = (REPO_ROOT / "mlruns").as_uri()
 DATA_DIR = Path("data/processed/phase_d")
@@ -72,6 +74,8 @@ BATCH_SIZE = 8192
 # the epoch index instead of the epoch count.
 WARMUP_STEPS = 0
 WARMUP_MAX_EPOCHS = 3
+# ReduceLROnPlateau: multiply lr by PLATEAU_FACTOR after PLATEAU_PATIENCE epochs without a
+# validation improvement; stop after EARLY_STOPPING_PATIENCE such epochs or MAX_EPOCHS (spec §5)
 PLATEAU_FACTOR = 0.3
 PLATEAU_PATIENCE = 1
 EARLY_STOPPING_PATIENCE = 3
@@ -80,7 +84,8 @@ MAX_EPOCHS = 50
 
 def run_name(args):
     """
-    Identifies the arm, not just the seed. Two D.8 arms at the same seed and embedding
+    Identifies the arm, not just the seed. args: parsed CLI namespace. Returns the string
+    used for checkpoint file names and MLflow run names. Two D.8 arms at the same seed and embedding
     dimension would otherwise write the same checkpoint file and the second would
     silently overwrite the first, leaving one arm scored against the other's weights.
     """
@@ -107,15 +112,22 @@ def git_commit():
 
 def peak_rss_gb():
     """Peak resident set. macOS reports bytes here, Linux kilobytes."""
+    # ru_maxrss unit differs by OS; a value above 1e7 is read as bytes (macOS), else kilobytes
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return peak / 1e9 if peak > 1e7 else peak / 1e6
 
 
 def scored_rows(labels):
-    """Total rows entering the loss across all five factors -- the loss's denominator."""
+    """
+    Total rows entering the loss across all factors -- the loss's denominator.
+    labels: dict of [B] int64 targets with MASKED where undefined. A pitch counts once per
+    factor it is scored on, so the total can exceed B.
+    """
     return int(sum(int(mask.sum()) for mask in factor_masks(labels).values()))
 
 
+# the yardstick objective: plain likelihood, summed, no class weighting. Passed to run_epoch as
+# `objective` to score any arm on the same quantity (the ledger's `reference`)
 CANONICAL = {"rule": "log", "weighting": "sum", "contact_pos_weight": None}
 
 
@@ -138,6 +150,7 @@ class LinearWarmup:
     """
 
     def __init__(self, optimizer, steps, base_lr=None):
+        # base_lrs: each param group's target rate, captured before the first scaled step
         self.optimizer, self.steps = optimizer, int(steps)
         self.base_lrs = [group["lr"] for group in optimizer.param_groups]
         self.base_lr = self.base_lrs[0] if base_lr is None else base_lr
@@ -145,6 +158,7 @@ class LinearWarmup:
 
     @property
     def done(self):
+        """True once all warmup steps have been taken."""
         return self.step_count >= self.steps
 
     def step(self):
@@ -152,6 +166,7 @@ class LinearWarmup:
         if self.done:
             return
         self.step_count += 1
+        # ramps linearly: 1/steps of base on the first step, reaching base on step `steps`
         scale = self.step_count / self.steps
         for group, base in zip(self.optimizer.param_groups, self.base_lrs):
             group["lr"] = base * scale
@@ -172,10 +187,12 @@ class Optimizers:
         return [group for opt in self.optimizers for group in opt.param_groups]
 
     def zero_grad(self, set_to_none=True):
+        """Clears gradients on every wrapped optimizer."""
         for opt in self.optimizers:
             opt.zero_grad(set_to_none=set_to_none)
 
     def step(self):
+        """Steps every wrapped optimizer."""
         for opt in self.optimizers:
             opt.step()
 
@@ -187,6 +204,7 @@ def real_optimizers(optimizer):
 
 def embedding_group(optimizer):
     """The SGD param group holding the embedding, or None on the single-AdamW default."""
+    # in the two-optimizer layout built by build_optimizer, index 1 is the embedding's SGD
     optimizers = real_optimizers(optimizer)
     return optimizers[1].param_groups[0] if len(optimizers) > 1 else None
 
@@ -204,12 +222,15 @@ def build_optimizer(model, args):
     lr*wd*w, which is exactly what AdamW's decoupled decay subtracts, so WEIGHT_DECAY means
     the same thing on both sides.
     """
+    # args: parsed CLI namespace; returns one torch optimizer, or an `Optimizers` handle
+    # over [trunk AdamW, embedding SGD]
     embedding_decay = embedding_weight_decay(args)
     if args.embedding_optimizer == "adamw":
         assert embedding_decay == WEIGHT_DECAY, \
             "--embedding-weight-decay needs --embedding-optimizer sgd: on the single-AdamW " \
             "path the table shares the trunk's param group and has no decay of its own"
         return torch.optim.AdamW(weight_decay_groups(model, WEIGHT_DECAY), lr=args.lr)
+    # trunk AdamW takes everything except the embedding table
     trunk = torch.optim.AdamW(
         weight_decay_groups(model, WEIGHT_DECAY, exclude=(model.embedding.weight,)),
         lr=args.lr)
@@ -231,7 +252,11 @@ EXPOSURE_DECAY_CAP = 0.1
 
 
 def hitter_exposure(tensors, train_indices, n_rows):
-    """Train pitches per embedding row (row 0 is the reserved index, always 0 here)."""
+    """
+    Train pitches per embedding row (row 0 is the reserved index, always 0 here).
+    tensors["hitter"] [N]: embedding row per pitch; train_indices: rows of the train split.
+    Returns [n_rows] float64 counts.
+    """
     hitter = tensors["hitter"][train_indices]
     counts = torch.bincount(hitter, minlength=n_rows).double()
     counts[RESERVED_HITTER_INDEX] = 0
@@ -239,7 +264,11 @@ def hitter_exposure(tensors, train_indices, n_rows):
 
 
 def exposure_scaled(counts, value, cap):
-    """value * median/n_h per row, capped; rows with no train pitches take the cap."""
+    """
+    value * median/n_h per row, capped; rows with no train pitches take the cap.
+    counts [n_rows]: train pitches per row; median is taken over rows with at least one.
+    Returns [n_rows] float32.
+    """
     seen = counts[counts > 0]
     median = seen.median() if len(seen) else torch.tensor(1.0, dtype=counts.dtype)
     scaled = torch.where(counts > 0, value * median / counts.clamp(min=1), torch.full_like(counts, cap))
@@ -256,10 +285,12 @@ def exposure_decay_hook(model, tensors, train_indices, args):
     """
     weight = model.embedding.weight
     counts = hitter_exposure(tensors, train_indices, weight.shape[0])
+    # [n_rows] per-row decay coefficients
     decay = exposure_scaled(counts, args.embedding_weight_decay_exposure,
                             EXPOSURE_DECAY_CAP)
     decay[RESERVED_HITTER_INDEX] = 0.0   # the reserved row is never decayed, only dropped into
     decay = decay.to(weight.device)[:, None]
+    # the hook adds decay[row] * w to the table's gradient on every backward pass
     weight.register_hook(lambda grad: grad + decay * weight.detach())
     return decay[:, 0]
 
@@ -270,6 +301,7 @@ def hitter_dropout_rates(tensors, train_indices, n_rows, args):
     p = getattr(args, "hitter_dropout", 0.0) or 0.0
     if p <= 0:
         return None
+    # per-row drop probability, capped at 1; [n_rows]
     counts = hitter_exposure(tensors, train_indices, n_rows)
     rates = exposure_scaled(counts, p, 1.0)
     rates[RESERVED_HITTER_INDEX] = 0.0
@@ -279,7 +311,10 @@ def hitter_dropout_rates(tensors, train_indices, n_rows, args):
 def drop_hitters(hitter, rates, generator):
     """Swap a random subset of a batch's hitter ids for the reserved row. The trunk then has
     to carry those pitches on context alone, which is the behaviour the cold-start path
-    needs at inference and the thing a well-exposed row otherwise never teaches it."""
+    needs at inference and the thing a well-exposed row otherwise never teaches it.
+    hitter [B]: embedding row per pitch; rates [n_rows]: drop probability per row.
+    generator: the seeded CPU Generator, so the drops are reproducible. Returns [B]."""
+    # one uniform draw per pitch, compared against that pitch's hitter's rate
     draw = torch.rand(hitter.shape[0], generator=generator)
     mask = (draw < rates[hitter.cpu()]).to(hitter.device)
     return hitter.masked_fill(mask, RESERVED_HITTER_INDEX)
@@ -305,6 +340,7 @@ def warmup_for(optimizer, args, n_train_rows):
     that point warmup would raise the rate the schedule just lowered and the run would be
     on neither schedule while both logged as if it were.
     """
+    # n_train_rows: rows in the train split, to convert the epoch cap into steps
     if args.warmup_steps <= 0:
         return None
     steps_per_epoch = math.ceil(n_train_rows / args.batch_size)
@@ -321,7 +357,7 @@ def warmup_for(optimizer, args, n_train_rows):
 def run_epoch(model, tensors, indices, optimizer, generator, args, on_step=None,
               objective=None, warmup=None, max_steps=None):
     """
-    One pass over `indices`. Returns (loss per scored row, steps, seconds).
+    One pass over `indices` (row indices into `tensors`, one split). Returns (loss per scored row, steps, seconds).
     optimizer=None evaluates instead of training: no grad, no dropout, fixed order.
     objective overrides the arm's own loss settings, which is how the canonical
     yardstick is measured on an arm that trains against something else.
@@ -339,6 +375,7 @@ def run_epoch(model, tensors, indices, optimizer, generator, args, on_step=None,
     drop_rates = (hitter_dropout_rates(tensors, indices, model.embedding.weight.shape[0], args)
                   if training else None)
 
+    # each batch: gather tensors -> (optionally drop hitters) -> forward -> summed loss -> step
     with torch.set_grad_enabled(training):
         for index in loader.batches(indices, args.batch_size, generator=generator,
                                     shuffle=training):
@@ -353,6 +390,7 @@ def run_epoch(model, tensors, indices, optimizer, generator, args, on_step=None,
                 if warmup is not None:
                     warmup.step()
                 optimizer.step()
+            # loss is a SUM over scored rows, so the running total is divided by rows below
             batch_rows = scored_rows(labels)
             total, rows, steps = total + loss.item(), rows + batch_rows, steps + 1
             if on_step is not None:
@@ -360,6 +398,7 @@ def run_epoch(model, tensors, indices, optimizer, generator, args, on_step=None,
             if max_steps is not None and steps >= max_steps:
                 break
 
+    # "mean" weighting already averages inside each batch, so divide by batches, not rows
     denominator = steps if objective["weighting"] == "mean" else rows
     return total / max(denominator, 1), steps, time.time() - started
 
@@ -367,6 +406,7 @@ def run_epoch(model, tensors, indices, optimizer, generator, args, on_step=None,
 def benchmark(model, tensors, indices, optimizer, generator, args):
     """One timed training epoch, no validation. Writes the CSV D.6's decision rests on."""
     per_row, steps, seconds = run_epoch(model, tensors, indices, optimizer, generator, args)
+    # one CSV row: timing, memory and the settings that determine them
     row = {"device": args.device, "secs_per_epoch": round(seconds, 1),
            "secs_per_100_steps": round(100 * seconds / steps, 2),
            "peak_rss_gb": round(peak_rss_gb(), 2), "steps": steps,
@@ -376,6 +416,7 @@ def benchmark(model, tensors, indices, optimizer, generator, args):
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "benchmark.csv"
+    # append, writing the header only when the file is empty
     path.touch()
     with path.open("a", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(row))
@@ -410,6 +451,7 @@ class ReplaySchedule:
 
     def step(self, taken):
         """Call AFTER optimizer.step(), with the total number of steps taken so far."""
+        # fire every cut whose step count has been reached (more than one if steps jumped)
         while self.fired < len(self.cuts) and taken >= self.cuts[self.fired]:
             self.fired += 1
             for group in self.optimizer.param_groups:
@@ -435,8 +477,11 @@ def fit_to_budget(model, tensors, indices, optimizer, generator, args):
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
     checkpoint = CHECKPOINT_DIR / f"{run_name(args)}.pt"
 
+    # loop epochs until the budget is spent; run_epoch's max_steps ends the last epoch mid-way
     taken, epoch, train_loss = 0, 0, float("nan")
     while taken < args.step_budget:
+        # on_step callback: replays lr cuts by global step (`taken` + step within this epoch).
+        # taken/epoch are bound as defaults so each epoch's closure sees its own values
         def log_step(step, loss_per_row, taken=taken, epoch=epoch):
             schedule.step(taken + step)
             mlflow.log_metric("train_loss_per_row", loss_per_row, step=epoch * 10_000 + step)
@@ -457,6 +502,7 @@ def fit_to_budget(model, tensors, indices, optimizer, generator, args):
               f"{seconds:.0f}s ({steps} steps, {taken}/{args.step_budget})", flush=True)
         epoch += 1
 
+    # the budget must be hit exactly and every replayed cut must have fired inside it
     assert taken == args.step_budget, f"took {taken} steps against a budget of {args.step_budget}"
     assert schedule.fired == len(schedule.cuts), (
         f"only {schedule.fired} of {len(schedule.cuts)} lr cuts fired inside the budget; "
@@ -477,7 +523,9 @@ def fit_to_budget(model, tensors, indices, optimizer, generator, args):
 def fit(model, tensors, indices, optimizer, generator, args):
     """
     Train to the plateau schedule and early stopping of §5, both on validation loss.
-    Returns (best validation loss per row, best epoch, checkpoint path).
+    indices: dict of split name -> row indices; args.eval_split names the validation split.
+    Returns (best validation loss per row, best epoch, reference loss at that epoch,
+    checkpoint path). With --step-budget, delegates to fit_to_budget.
     """
     if getattr(args, "step_budget", 0):
         return fit_to_budget(model, tensors, indices, optimizer, generator, args)
@@ -502,7 +550,11 @@ def fit(model, tensors, indices, optimizer, generator, args):
     # serving as one, and dropping it alone would print the line on every later epoch.
     warmup_reported = False
 
+    # per epoch: train, validate, step the plateau schedulers, checkpoint on improvement,
+    # stop after EARLY_STOPPING_PATIENCE epochs without one
     for epoch in range(args.max_epochs):
+        # on_step callback; epoch bound as a default so the closure keeps this epoch's value.
+        # The 10_000 offset keeps each epoch's step indices from overlapping in MLflow
         def log_step(step, loss_per_row, epoch=epoch):
             mlflow.log_metric("train_loss_per_row", loss_per_row,
                               step=epoch * 10_000 + step)
@@ -516,6 +568,7 @@ def fit(model, tensors, indices, optimizer, generator, args):
         train_loss, steps, seconds = run_epoch(model, tensors, indices["train"], optimizer,
                                                generator, args, on_step=log_step,
                                                warmup=warmup)
+        # optimizer=None: validation, no grad, no dropout
         val_loss, _, _ = run_epoch(model, tensors, indices[args.eval_split], None,
                                    None, args)
         # the arm's own objective drives early stopping, but three of the six D.8 arms
@@ -563,6 +616,7 @@ def contact_pos_weight(tensors, train_index):
     D.8 arm). Counting on the full table would read the validation and test seasons
     to set a training constant, which is leakage no loss curve would reveal.
     """
+    # -1 is MASKED: keep only pitches that were swung at, then ratio of negatives to positives
     contact = tensors["contact"][train_index]
     observed = contact[contact != -1]
     positive = int((observed == 1).sum())
@@ -571,12 +625,18 @@ def contact_pos_weight(tensors, train_index):
 
 
 def run(args):
+    """
+    Builds data, model and optimizer from `args`, logs the run to MLflow, then either times
+    one epoch (--benchmark) or trains with `fit`. Returns a dict of the run's headline numbers.
+    """
     tensors, manifest = loader.load_tensors(args.data_dir)
     indices = loader.split_indices(tensors["season"],
                                    load_splits(getattr(args, "split_config", None)
                                                or DEFAULT_SPLIT_CONFIG))
+    # contact positive-class weight, only for the inverse-frequency arm
     args.contact_pos_weight = (contact_pos_weight(tensors, indices["train"]).to(args.device)
                                if args.contact_inverse_frequency else None)
+    # two separate seeds: global torch (initialisation, dropout) and a Generator for batch order
     torch.manual_seed(args.seed)
     generator = torch.Generator().manual_seed(args.seed)
 
@@ -589,6 +649,7 @@ def run(args):
     if getattr(args, "embedding_lr", None) is None:
         args.embedding_lr = args.lr
     optimizer = build_optimizer(model, args)
+    # exposure-scaled embedding decay: install the gradient hook and print the per-row range
     exposure_decay = None
     if getattr(args, "embedding_weight_decay_exposure", None) is not None:
         exposure_decay = exposure_decay_hook(model, tensors, indices["train"], args)
@@ -643,6 +704,7 @@ def run(args):
 
 
 def main():
+    """CLI entry: parses and validates arguments (including the test-season guard), then runs."""
     import argparse
 
     parser = argparse.ArgumentParser(description="Train the Phase D v1 model.")
@@ -716,6 +778,8 @@ def main():
     # an explicit argument and the split is derived FROM it, not from --final-run:
     # deriving it the other way would make this guard a tautology it can never fail.
     config = load_splits(args.split_config or DEFAULT_SPLIT_CONFIG)
+    # canonical: the arm's own loss already is the reference log loss, so `fit` can skip the
+    # extra validation pass
     args.canonical = (args.loss_rule == "log" and args.loss_weighting == "sum"
                       and not args.contact_inverse_frequency)
     if config["split"]["val"]:

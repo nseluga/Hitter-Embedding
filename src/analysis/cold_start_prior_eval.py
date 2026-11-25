@@ -91,6 +91,10 @@ def _align(frame_a, frame_b, key_cols=claim1_eval.KEY):
 
 
 def _compare(label, frame_a, frame_b, n_boot, seed):
+    """
+    Paired RMSE and rank comparison of two eval frames on their shared cold-start groups.
+    Returns (status dict, long table of both metrics or None when not resolvable).
+    """
     cold_a, cold_b = _cold_start_groups(frame_a), _cold_start_groups(frame_b)
     part_a, part_b = _align(cold_a, cold_b)
     if len(part_a) < 3:
@@ -100,6 +104,7 @@ def _compare(label, frame_a, frame_b, n_boot, seed):
         rank = claim1_eval.paired_rank_difference(part_a, part_b, n_boot=n_boot, seed=seed)
     except AssertionError as exc:
         return {"resolvable": False, "reason": str(exc)}, None
+    # tag each metric table with the comparison label so they stack into one CSV
     rmse = rmse.copy(); rmse.insert(0, "comparison", label); rmse["metric"] = "rmse_difference"
     rank = rank.copy(); rank.insert(0, "comparison", label); rank["metric"] = "rank_difference"
     return {"resolvable": True, "n_cold_start_groups": int(len(part_a))}, pd.concat(
@@ -108,6 +113,12 @@ def _compare(label, frame_a, frame_b, n_boot, seed):
 
 def run_eval(checkpoint_dir, arm, seeds, stats_csv, data_dir, pitch_events, eval_targets_path,
             eval_season=EVAL_SEASON, n_boot=2000, seed=0):
+    """
+    Score four prediction sets (model and EB baseline, each with and without a cold-start
+    prior) on the claim-1 frame and compare each pair on the cold-start groups.
+    Returns (JSON-ready summary dict, CSV-ready table of paired differences).
+    """
+    # load data and build the model's query tables
     tensors, manifest = loader.load_tensors(data_dir)
     frame = qt.align_pitch_frame(pitch_events, eval_targets_path, tensors["season"],
                                   career_pitchers=manifest.get("career_pitchers_excluded", False))
@@ -115,24 +126,29 @@ def run_eval(checkpoint_dir, arm, seeds, stats_csv, data_dir, pitch_events, eval
     tables = query.build_tables(frame, tensors, manifest, pa_df)
     stats = pd.read_csv(stats_csv)
 
+    # ensemble of seed checkpoints and the single averaged debut vector per stand
     checkpoints = [Path(checkpoint_dir) / f"{arm}_s{s}.pt" for s in seeds]
     models = query.load_ensemble(checkpoints, manifest, tensors["context"].shape[1])
     cold_start_prior = ensemble_cold_start_prior(models, stats)
 
+    # model predictions without and with the debut prior substituted for unseen hitters
     model_base, _ = query.predict(models, tensors, manifest, frame, tables, pa_df, eval_season)
     model_prior, _ = query.predict(models, tensors, manifest, frame, tables, pa_df, eval_season,
                                    cold_start_prior=cold_start_prior)
 
+    # EB baseline: same fitted parameters, with and without the matched debut_mu
     eb_params = eb.fit(pa_df, eval_season)
     eb_base = eb.predict(pa_df, eval_season, params=eb_params)
     debut_mu = eb_debut_mu(stats)
     eb_prior = eb.predict(pa_df, eval_season, params=eb_params, debut_mu=debut_mu)
 
+    # join each prediction set to actuals and strata
     frame_model_base, _ = claim1_eval.build_eval_frame(pa_df, model_base, eval_season, seen_only=False)
     frame_model_prior, _ = claim1_eval.build_eval_frame(pa_df, model_prior, eval_season, seen_only=False)
     frame_eb_base, _ = claim1_eval.build_eval_frame(pa_df, eb_base, eval_season, seen_only=False)
     frame_eb_prior, _ = claim1_eval.build_eval_frame(pa_df, eb_prior, eval_season, seen_only=False)
 
+    # each comparison is (without prior, with prior); results are keyed by label
     summary = {}
     tables_out = []
     for label, frame_a, frame_b in (

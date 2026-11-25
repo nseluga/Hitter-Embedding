@@ -47,6 +47,7 @@ N_BOOT = 1000
 
 
 def train_seasons(path=SPLIT_CONFIG_PATH):
+    """Train-season list from the frozen split config (src/config/split_config.json). Returns a list of season ints."""
     with open(path) as handle:
         return json.load(handle)["split"]["train"]
 
@@ -59,7 +60,9 @@ def pitcher_attributes(pitches, seasons):
     """
     window = pitches[pitches["season"].isin(seasons)]
     assert len(window), "no train-season pitches"
+    # Fastball mask (four-seamers and sinkers); velocity and height are averaged over these only.
     fastball = window["pitch_type"].isin(FASTBALLS)
+    # Per-pitch flags and fastball-only measurements, grouped to one row per pitcher and throwing hand.
     grouped = window.assign(
         is_fb=fastball, is_brk=window["pitch_type"].isin(BREAKING),
         fb_speed=window["release_speed"].where(fastball),
@@ -68,6 +71,7 @@ def pitcher_attributes(pitches, seasons):
     out = grouped.agg(n_pitches=("is_fb", "size"), n_fb=("is_fb", "sum"),
                       fb_velo=("fb_speed", "mean"), fb_height=("fb_z", "mean"),
                       brk_share=("is_brk", "mean")).reset_index()
+    # Drop pitchers below the pitch floors.
     out = out[(out["n_pitches"] >= MIN_TRAIN_PITCHES) & (out["n_fb"] >= MIN_TRAIN_FASTBALLS)]
     assert out[list(AXES)].notna().all().all(), "an attribute is missing after the floors"
     return out.reset_index(drop=True)
@@ -80,9 +84,11 @@ def weighted_terciles(values, weight):
     """
     values = np.asarray(values, dtype="float64")
     weight = np.asarray(weight, dtype="float64")
+    # Sort pitchers by axis value; the cumulative weight share then sets which third of the weight each falls in.
     order = np.argsort(values, kind="stable")
     cumulative = np.cumsum(weight[order]) / weight.sum()
     labels = np.empty(len(values), dtype="int64")
+    # Cumulative share 0-1/3 -> 0, 1/3-2/3 -> 1, above -> 2; the 1e-12 keeps an exact boundary in the lower bin.
     labels[order] = np.minimum((cumulative * 3 - 1e-12).astype("int64"), 2)
     return labels
 
@@ -91,8 +97,10 @@ def label_pitchers(attributes, pa_train):
     """
     Attach batters-faced over the train window and each axis's tercile, within hand.
     """
+    # Batters faced per pitcher over the train window, used as the tercile weight.
     bf = pa_train.groupby(["pitcher", "p_throws"]).size().rename("bf").reset_index()
     out = attributes.merge(bf, on=["pitcher", "p_throws"], how="inner")
+    # Tercile each axis separately within each hand, so a left-hander is compared with other left-handers.
     for axis in AXES:
         out[f"{axis}_tercile"] = -1
         for hand in ("L", "R"):
@@ -163,12 +171,20 @@ def split_half(part, min_half_pa=MIN_HALF_PA, seed=0):
 
 
 def ceiling_stage(pitches, pa_df, seasons, eval_season=EVAL_SEASON):
+    """
+    Stage `ceiling`: how reliably can a hitter-level pitcher-type effect be measured at all?
+    pitches: train+eval pitch rows; pa_df: PA-level eval targets; seasons: train seasons that define the attributes.
+    Returns (pitcher labels with terciles, split-half reliability rows per axis/hand/stand, per-hand attribute summary).
+    """
+    # Drop plate appearances by pitchers batting (via eval_targets.drop_pitcher_batters).
     pa_df = eval_targets.drop_pitcher_batters(pa_df)
     attributes = pitcher_attributes(pitches, seasons)
+    # Pitcher attributes and terciles come from train seasons only, so the eval season cannot shape the groups.
     labels = label_pitchers(attributes, pa_df[pa_df["season"].isin(seasons)])
     pa_eval = pa_df[pa_df["season"] == eval_season]
 
     rows = []
+    # One contrast per (axis, pitcher hand): top vs bottom tercile, then split-half reliability by hitter stand.
     for axis in AXES:
         for hand in ("R", "L"):
             part, covered = contrast_pa(pa_eval, labels, axis, hand)
@@ -178,6 +194,7 @@ def ceiling_stage(pitches, pa_df, seasons, eval_season=EVAL_SEASON):
                             "matchup": {"pooled": "both"}.get(
                                 row["stand"], "same" if row["stand"] == hand else "opposite")})
                 rows.append(row)
+    # Descriptive spread of each axis within hand.
     summary = labels.groupby("p_throws")[list(AXES)].describe().T
     return labels, pd.DataFrame(rows), summary
 
@@ -192,6 +209,7 @@ def query_stage(args):
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    # Load the built tensors and rebuild the pitch frame and lookup tables the query code needs.
     tensors, manifest = loader.load_tensors(args.data_dir)
     assert EVAL_SEASON not in manifest["train_seasons"], "eval season inside the train window"
     frame = qt.align_pitch_frame(args.pitches, args.eval_targets, tensors["season"],
@@ -202,14 +220,17 @@ def query_stage(args):
     models = query.load_ensemble(paths, manifest, tensors["context"].shape[1])
     prior = query.default_cold_start_prior(models, args.hitter_stats)
 
+    # One composition pass over the eval season; keep_matrix=True also returns each hitter's W(0,0) against every pitcher.
     predictions, diagnostics = query.predict(
         models, tensors, manifest, frame, tables, pa_df, EVAL_SEASON,
         batters=args.batters, cold_start_prior=prior, keep_matrix=True)
     groups = diagnostics.pop("per_pitcher")
 
     arrays = {}
+    # Check each (stand, hand) matrix reproduces the ordinary prediction when reweighted by pitcher BF, then stash it.
     for group in groups:
         key = f"{group['stand']}HB_vs_{group['p_throws']}HP"
+        # BF-weighted average of the per-pitcher matrix rows = the hitter's predicted wOBA vs that hand.
         pred = group["w00"] @ group["bf_weight"] / group["bf_weight"].sum()
         expected = (predictions[predictions["p_throws"] == group["p_throws"]]
                     .set_index("batter").loc[group["batter"], "pred_woba"].to_numpy())
@@ -226,6 +247,7 @@ def query_stage(args):
 
 
 def main():
+    """CLI entry: `--stage ceiling` (data only, default) or `--stage query` (model ensemble pass); see the module docstring."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--stage", choices=["ceiling", "query"], default="ceiling")
     parser.add_argument("--pitches", default=PITCHES_PATH)
@@ -249,6 +271,7 @@ def main():
     pitches = pd.read_parquet(args.pitches, columns=[
         "pitcher", "p_throws", "season", "pitch_type", "release_speed", "plate_z"])
     pa_df = pd.read_parquet(args.eval_targets)
+    # Ceiling stage reads only the pitch columns it needs, then writes labels, reliability table and summary.
     labels, ceiling, summary = ceiling_stage(pitches, pa_df, seasons)
 
     out = Path(args.out_dir)

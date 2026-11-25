@@ -40,12 +40,14 @@ def lookup_names(mlbam_ids, lookup_fn):
     One batched call, one retry on failure. Returns {mlbam_id: name}; unresolved ids are
     omitted, and their count is logged.
     """
+    # a single transient network failure should not abort the build, hence one retry
     try:
         result = lookup_fn(list(mlbam_ids), key_type="mlbam")
     except Exception:
         logger.warning("player id lookup failed, retrying once")
         result = lookup_fn(list(mlbam_ids), key_type="mlbam")
 
+    # keep a name only when both parts are present
     names = {}
     for row in result.itertuples():
         first, last = getattr(row, "name_first", None), getattr(row, "name_last", None)
@@ -64,6 +66,7 @@ def majority_stand(pitch_table_path, batter_ids):
     STAND_TRAIN_SEASONS. Reads only the batter, stand, season columns.
     """
     df = pd.read_parquet(pitch_table_path, columns=["batter", "stand", "season"])
+    # restricted to train seasons so no eval-season information leaks in
     df = df[df["season"].isin(STAND_TRAIN_SEASONS) & df["batter"].isin(batter_ids)]
     return df.groupby("batter")["stand"].agg(lambda s: s.value_counts().idxmax()).to_dict()
 
@@ -73,6 +76,7 @@ def build_frame(vocabulary, names, stands):
     Assemble the output frame from a vocabulary map, a name lookup, and a stand lookup.
     Includes the reserved cold-start row at index 0. Sorted by embedding_index.
     """
+    # row 0 first: the reserved cold-start row has no real batter id, name, or handedness
     rows = [{
         "batter": COLD_START_BATTER,
         "embedding_index": COLD_START_INDEX,
@@ -80,6 +84,7 @@ def build_frame(vocabulary, names, stands):
         "stand": "",
     }]
     for mlbam_id, index in vocabulary.items():
+        # unresolved name or handedness is left as an empty string, not guessed
         rows.append({
             "batter": mlbam_id,
             "embedding_index": index,
@@ -90,6 +95,7 @@ def build_frame(vocabulary, names, stands):
 
 
 def main():
+    """CLI: look up names and handedness for the vocabulary and write hitter_names.csv."""
     import argparse
 
     logging.basicConfig(level=logging.INFO)
@@ -108,6 +114,7 @@ def main():
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(args.out, index=False)
+    # count real hitters (not the cold-start row) whose name lookup came back empty
     n_unresolved = (frame["embedding_index"] != COLD_START_INDEX) & (frame["name"] == "")
     print(f"rows written: {len(frame)}")
     print(f"unresolved names: {int(n_unresolved.sum())}")

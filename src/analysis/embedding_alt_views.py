@@ -169,9 +169,15 @@ def _whiff_rates_by_pitch_group(pitch_events_path):
     """Shared groundwork for whiff_brk_minus_fb_by_batter and
     whiff_rate_components_by_batter: per-batter x pitch_group whiff rate and
     swing count, using the frozen PITCH_GROUPS classification. whiff =
-    swing & not contact."""
+    swing & not contact.
+
+    Takes the pitch-level parquet path. Returns (rates, counts), each a
+    DataFrame [n_batters, 2] with columns "breaking"/"fastball": mean whiff
+    rate and number of swings (pitches in neither group are dropped)."""
     df = pd.read_parquet(pitch_events_path, columns=["batter", "pitch_type", "swing", "contact"])
+    # Whiff rate is defined over swings only.
     df = df[df["swing"] == 1]
+    # Label each swing fastball/breaking; other pitch types stay NaN and are filtered out below.
     group = pd.Series(np.nan, index=df.index, dtype=object)
     for name, codes in PITCH_GROUPS.items():
         group[df["pitch_type"].isin(codes)] = name
@@ -190,6 +196,7 @@ def whiff_brk_minus_fb_by_batter(pitch_events_path=PITCH_EVENTS_PATH):
     target), so none of the leakage-window discipline in baseline_ladder_gbm
     applies. Returns a Series indexed by batter."""
     rates, _ = _whiff_rates_by_pitch_group(pitch_events_path)
+    # Swing counts are ignored here: no minimum-swings mask on this contrast.
     return (rates["breaking"] - rates["fastball"]).rename("whiff_brk_minus_fb")
 
 
@@ -202,6 +209,7 @@ def whiff_rate_components_by_batter(pitch_events_path=PITCH_EVENTS_PATH):
     (brk_series, fb_series), both indexed by batter, restricted to hitters
     valid in BOTH groups."""
     rates, counts = _whiff_rates_by_pitch_group(pitch_events_path)
+    # Keep only hitters with enough swings against BOTH pitch families.
     valid = (counts.get("fastball", 0) >= axis_screen.MIN_SWINGS_PER_SLICE) & \
             (counts.get("breaking", 0) >= axis_screen.MIN_SWINGS_PER_SLICE)
     valid_idx = valid[valid].index
@@ -221,7 +229,9 @@ def ev_p90_components_by_batter(pitch_events_path=PITCH_EVENTS_PATH):
     applies to ev_brk_minus_fb. Returns (brk_series, fb_series), both
     indexed by batter, restricted to hitters valid in BOTH groups."""
     df = pd.read_parquet(pitch_events_path, columns=["batter", "pitch_type", "swing", "ev"])
+    # Batted balls only: swings that produced a measured exit velocity.
     df = df[(df["swing"] == 1) & df["ev"].notna()]
+    # Label each batted ball fastball/breaking; other pitch types stay NaN and are filtered out below.
     group = pd.Series(np.nan, index=df.index, dtype=object)
     for name, codes in PITCH_GROUPS.items():
         group[df["pitch_type"].isin(codes)] = name
@@ -229,6 +239,7 @@ def ev_p90_components_by_batter(pitch_events_path=PITCH_EVENTS_PATH):
     df = df[df["pitch_group"].isin(PITCH_GROUPS)]
     counts = df.groupby(["batter", "pitch_group"]).size().unstack(fill_value=0)
     p90 = df.groupby(["batter", "pitch_group"])["ev"].quantile(0.9).unstack("pitch_group")
+    # Keep only hitters with enough batted balls against BOTH pitch families.
     valid = (counts.get("fastball", 0) >= axis_screen.MIN_BATTED_BALLS_PER_SLICE) & \
             (counts.get("breaking", 0) >= axis_screen.MIN_BATTED_BALLS_PER_SLICE)
     valid_idx = valid[valid].index
@@ -243,19 +254,25 @@ def lda_axis_cv(normalized, labels, seed=BOOT_SEED, n_splits=5):
     """K-fold held-out classification accuracy of an LDA fit per-fold (fit
     on train, scored on held-out test) — the honest number, since a
     supervised projection always looks good on the data it was fit to.
-    Returns (model fit on ALL rows, cv_mean, cv_std)."""
+    Returns (model fit on ALL rows, cv_mean, cv_std).
+
+    normalized [N, D]: N hitters, D embedding dims (unit-normalized).
+    labels [N]: tercile class (0/1/2) per hitter."""
     labels = np.asarray(labels)
+    # Shuffled folds with a fixed seed so the CV number is reproducible.
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
     accs = []
     for train_idx, test_idx in kf.split(normalized):
         model = LinearDiscriminantAnalysis()
         model.fit(normalized[train_idx], labels[train_idx])
         accs.append(model.score(normalized[test_idx], labels[test_idx]))
+    # The all-rows model supplies the plotted discriminant coordinate; the CV numbers above are the accuracy estimate.
     full_model = LinearDiscriminantAnalysis().fit(normalized, labels)
     return full_model, float(np.mean(accs)), float(np.std(accs))
 
 
 def _padded_lim(values, pad_frac=0.05):
+    """(min, max) of `values` widened by pad_frac of the range on each side, for axis limits."""
     lo, hi = float(np.min(values)), float(np.max(values))
     pad = pad_frac * (hi - lo)
     return lo - pad, hi + pad
@@ -266,7 +283,10 @@ def _padded_lim(values, pad_frac=0.05):
 def fig_supervised_projection(x, y, ev_tercile, whiff_tercile, ev_cv_mean, whiff_cv_mean, path):
     """Two panels, IDENTICAL (x, y) axes — x = ev_p90 LDA score, y =
     whiff_brk_minus_fb LDA score. Left colored by ev_p90 tercile, right by
-    whiff_brk_minus_fb tercile."""
+    whiff_brk_minus_fb tercile.
+
+    x, y [N]: per-hitter LDA scores; ev_tercile, whiff_tercile [N]: class
+    0/1/2; *_cv_mean: held-out CV accuracy shown in each title; path: PNG out."""
     xlim, ylim = _padded_lim(x), _padded_lim(y)
     palette = {0: "#d9d9d9", 1: "#8fb3ff", 2: "#1f4fd1"}
     tercile_names = ["low", "mid", "high"]
@@ -298,18 +318,23 @@ def fig_similarity_heatmap(x, y, ev_values, path, n_bins=N_HEATMAP_BINS,
     """2-D binned gradient over the SAME (ev_p90-LDA, whiff-LDA) plane as
     Figure 1 — no individual dots. Each cell colored by the mean ev_p90
     (mph) of hitters in it; cells with fewer than `min_per_bin` hitters are
-    greyed out."""
+    greyed out.
+
+    x, y, ev_values [N]: per-hitter LDA scores and ev_p90 (mph); path: PNG out."""
     x, y, ev_values = np.asarray(x), np.asarray(y), np.asarray(ev_values)
+    # Equal-width bin edges over the data range; the clip puts the max value in the last bin.
     x_edges = np.linspace(x.min(), x.max(), n_bins + 1)
     y_edges = np.linspace(y.min(), y.max(), n_bins + 1)
     xi = np.clip(np.digitize(x, x_edges) - 1, 0, n_bins - 1)
     yi = np.clip(np.digitize(y, y_edges) - 1, 0, n_bins - 1)
 
+    # Per-cell sum and count -> mean value; empty cells stay NaN. Arrays are [y_bin, x_bin].
     sums = np.zeros((n_bins, n_bins))
     counts = np.zeros((n_bins, n_bins))
     np.add.at(sums, (yi, xi), ev_values)
     np.add.at(counts, (yi, xi), 1)
     means = np.divide(sums, counts, out=np.full_like(sums, np.nan), where=counts > 0)
+    # Sparse cells (< min_per_bin hitters) are masked so they render grey, not as a noisy mean.
     means_masked = np.ma.masked_where(counts < min_per_bin, means)
 
     cmap = plt.get_cmap("viridis").with_extremes(bad="#d0d0d0")
@@ -345,7 +370,13 @@ def run_pairing(pairing_id, x_metric, y_metric, expected_x_cv, expected_y_cv,
     """Full protocol for one (x_metric, y_metric) axis pair: frozen
     embedding, tercile labels, LDA, 5-fold shuffled CV (seed=BOOT_SEED),
     season <=2024 (inherited from hitters/contrasts). Raises if either CV
-    accuracy drifts from its expected value by more than CV_TOLERANCE."""
+    accuracy drifts from its expected value by more than CV_TOLERANCE.
+
+    normalized [N, D]: unit-normalized embedding, row-aligned to `hitters`
+    (N hitters, D dims). Returns (summary dict, x_proj, y_proj [M] LDA scores
+    for the M plotted hitters, x/y tercile labels [M], woba values [M],
+    x_span, y_span real-unit (min, max))."""
+    # Per-batter metric values for each axis, plus boolean masks over `hitters` rows marking who has each metric.
     x_series = metric_series_by_batter(x_metric, hitters, contrasts)
     y_series = metric_series_by_batter(y_metric, hitters, contrasts)
 
@@ -384,9 +415,11 @@ def run_pairing(pairing_id, x_metric, y_metric, expected_x_cv, expected_y_cv,
     y_tercile_plot = tercile_labels(pd.Series(y_plot_vals)).values
     woba_plot_vals = hitters.loc[plot_mask, "batter"].map(woba_series).to_numpy()
 
+    # LDA discriminant score: the single direction (first discriminant, [:, 0]) that best separates that axis's terciles.
     x_proj = x_model.transform(normalized[plot_mask])[:, 0]
     y_proj = y_model.transform(normalized[plot_mask])[:, 0]
 
+    # Real-unit range of each metric among plotted hitters, reported in the axis-3 title/JSON since LDA scores have no unit.
     x_span = (float(x_plot_vals.min()), float(x_plot_vals.max()))
     y_span = (float(y_plot_vals.min()), float(y_plot_vals.max()))
 
@@ -420,9 +453,14 @@ def run_pairing(pairing_id, x_metric, y_metric, expected_x_cv, expected_y_cv,
 def run_all_pairings(normalized, hitters, out_dir):
     """Renders each AXIS_PAIRINGS entry as ONE 3-panel PNG (projection x
     tercile, projection y tercile, woba gradient) sharing identical x/y axes
-    across all three panels."""
+    across all three panels.
+
+    normalized [N, D]: unit-normalized embedding, row-aligned to `hitters`.
+    Writes figures/fig_axes_<pairing_id>.png under out_dir; returns
+    {pairing_id: summary dict} (CV accuracies, spans, axis correlations)."""
     figures_dir = Path(out_dir) / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
+    # Add the four standalone component metrics to axis_screen's contrasts so run_pairing can look every metric up by name.
     contrasts = axis_screen.build_contrasts(hitters)
     whiff_brk, whiff_fb = whiff_rate_components_by_batter()
     contrasts["whiff_rate_brk"] = whiff_brk
@@ -443,6 +481,7 @@ def run_all_pairings(normalized, hitters, out_dir):
         tercile_names = ["low", "mid", "high"]
         draw_identity = pairing_id in IDENTITY_LINE_PAIRINGS
 
+        # Panels 1-2: the same scatter, colored by the x-metric tercile then the y-metric tercile.
         fig, axes = plt.subplots(1, 3, figsize=(19.5, 5.8))
         panels = [
             (axes[0], np.asarray(x_tercile_plot), summary["x"]["lda_cv_accuracy_mean"], METRIC_TITLES[x_metric]),
@@ -453,6 +492,7 @@ def run_all_pairings(normalized, hitters, out_dir):
                 mask = tercile == t
                 ax.scatter(x_proj[mask], y_proj[mask], s=8, alpha=0.6, color=color,
                            label=tercile_names[t], zorder=2)
+            # y = x over the range both axes share, so the line stays inside the plotted limits.
             if draw_identity:
                 lo, hi = max(xlim[0], ylim[0]), min(xlim[1], ylim[1])
                 ax.plot([lo, hi], [lo, hi], linestyle="--", linewidth=1, color="#999999",
@@ -463,6 +503,7 @@ def run_all_pairings(normalized, hitters, out_dir):
             ax.legend(fontsize=8, title="tercile")
             ax.set_xlim(xlim); ax.set_ylim(ylim)
 
+        # Panel 3: same binning as fig_similarity_heatmap, colored by mean observed wOBA (a quantity on neither axis).
         ax3 = axes[2]
         x_edges = np.linspace(x_proj.min(), x_proj.max(), N_HEATMAP_BINS + 1)
         y_edges = np.linspace(y_proj.min(), y_proj.max(), N_HEATMAP_BINS + 1)
@@ -490,6 +531,7 @@ def run_all_pairings(normalized, hitters, out_dir):
         ax3.set_xlim(xlim); ax3.set_ylim(ylim)
 
         fig.suptitle(f"{pairing_id}: {x_metric} vs {y_metric} (n={summary['n_hitters_plotted']})", fontsize=11)
+        # Footnote (identity-line pairings only) gets extra bottom margin in tight_layout.
         if draw_identity:
             fig.text(0.5, 0.01,
                 "Identity line drawn in LDA-score space: marks equal standing on the two axes, "
@@ -510,6 +552,10 @@ def run_all_pairings(normalized, hitters, out_dir):
 
 def run(checkpoint_dir, arm, hitter_stats_path, names_path, out_dir,
         pitch_events_path=PITCH_EVENTS_PATH):
+    """Load the frozen embedding, render every axis-pairing figure, and write
+    embedding_alt_views.json (per-pairing CV accuracy plus method metadata) to
+    out_dir. Returns the summary dict. Note pitch_events_path is accepted but
+    not forwarded: run_all_pairings uses PITCH_EVENTS_PATH."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 

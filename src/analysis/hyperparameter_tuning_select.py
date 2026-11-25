@@ -98,6 +98,7 @@ STAGE_RULES = {
 
 
 def ledger_rows(path=LEDGER):
+    """Read the sweep ledger CSV and keep only completed (status == "ok") runs, as a list of dicts."""
     with Path(path).open() as handle:
         return [r for r in csv.DictReader(handle) if r["status"] == "ok"]
 
@@ -140,6 +141,7 @@ def build_check(rows, stage=STAGE):
     floor_stage, floor_config = rule["noise_floor"]
     incumbent = references_by_seed(rows, stage, rule["incumbent"])
     floor = references_by_seed(rows, floor_stage, floor_config)
+    # Seeds the incumbent and the noise-floor arm both ran; any such seed should reproduce exactly.
     shared = sorted(set(incumbent) & set(floor))
     mismatched = [seed for seed in shared if incumbent[seed] != floor[seed]]
     return {"shared_seeds": shared,
@@ -162,7 +164,11 @@ def noise_floor(rows, stage=STAGE):
 
 
 def select(rows, stage=STAGE):
-    """The pre-registered rule. Returns the full record, verdict included."""
+    """The pre-registered rule. Returns the full record, verdict included.
+
+    rows: completed ledger rows (see ledger_rows); stage: key of STAGE_RULES.
+    Raises on an unknown stage, no runs, or an incumbent that is missing or
+    under MIN_SEEDS_PER_ARM; grid gaps and guard failure are reported in the verdict instead."""
     if stage not in STAGE_RULES:
         raise ValueError(f"unknown stage {stage!r}; known stages are {sorted(STAGE_RULES)}")
     rule = STAGE_RULES[stage]
@@ -178,6 +184,7 @@ def select(rows, stage=STAGE):
     unexpected_arms = [name for name in configs if name not in expected]
     floor_sd, floor_mean, floor_n = noise_floor(rows, stage)
 
+    # Per-arm summary of `reference` (held-out log loss; lower is better) across seeds.
     arms = {}
     for name in configs:
         values = references(rows, stage, name)
@@ -188,6 +195,7 @@ def select(rows, stage=STAGE):
             "reference_values": values,
         }
 
+    # Single-seed arms that did not beat the incumbent's screen-seed run are marked screened out (not under-run).
     screen_seed = rule.get("screen_seed")
     screen_ref = (references_by_seed(rows, stage, incumbent_name).get(screen_seed)
                   if screen_seed is not None else None)
@@ -209,6 +217,7 @@ def select(rows, stage=STAGE):
             f"every margin in this stage is measured against it, so it needs at least "
             f"{MIN_SEEDS_PER_ARM}.")
 
+    # Guard: confirm the incumbent is on the same scale/build as the noise-floor arm before trusting any margin.
     incumbent_mean = arms[incumbent_name]["reference_mean"]
     drift = abs(incumbent_mean - floor_mean)
     build = build_check(rows, stage)
@@ -231,6 +240,7 @@ def select(rows, stage=STAGE):
         arm["promotable"] = bool(name != incumbent_name and not arm["screened_out"]
                                  and arm["margin_in_ses"] > MARGIN_SES)
 
+    # Winner = the promotable arm with the largest margin; otherwise the incumbent stands.
     challengers = {k: v for k, v in arms.items() if k != incumbent_name and v["promotable"]}
     winner = (max(challengers, key=lambda k: challengers[k]["margin_in_ses"])
               if challengers else incumbent_name)
@@ -244,6 +254,7 @@ def select(rows, stage=STAGE):
     confirmed = arms[winner]["n_seeds"] >= CONFIRMATION_SEEDS
     requires_confirmation = winner != incumbent_name and not confirmed
 
+    # Verdict precedence: incomplete grid, then failed guard, then incumbent stands, then tuned (pending confirmation or not).
     return {
         "stage": stage,
         "rule": {
@@ -288,6 +299,7 @@ def select(rows, stage=STAGE):
 
 
 def report(result, out_dir=OUT_DIR):
+    """Write select()'s result to selection.json and a per-arm selection.csv (sorted best reference first); returns both paths."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "selection.json"
@@ -306,6 +318,7 @@ def report(result, out_dir=OUT_DIR):
 
 
 def main():
+    """CLI: run select() on the ledger, write the report files, and print the verdict plus any refusal reason."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("--ledger", default=str(LEDGER))
     parser.add_argument("--stage", default=STAGE)

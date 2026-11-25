@@ -27,6 +27,8 @@ from src.config.splits import load_splits, season_split_map
 from src.data.model_dataset import load as load_arrays
 from src.model.v1 import FACTORS, LEGACY_FACTORS
 
+# Tensor names read from the built dataset: "context" and "hitter" are the model inputs,
+# "season" drives the split masks, and the factor arrays are the labels.
 REQUIRED_NAMES = ("context", "hitter", "season") + LEGACY_FACTORS
 # `split` postdates the datasets the first 39 runs were trained on, so it is loaded when
 # present and absent otherwise rather than making every old artifact unreadable
@@ -37,13 +39,17 @@ TENSOR_NAMES = REQUIRED_NAMES + OPTIONAL_NAMES
 def load_tensors(data_dir):
     """
     Read the built dataset into resident torch tensors sharing numpy's memory.
-    Returns (tensors, manifest). Contiguity is asserted rather than fixed: the
+    data_dir: directory of the built dataset (.npy arrays plus manifest).
+    Returns (tensors, manifest): tensors maps name -> torch tensor with one row per pitch
+    (leading axis N = n_pitches); manifest is the dataset metadata dict. Contiguity is asserted rather than fixed: the
     fix belongs in `model_dataset.save`, which the 2015-2024 refit also runs.
     """
+    # mmap_mode=None forces a full in-RAM read (see module docstring, point 1)
     arrays, manifest = load_arrays(data_dir, mmap_mode=None)
     missing = sorted(set(REQUIRED_NAMES) - set(arrays))
     assert not missing, f"built dataset is missing {missing}"
 
+    # wrap each array as a tensor; optional factors are skipped when the dataset predates them
     tensors = {}
     for name in (n for n in TENSOR_NAMES if n in arrays):
         array = arrays[name]
@@ -52,6 +58,7 @@ def load_tensors(data_dir):
         assert len(array) == manifest["n_pitches"], f"{name} disagrees with the manifest"
         tensors[name] = torch.from_numpy(array)
 
+    # safety check: refuse a dataset whose fit used the sealed test season
     frozen_test = set(load_splits()["split"]["test"])
     assert not set(manifest["train_seasons"]) & frozen_test, \
         "the built dataset was fit on the frozen test season"
@@ -61,15 +68,19 @@ def load_tensors(data_dir):
 def split_indices(season, config=None):
     """
     Row indices per split, from the frozen walk-forward season map.
-    season: the int64 season tensor. Returns {split_name: int64 index tensor}.
+    season [N]: int64 season of each pitch. config: split config, default the frozen one.
+    Returns {split_name: int64 index tensor}.
     Asserts the splits partition the table -- every row in exactly one.
     """
     config = config or load_splits()
+    # every season in the table must have a split assigned in the config
     seasons = season.numpy()
     mapping = season_split_map(config)
     unknown = sorted(set(np.unique(seasons).tolist()) - set(mapping))
     assert not unknown, f"seasons absent from the frozen split config: {unknown}"
 
+    # per split: boolean mask over rows by season membership -> sorted row indices;
+    # `assigned` counts how many splits claim each row
     indices, assigned = {}, np.zeros(len(seasons), dtype=np.int8)
     for name, split_seasons in config["split"].items():
         mask = np.isin(seasons, split_seasons)
@@ -92,9 +103,12 @@ def split_indices(season, config=None):
 def batches(indices, batch_size, generator=None, shuffle=True):
     """
     Yield index tensors of at most batch_size rows, drawn from `indices`.
+    indices [M]: int64 row indices into the full table (one split). Each yield is [<=batch_size].
+    The last batch may be short. shuffle=False keeps `indices` order.
     generator: a seeded `torch.Generator`, so an epoch's order is reproducible.
     No DataLoader, so there are no worker seeds to get wrong.
     """
+    # a fresh permutation of positions within `indices` each call, i.e. each epoch
     order = torch.randperm(len(indices), generator=generator) if shuffle \
         else torch.arange(len(indices))
     for start in range(0, len(indices), batch_size):
@@ -104,9 +118,13 @@ def batches(indices, batch_size, generator=None, shuffle=True):
 def gather(tensors, index, device=None):
     """
     Materialise one batch. Returns (hitter, context, labels).
+    tensors: output of load_tensors. index [B]: int64 row indices of the B pitches.
+    device: optional torch device to move the batch onto (None keeps it on CPU).
+    hitter and context are indexed per row, so they come back with leading axis B.
     labels carries all five factors with MASKED intact; the model's teacher forcing
     reads the observed EV and LA bins straight out of it.
     """
+    # fancy-indexing copies just these B rows out of the resident table
     hitter = tensors["hitter"][index]
     context = tensors["context"][index]
     labels = {name: tensors[name][index] for name in FACTORS if name in tensors}

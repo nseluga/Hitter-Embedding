@@ -15,6 +15,7 @@ DEFAULT_SPLIT_CONFIG = Path(__file__).parent / "split_config.json"
 
 def load_splits(path=DEFAULT_SPLIT_CONFIG):
     """Read the frozen split config, validate its shape, and return it as a dict."""
+    # validate on load so a malformed config never reaches a run
     config = json.loads(Path(path).read_text())
     validate_split_config(config)
     return config
@@ -34,6 +35,7 @@ def validate_split_config(config):
     tests on anything but the frozen test season is rejected here, not downstream.
     """
     train, val, test = config["split"]["train"], config["split"]["val"], config["split"]["test"]
+    # all seasons across the three sets; the asserts below check they partition config["seasons"]
     assigned = train + val + test
 
     assert len(assigned) == len(set(assigned)), "a season appears in more than one split"
@@ -43,6 +45,7 @@ def validate_split_config(config):
         assert val == [], f"a final_run split has no validation season, got {val}"
         assert test == [max(train) + 1], f"test must be the season after train, got {test}"
         assert not config.get("frozen"), "the frozen split is not a final_run split"
+        # the test season is read from the frozen config on disk, so a final_run config cannot move it
         frozen_test = json.loads(DEFAULT_SPLIT_CONFIG.read_text())["split"]["test"]
         assert test == frozen_test, (
             f"a final_run split must keep the frozen test season {frozen_test}, got {test}")
@@ -52,7 +55,10 @@ def validate_split_config(config):
 
 
 def validate_against_data(df, config=None):
-    """Assert the labeled table's seasons match the config exactly: none missing, none unassigned."""
+    """
+    Assert the labeled table's seasons match the config exactly: none missing, none unassigned.
+    df: labeled pitch table with an integer-like `season` column; config: split dict, default frozen.
+    """
     config = config or load_splits()
     present = set(int(s) for s in df["season"].unique())
     configured = set(config["seasons"])
@@ -63,4 +69,5 @@ def validate_against_data(df, config=None):
 def season_split_map(config=None):
     """Return a {season: split_name} mapping for assigning rows to train/val/test."""
     config = config or load_splits()
+    # inverts {"train": [...], "val": [...], "test": [...]} into one lookup per season
     return {season: name for name, seasons in config["split"].items() for season in seasons}
